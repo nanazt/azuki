@@ -1,0 +1,27 @@
+[package]
+name = "azuki"
+edition.workspace = true
+version.workspace = true
+
+[dependencies]
+azuki-db = { path = "../azuki-db" }
+azuki-player = { path = "../azuki-player" }
+azuki-media = { path = "../azuki-media" }
+azuki-bot = { path = "../azuki-bot" }
+azuki-web = { path = "../azuki-web" }
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+anyhow.workspace = true
+secrecy.workspace = true
+sqlx.workspace = true
+tokio-util.workspace = true
+dotenvy.workspace = true
+serenity.workspace = true
+axum.workspace = true
+rand.workspace = true
+hex.workspace = true
+rustls = { version = "0.23", default-features = false, features = ["aws_lc_rs"] }
+dashmap.workspace = true

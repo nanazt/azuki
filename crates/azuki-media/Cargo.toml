@@ -1,0 +1,18 @@
+[package]
+name = "azuki-media"
+edition.workspace = true
+version.workspace = true
+
+[dependencies]
+azuki-db = { path = "../azuki-db" }
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+reqwest.workspace = true
+sha2.workspace = true
+hex.workspace = true
+url.workspace = true
+infer.workspace = true
+sqlx.workspace = true

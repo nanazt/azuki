@@ -1,0 +1,21 @@
+[package]
+name = "azuki-bot"
+edition.workspace = true
+version.workspace = true
+
+[dependencies]
+azuki-db = { path = "../azuki-db" }
+azuki-player = { path = "../azuki-player" }
+azuki-media = { path = "../azuki-media" }
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+serenity.workspace = true
+songbird.workspace = true
+symphonia.workspace = true
+sha2.workspace = true
+hex.workspace = true
+tokio-util.workspace = true
+sqlx.workspace = true

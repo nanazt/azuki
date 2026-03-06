@@ -1,0 +1,81 @@
+import { useEffect } from "react";
+import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router-dom";
+import { ToastProvider, ToastContainer } from "./components/ui/Toast";
+import { useAuthStore } from "./stores/authStore";
+import { useWebSocket } from "./hooks/useWebSocket";
+import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
+import { AppShell } from "./components/layout/AppShell";
+import { Login } from "./pages/Login";
+import { Home } from "./pages/Home";
+import { Playlists } from "./pages/Playlists";
+import { Favorites } from "./pages/Favorites";
+import { History } from "./pages/History";
+import { Stats } from "./pages/Stats";
+import { Settings } from "./pages/Settings";
+import { SearchPage } from "./components/features/search/SearchPage";
+import { QueuePanel } from "./components/features/queue";
+
+function ProtectedRoute() {
+  const { authenticated, checking, setAuthenticated, setChecking } = useAuthStore();
+
+  useEffect(() => {
+    if (!checking) return;
+    fetch("/api/stats/me", { credentials: "include" })
+      .then((res) => {
+        setAuthenticated(res.ok);
+      })
+      .catch(() => {
+        setAuthenticated(false);
+        setChecking(false);
+      });
+  }, [checking, setAuthenticated, setChecking]);
+
+  if (checking) {
+    return (
+      <div className="flex items-center justify-center h-dvh bg-[var(--color-bg)]">
+        <div className="text-[var(--color-text-secondary)]">Loading...</div>
+      </div>
+    );
+  }
+
+  if (!authenticated) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return <AuthenticatedLayout />;
+}
+
+function AuthenticatedLayout() {
+  useWebSocket();
+  useKeyboardShortcuts();
+
+  return (
+    <AppShell>
+      <Outlet />
+    </AppShell>
+  );
+}
+
+export default function App() {
+  return (
+    <ToastProvider>
+      <BrowserRouter>
+        <ToastContainer />
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route element={<ProtectedRoute />}>
+            <Route path="/" element={<Home />} />
+            <Route path="/search" element={<SearchPage />} />
+            <Route path="/playlists" element={<Playlists />} />
+            <Route path="/favorites" element={<Favorites />} />
+            <Route path="/history" element={<History />} />
+            <Route path="/stats" element={<Stats />} />
+            <Route path="/settings" element={<Settings />} />
+            <Route path="/queue" element={<QueuePanel />} />
+          </Route>
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </BrowserRouter>
+    </ToastProvider>
+  );
+}

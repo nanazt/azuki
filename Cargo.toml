@@ -1,0 +1,84 @@
+[workspace]
+members = [
+    "crates/azuki",
+    "crates/azuki-bot",
+    "crates/azuki-db",
+    "crates/azuki-media",
+    "crates/azuki-player",
+    "crates/azuki-web",
+]
+resolver = "3"
+
+[workspace.package]
+edition = "2024"
+version = "0.1.0"
+
+[workspace.dependencies]
+# Async runtime
+tokio = { version = "1.50", features = ["full"] }
+
+# Serialization
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.149"
+
+# Logging
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }
+
+# Error handling
+thiserror = "2.0.18"
+anyhow = "1.0.102"
+
+# Database
+sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite", "migrate"] }
+
+# Web
+axum = { version = "0.8.8", features = ["macros", "ws", "multipart"] }
+axum-extra = { version = "0.12.5", features = ["cookie", "typed-header"] }
+tower = { version = "0.5.3", features = ["limit", "timeout"] }
+tower-http = { version = "0.6.8", features = [
+    "cors",
+    "fs",
+    "set-header",
+    "trace",
+] }
+
+# HTTP client
+reqwest = { version = "0.13", features = ["json", "form"] }
+
+# Auth
+jsonwebtoken = { version = "10", features = ["aws_lc_rs"] }
+
+# Discord
+serenity = { version = "0.12.5", default-features = false, features = [
+    "client",
+    "gateway",
+    "model",
+    "cache",
+    "voice",
+] }
+songbird = { git = "https://github.com/beerpsi-forks/songbird", branch = "davey", features = [
+    "serenity",
+    "driver",
+] }
+symphonia = { version = "0.5", default-features = false, features = [
+    "ogg",
+    "mp3",
+    "aac",
+    "isomp4",
+] }
+
+# Utilities
+uuid = { version = "1", features = ["v4"] }
+chrono = { version = "0.4.44", features = ["serde"] }
+secrecy = { version = "0.10.3", features = ["serde"] }
+rand = "0.10"
+sha2 = "0.10"
+hex = "0.4.3"
+url = "2.5"
+infer = "0.19"
+tokio-util = { version = "0.7.18", features = ["rt"] }
+futures-util = "0.3"
+dotenvy = "0.15"
+cookie = "0.18"
+dashmap = "6"
