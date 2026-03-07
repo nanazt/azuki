@@ -394,6 +394,65 @@ async fn download_worker(
                 }
             };
 
+            // Check if track already exists with a cached file
+            let track_id = azuki_web::util::sha_id(&url);
+            if let Ok(existing) = azuki_db::queries::tracks::get_track(&db, &track_id).await
+                && let Some(ref fp) = existing.file_path
+                && std::path::Path::new(fp).exists()
+            {
+                let track_info = azuki_player::TrackInfo {
+                    id: existing.id,
+                    title: existing.title,
+                    artist: existing.artist,
+                    duration_ms: existing.duration_ms as u64,
+                    thumbnail_url: existing.thumbnail_url,
+                    source_url: existing.source_url,
+                    source_type: existing.source_type,
+                    file_path: existing.file_path,
+                    youtube_id: existing.youtube_id,
+                    volume: existing.volume as u8,
+                };
+
+                let snapshot = player.get_state().await;
+                match snapshot.state {
+                    azuki_player::PlayStateInfo::Idle => {
+                        let _ = player.play(track_info.clone(), req.user_id.clone()).await;
+                    }
+                    _ => {
+                        let _ = player
+                            .enqueue(track_info.clone(), req.user_id.clone())
+                            .await;
+                    }
+                }
+
+                let _ = azuki_db::queries::history::record_play(
+                    &db,
+                    &track_info.id,
+                    &req.user_id,
+                )
+                .await;
+
+                broadcast_web_event(
+                    &web_tx,
+                    &seq,
+                    azuki_web::events::WebEvent::HistoryAdded {
+                        track: track_info.clone(),
+                        user_id: req.user_id,
+                    },
+                );
+
+                active.remove(&download_id);
+                broadcast_web_event(
+                    &web_tx,
+                    &seq,
+                    azuki_web::events::WebEvent::DownloadComplete {
+                        download_id,
+                        track: track_info,
+                    },
+                );
+                return;
+            }
+
             // Download with progress
             let progress_web_tx = web_tx.clone();
             let progress_seq = Arc::clone(&seq);
