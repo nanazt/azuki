@@ -41,7 +41,7 @@ export function useWebSocket() {
   }, []);
 
   const scheduleReconnect = useCallback(() => {
-    const delay = Math.min(1000 * 2 ** retriesRef.current, 30000);
+    const delay = 1000;
     retriesRef.current++;
     reconnectTimer.current = setTimeout(connect, delay);
   }, [connect]);
@@ -61,7 +61,7 @@ export function useWebSocket() {
     // Initial snapshot (no seq wrapper)
     if ("type" in data && (data as any).type === "state_snapshot") {
       const snap = data as any;
-      state.applySnapshot(snap.state ?? snap);
+      state.applySnapshot(snap.state ?? snap, 0);
       restoreActiveDownloads(snap.active_downloads);
       return;
     }
