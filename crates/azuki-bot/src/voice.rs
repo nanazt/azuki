@@ -59,3 +59,10 @@ pub fn resume_track(handle: &songbird::tracks::TrackHandle) {
 pub fn seek_track(handle: &songbird::tracks::TrackHandle, position_ms: u64) {
     let _ = handle.seek(Duration::from_millis(position_ms));
 }
+
+pub async fn stop_playback(songbird: &Arc<Songbird>, guild_id: GuildId) {
+    if let Some(call) = songbird.get(guild_id) {
+        let mut handler = call.lock().await;
+        handler.stop();
+    }
+}

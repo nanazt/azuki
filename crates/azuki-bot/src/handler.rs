@@ -214,6 +214,10 @@ async fn run_audio_subscriber(state: Arc<BotState>) {
                 azuki_player::PlayerEvent::TrackEnded { .. } => {
                     current_track_handle = None;
                     current_file = None;
+                    let sb_guard = state.songbird.lock().await;
+                    if let Some(sb) = sb_guard.as_ref() {
+                        crate::voice::stop_playback(sb, state.guild_id).await;
+                    }
                 }
                 _ => {}
             },
