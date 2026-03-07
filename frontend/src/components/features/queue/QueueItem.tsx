@@ -1,7 +1,8 @@
 import clsx from "clsx";
-import { X, Music } from "lucide-react";
+import { X } from "lucide-react";
 import type { QueueEntry } from "../../../lib/types";
 import { Avatar } from "../../ui/Avatar";
+import { TrackThumbnail } from "../../ui/TrackThumbnail";
 
 interface QueueItemProps {
   entry: QueueEntry;
@@ -23,17 +24,7 @@ export function QueueItem({ entry, index, position, onRemove }: QueueItemProps) 
       <span className="text-xs text-[var(--color-text-tertiary)] w-5 text-center flex-shrink-0 tabular-nums">
         {position}
       </span>
-      {track.thumbnail_url ? (
-        <img
-          src={track.thumbnail_url}
-          alt={track.title}
-          className="w-9 h-9 rounded object-cover flex-shrink-0"
-        />
-      ) : (
-        <div className="w-9 h-9 rounded bg-[var(--color-bg-tertiary)] flex items-center justify-center flex-shrink-0">
-          <Music size={14} className="text-[var(--color-text-tertiary)]" />
-        </div>
-      )}
+      <TrackThumbnail track={track} sizeClass="w-9 h-9" iconSize={14} className="rounded" />
       <div className="min-w-0 flex-1">
         <div className="text-sm text-[var(--color-text)] truncate font-medium">
           {track.title}

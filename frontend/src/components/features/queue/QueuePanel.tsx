@@ -1,5 +1,5 @@
 import { useCallback } from "react";
-import { ListMusic, Music, Search, Loader2 } from "lucide-react";
+import { ListMusic, Search, Loader2 } from "lucide-react";
 import { usePlayerStore } from "../../../stores/playerStore";
 import {
   useDownloadStore,
@@ -9,6 +9,7 @@ import { api } from "../../../lib/api";
 import { QueueItem } from "./QueueItem";
 import { useToast } from "../../../hooks/useToast";
 import { Avatar } from "../../ui/Avatar";
+import { TrackThumbnail } from "../../ui/TrackThumbnail";
 
 interface QueuePanelProps {
   onOpenSearch?: () => void;
@@ -58,20 +59,7 @@ export function QueuePanel({ onOpenSearch }: QueuePanelProps) {
               </span>
             </div>
             <div className="flex items-center gap-3 px-3 py-2 mx-1 rounded-lg bg-[var(--color-bg-tertiary)]">
-              {currentTrack.thumbnail_url ? (
-                <img
-                  src={currentTrack.thumbnail_url}
-                  alt={currentTrack.title}
-                  className="w-9 h-9 rounded object-cover flex-shrink-0"
-                />
-              ) : (
-                <div className="w-9 h-9 rounded bg-[var(--color-bg-hover)] flex items-center justify-center flex-shrink-0">
-                  <Music
-                    size={14}
-                    className="text-[var(--color-text-tertiary)]"
-                  />
-                </div>
-              )}
+              <TrackThumbnail track={currentTrack} sizeClass="w-9 h-9" iconSize={14} className="rounded" />
               <div className="min-w-0 flex-1">
                 <div className="text-sm font-medium text-[var(--color-text)] truncate">
                   {currentTrack.title}

@@ -4,8 +4,10 @@ import type { Playlist, PlaylistTrack } from "../lib/types";
 import { Skeleton } from "../components/ui/Skeleton";
 import { Modal } from "../components/ui/Modal";
 import { Button } from "../components/ui/Button";
-import { ListMusic, Plus, Trash2, ChevronLeft, Music } from "lucide-react";
+import { ListMusic, Plus, Trash2, ChevronLeft, Loader2 } from "lucide-react";
+import { TrackThumbnail } from "../components/ui/TrackThumbnail";
 import { formatTime } from "../lib/utils";
+import { useToast } from "../components/ui/Toast";
 
 export function Playlists() {
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
@@ -84,8 +86,23 @@ export function Playlists() {
     setTracks((prev) => prev.filter((t) => t.position !== position));
   };
 
-  const handlePlayTrack = (track: PlaylistTrack) => {
-    api.addToQueue(track.track.source_url).catch(() => {});
+  const [addingIds, setAddingIds] = useState<Set<string>>(new Set());
+  const { showToast } = useToast();
+
+  const handleAddTrack = async (track: PlaylistTrack) => {
+    if (addingIds.has(track.track.id)) return;
+    setAddingIds(prev => new Set(prev).add(track.track.id));
+    try {
+      await api.addToQueue(track.track.source_url);
+    } catch {
+      showToast("Failed to add to queue", "error");
+    } finally {
+      setAddingIds(prev => {
+        const next = new Set(prev);
+        next.delete(track.track.id);
+        return next;
+      });
+    }
   };
 
   if (selected) {
@@ -134,21 +151,7 @@ export function Playlists() {
           <ul className="flex flex-col gap-1">
             {tracks.map((entry) => (
               <li key={entry.position} className="flex items-center gap-3 group px-3 py-2 rounded-lg hover:bg-[var(--color-bg-secondary)] transition-colors">
-                <button
-                  onClick={() => handlePlayTrack(entry)}
-                  className="flex items-center gap-3 flex-1 min-w-0 text-left"
-                >
-                  {entry.track.thumbnail_url ? (
-                    <img
-                      src={entry.track.thumbnail_url}
-                      alt={entry.track.title}
-                      className="w-10 h-10 rounded-md object-cover flex-shrink-0"
-                    />
-                  ) : (
-                    <div className="w-10 h-10 rounded-md bg-[var(--color-bg-secondary)] flex items-center justify-center flex-shrink-0">
-                      <Music size={16} className="text-[var(--color-text-tertiary)]" />
-                    </div>
-                  )}
+                  <TrackThumbnail track={entry.track} sizeClass="w-10 h-10" iconSize={16} className="rounded-md" />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-[var(--color-text)] truncate">
                       {entry.track.title}
@@ -159,17 +162,26 @@ export function Playlists() {
                       </p>
                     )}
                   </div>
-                  <span className="text-xs text-[var(--color-text-tertiary)] flex-shrink-0 mr-2">
+                  <span className="text-xs text-[var(--color-text-tertiary)] flex-shrink-0">
                     {formatTime(entry.track.duration_ms)}
                   </span>
-                </button>
-                <button
-                  onClick={() => handleRemoveTrack(entry.position)}
-                  className="p-1.5 rounded text-[var(--color-text-tertiary)] hover:text-[var(--color-danger)] opacity-0 group-hover:opacity-100 transition-all flex-shrink-0"
-                  aria-label="Remove from playlist"
-                >
-                  <Trash2 size={14} />
-                </button>
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 [@media(hover:none)]:opacity-100 transition-opacity flex-shrink-0">
+                    <button
+                      onClick={() => handleAddTrack(entry)}
+                      disabled={addingIds.has(entry.track.id)}
+                      className="p-1.5 rounded-lg text-[var(--color-text-tertiary)] hover:text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 transition-colors disabled:opacity-50"
+                      aria-label="Add to queue"
+                    >
+                      {addingIds.has(entry.track.id) ? <Loader2 size={15} className="animate-spin" /> : <Plus size={15} />}
+                    </button>
+                    <button
+                      onClick={() => handleRemoveTrack(entry.position)}
+                      className="p-1.5 rounded-lg text-[var(--color-text-tertiary)] hover:text-[var(--color-danger)] hover:bg-[var(--color-danger)]/10 transition-colors"
+                      aria-label="Remove from playlist"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
               </li>
             ))}
           </ul>

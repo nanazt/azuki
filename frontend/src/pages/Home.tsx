@@ -4,6 +4,7 @@ import type { TrackInfo } from "../lib/types";
 import { usePlayerStore } from "../stores/playerStore";
 import { formatTime } from "../lib/utils";
 import { Skeleton } from "../components/ui/Skeleton";
+import { TrackThumbnail } from "../components/ui/TrackThumbnail";
 import { Music, Radio } from "lucide-react";
 
 interface HistoryEntry {
@@ -37,17 +38,7 @@ export function Home() {
       {/* Now Playing banner */}
       {currentTrack ? (
         <div className="flex items-center gap-4 p-4 rounded-xl bg-[var(--color-accent)]/10 border border-[var(--color-accent)]/30">
-          {currentTrack.thumbnail_url ? (
-            <img
-              src={currentTrack.thumbnail_url}
-              alt={currentTrack.title}
-              className="w-14 h-14 rounded-lg object-cover flex-shrink-0"
-            />
-          ) : (
-            <div className="w-14 h-14 rounded-lg bg-[var(--color-bg-secondary)] flex items-center justify-center flex-shrink-0">
-              <Music size={24} className="text-[var(--color-text-tertiary)]" />
-            </div>
-          )}
+          <TrackThumbnail track={currentTrack} sizeClass="w-14 h-14" iconSize={24} className="rounded-lg" />
           <div className="flex-1 min-w-0">
             <p className="text-xs text-[var(--color-accent)] font-semibold uppercase tracking-wide mb-0.5 flex items-center gap-1.5">
               <Radio size={12} />
@@ -101,17 +92,7 @@ export function Home() {
                   onClick={() => handlePlay(entry.track)}
                   className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-[var(--color-bg-secondary)] transition-colors text-left group"
                 >
-                  {entry.track.thumbnail_url ? (
-                    <img
-                      src={entry.track.thumbnail_url}
-                      alt={entry.track.title}
-                      className="w-10 h-10 rounded-md object-cover flex-shrink-0"
-                    />
-                  ) : (
-                    <div className="w-10 h-10 rounded-md bg-[var(--color-bg-secondary)] flex items-center justify-center flex-shrink-0">
-                      <Music size={16} className="text-[var(--color-text-tertiary)]" />
-                    </div>
-                  )}
+                  <TrackThumbnail track={entry.track} sizeClass="w-10 h-10" iconSize={16} className="rounded-md" />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-[var(--color-text)] truncate">
                       {entry.track.title}

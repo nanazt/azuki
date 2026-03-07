@@ -1,9 +1,6 @@
-import { useState } from "react";
 import { NavLink } from "react-router-dom";
 import {
   BarChart3,
-  ChevronDown,
-  ChevronRight,
   Clock,
   Heart,
   Home,
@@ -48,7 +45,6 @@ function NavItem({ to, icon, label, indent, end }: NavItemProps) {
 }
 
 export function Sidebar() {
-  const [libraryOpen, setLibraryOpen] = useState(true);
   const listeners = usePlayerStore((s) => s.listeners);
 
   return (
@@ -65,41 +61,11 @@ export function Sidebar() {
         <NavItem to="/" icon={<Home size={16} />} label="Home" end />
         <NavItem to="/search" icon={<Search size={16} />} label="Search" />
 
-        {/* Library section */}
-        <div className="mt-4">
-          <button
-            onClick={() => setLibraryOpen((v) => !v)}
-            className="flex items-center gap-2 w-full px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)] transition-colors"
-          >
-            {libraryOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-            Library
-          </button>
-
-          {libraryOpen && (
-            <div className="mt-1 space-y-0.5">
-              <NavItem
-                to="/playlists"
-                icon={<ListMusic size={16} />}
-                label="Playlists"
-                indent
-              />
-              <NavItem
-                to="/favorites"
-                icon={<Heart size={16} />}
-                label="Favorites"
-                indent
-              />
-              <NavItem
-                to="/history"
-                icon={<Clock size={16} />}
-                label="History"
-                indent
-              />
-            </div>
-          )}
-        </div>
-
-        <div className="mt-2">
+        {/* Library */}
+        <div className="mt-4 space-y-0.5">
+          <NavItem to="/playlists" icon={<ListMusic size={16} />} label="Playlists" />
+          <NavItem to="/favorites" icon={<Heart size={16} />} label="Favorites" />
+          <NavItem to="/history" icon={<Clock size={16} />} label="History" />
           <NavItem to="/stats" icon={<BarChart3 size={16} />} label="Stats" />
         </div>
       </nav>

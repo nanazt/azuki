@@ -3,7 +3,9 @@ import clsx from "clsx";
 import { api } from "../lib/api";
 import type { TrackInfo } from "../lib/types";
 import { Skeleton } from "../components/ui/Skeleton";
-import { Heart, Music, Play } from "lucide-react";
+import { Heart, Plus, Loader2 } from "lucide-react";
+import { TrackThumbnail } from "../components/ui/TrackThumbnail";
+import { useToast } from "../components/ui/Toast";
 import { formatTime } from "../lib/utils";
 
 export function Favorites() {
@@ -34,8 +36,23 @@ export function Favorites() {
     return () => window.removeEventListener("favorite-changed", handler);
   }, []);
 
-  const handlePlay = (track: TrackInfo) => {
-    api.addToQueue(track.source_url).catch(() => {});
+  const [addingIds, setAddingIds] = useState<Set<string>>(new Set());
+  const { showToast } = useToast();
+
+  const handleAdd = async (track: TrackInfo) => {
+    if (addingIds.has(track.id)) return;
+    setAddingIds(prev => new Set(prev).add(track.id));
+    try {
+      await api.addToQueue(track.source_url);
+    } catch {
+      showToast("Failed to add to queue", "error");
+    } finally {
+      setAddingIds(prev => {
+        const next = new Set(prev);
+        next.delete(track.id);
+        return next;
+      });
+    }
   };
 
   const handleUnfavorite = async (track: TrackInfo) => {
@@ -101,18 +118,7 @@ export function Favorites() {
                 exitingIds.has(track.id) && "opacity-0 scale-95"
               )}
             >
-              {/* Thumbnail */}
-              {track.thumbnail_url ? (
-                <img
-                  src={track.thumbnail_url}
-                  alt={track.title}
-                  className="w-12 h-12 rounded-lg object-cover flex-shrink-0"
-                />
-              ) : (
-                <div className="w-12 h-12 rounded-lg bg-[var(--color-bg-secondary)] flex items-center justify-center flex-shrink-0">
-                  <Music size={20} className="text-[var(--color-text-tertiary)]" />
-                </div>
-              )}
+              <TrackThumbnail track={track} sizeClass="w-12 h-12" iconSize={20} className="rounded-lg" />
 
               {/* Info */}
               <div className="flex-1 min-w-0">
@@ -128,13 +134,14 @@ export function Favorites() {
               </span>
 
               {/* Actions */}
-              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 [@media(hover:none)]:opacity-100 transition-opacity flex-shrink-0">
                 <button
-                  onClick={() => handlePlay(track)}
-                  className="p-1.5 rounded-lg text-[var(--color-text-tertiary)] hover:text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 transition-colors"
-                  aria-label="Play"
+                  onClick={() => handleAdd(track)}
+                  disabled={addingIds.has(track.id)}
+                  className="p-1.5 rounded-lg text-[var(--color-text-tertiary)] hover:text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 transition-colors disabled:opacity-50"
+                  aria-label="Add to queue"
                 >
-                  <Play size={15} />
+                  {addingIds.has(track.id) ? <Loader2 size={15} className="animate-spin" /> : <Plus size={15} />}
                 </button>
                 <button
                   onClick={() => handleUnfavorite(track)}

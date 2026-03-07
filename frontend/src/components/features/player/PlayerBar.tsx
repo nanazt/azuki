@@ -10,13 +10,13 @@ import {
   Repeat,
   Repeat1,
   Heart,
-  Music,
   ChevronUp,
 } from "lucide-react";
 import { usePlayer } from "../../../hooks/usePlayer";
 import { usePlayerStore } from "../../../stores/playerStore";
 import { api } from "../../../lib/api";
 import { Slider } from "../../ui/Slider";
+import { TrackThumbnail } from "../../ui/TrackThumbnail";
 import { formatTime } from "../../../lib/utils";
 
 export function PlayerBar() {
@@ -144,17 +144,7 @@ export function PlayerBar() {
         <div className="flex items-center gap-4">
           {/* Left: track info */}
           <div className="flex items-center gap-3 min-w-0 w-[30%]">
-            {track.thumbnail_url ? (
-              <img
-                src={track.thumbnail_url}
-                alt={track.title}
-                className="w-12 h-12 rounded object-cover flex-shrink-0"
-              />
-            ) : (
-              <div className="w-12 h-12 rounded bg-[var(--color-bg-tertiary)] flex items-center justify-center flex-shrink-0">
-                <Music size={20} className="text-[var(--color-text-tertiary)]" />
-              </div>
-            )}
+            <TrackThumbnail track={track} sizeClass="w-12 h-12" iconSize={20} className="rounded" />
             <div className="min-w-0">
               <div className="text-sm font-medium text-[var(--color-text)] truncate">
                 {track.title}
@@ -294,17 +284,7 @@ export function PlayerBar() {
 
       {/* Mobile mini player */}
       <div className="flex md:hidden items-center gap-3 h-[60px] bg-[var(--color-bg-secondary)] border-t border-[var(--color-border)] px-3">
-        {track.thumbnail_url ? (
-          <img
-            src={track.thumbnail_url}
-            alt={track.title}
-            className="w-10 h-10 rounded object-cover flex-shrink-0"
-          />
-        ) : (
-          <div className="w-10 h-10 rounded bg-[var(--color-bg-tertiary)] flex items-center justify-center flex-shrink-0">
-            <Music size={16} className="text-[var(--color-text-tertiary)]" />
-          </div>
-        )}
+        <TrackThumbnail track={track} sizeClass="w-10 h-10" iconSize={16} className="rounded" />
         <div className="min-w-0 flex-1">
           <div className="text-sm font-medium text-[var(--color-text)] truncate">
             {track.title}

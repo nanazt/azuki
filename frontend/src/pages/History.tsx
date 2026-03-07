@@ -3,7 +3,8 @@ import { api } from "../lib/api";
 import type { TrackInfo } from "../lib/types";
 import { Skeleton } from "../components/ui/Skeleton";
 import { Button } from "../components/ui/Button";
-import { Music, Clock, Plus, Loader2 } from "lucide-react";
+import { TrackThumbnail } from "../components/ui/TrackThumbnail";
+import { Clock, Plus, Loader2 } from "lucide-react";
 import { formatTime } from "../lib/utils";
 import { useToast } from "../components/ui/Toast";
 import clsx from "clsx";
@@ -156,17 +157,7 @@ export function History() {
           <ul className="flex flex-col">
             {items.map((entry, i) => (
               <li key={i} className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-[var(--color-bg-hover)] transition-colors duration-100 group">
-                  {entry.track.thumbnail_url ? (
-                    <img
-                      src={entry.track.thumbnail_url}
-                      alt={entry.track.title}
-                      className="w-12 h-12 rounded object-cover flex-shrink-0"
-                    />
-                  ) : (
-                    <div className="w-12 h-12 rounded bg-[var(--color-bg-tertiary)] flex items-center justify-center flex-shrink-0">
-                      <Music size={18} className="text-[var(--color-text-tertiary)]" />
-                    </div>
-                  )}
+                  <TrackThumbnail track={entry.track} sizeClass="w-12 h-12" iconSize={18} className="rounded" />
                   <div className="min-w-0 flex-1">
                     <div className="text-sm font-medium text-[var(--color-text)] truncate">
                       {entry.track.title}

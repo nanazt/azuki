@@ -1,4 +1,5 @@
-import { Plus, Music } from "lucide-react";
+import { Plus } from "lucide-react";
+import { TrackThumbnail } from "../../ui/TrackThumbnail";
 import clsx from "clsx";
 import type { TrackInfo } from "../../../lib/types";
 import { formatTime } from "../../../lib/utils";
@@ -17,17 +18,7 @@ export function SearchResult({ track, onAdd, adding = false }: SearchResultProps
         "hover:bg-[var(--color-bg-hover)] transition-colors duration-100 group"
       )}
     >
-      {track.thumbnail_url ? (
-        <img
-          src={track.thumbnail_url}
-          alt={track.title}
-          className="w-12 h-12 rounded object-cover flex-shrink-0"
-        />
-      ) : (
-        <div className="w-12 h-12 rounded bg-[var(--color-bg-tertiary)] flex items-center justify-center flex-shrink-0">
-          <Music size={18} className="text-[var(--color-text-tertiary)]" />
-        </div>
-      )}
+      <TrackThumbnail track={track} sizeClass="w-12 h-12" iconSize={18} className="rounded" />
       <div className="min-w-0 flex-1">
         <div className="text-sm font-medium text-[var(--color-text)] truncate">
           {track.title}

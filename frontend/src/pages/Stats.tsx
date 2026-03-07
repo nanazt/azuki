@@ -3,7 +3,8 @@ import { api } from "../lib/api";
 import type { UserStats, ServerStats, TrackInfo } from "../lib/types";
 import { Skeleton } from "../components/ui/Skeleton";
 import { formatTime } from "../lib/utils";
-import { Music, BarChart2 } from "lucide-react";
+import { BarChart2 } from "lucide-react";
+import { TrackThumbnail } from "../components/ui/TrackThumbnail";
 
 function TrackRow({ track, count, rank }: { track: TrackInfo; count: number; rank: number }) {
   return (
@@ -11,17 +12,7 @@ function TrackRow({ track, count, rank }: { track: TrackInfo; count: number; ran
       <span className="text-xs text-[var(--color-text-tertiary)] w-5 text-right flex-shrink-0">
         {rank}
       </span>
-      {track.thumbnail_url ? (
-        <img
-          src={track.thumbnail_url}
-          alt={track.title}
-          className="w-9 h-9 rounded-md object-cover flex-shrink-0"
-        />
-      ) : (
-        <div className="w-9 h-9 rounded-md bg-[var(--color-bg-secondary)] flex items-center justify-center flex-shrink-0">
-          <Music size={14} className="text-[var(--color-text-tertiary)]" />
-        </div>
-      )}
+      <TrackThumbnail track={track} sizeClass="w-9 h-9" iconSize={14} className="rounded-md" />
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium text-[var(--color-text)] truncate">{track.title}</p>
         {track.artist && (
