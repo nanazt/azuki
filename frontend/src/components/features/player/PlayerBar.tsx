@@ -19,7 +19,7 @@ import { Slider } from "../../ui/Slider";
 import { formatTime } from "../../../lib/utils";
 
 export function PlayerBar() {
-  const { playState, volume, loopMode, togglePlay, skip, seek, setVolume, cycleLoop } =
+  const { playState, volume, loopMode, togglePlay, skip, previous, seek, setVolume, cycleLoop } =
     usePlayer();
   const favoritedTrackIds = usePlayerStore((s) => s.favoritedTrackIds);
   const [elapsed, setElapsed] = useState(0);
@@ -175,9 +175,9 @@ export function PlayerBar() {
           {/* Center: controls */}
           <div className="flex items-center gap-2 justify-center flex-1">
             <button
+              onClick={previous}
               className="p-2 text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors cursor-pointer rounded-full hover:bg-[var(--color-bg-hover)]"
               aria-label="Previous"
-              disabled
             >
               <SkipBack size={18} />
             </button>

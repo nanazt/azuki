@@ -38,6 +38,7 @@ export function usePlayer() {
   }, [pause, resume]);
 
   const skip = useCallback(() => api.skip(), []);
+  const previous = useCallback(() => api.previous(), []);
   const stop = useCallback(() => api.stop(), []);
 
   const seek = useCallback((ms: number) => {
@@ -71,6 +72,7 @@ export function usePlayer() {
     resume,
     togglePlay,
     skip,
+    previous,
     stop,
     seek,
     setVolume,

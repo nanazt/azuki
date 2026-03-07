@@ -57,6 +57,7 @@ export const api = {
   pause: () => post<void>("/api/player/pause"),
   resume: () => post<void>("/api/player/resume"),
   skip: () => post<void>("/api/player/skip"),
+  previous: () => post<void>("/api/player/previous"),
   stop: () => post<void>("/api/player/stop"),
   seek: (position_ms: number) => post<void>("/api/player/seek", { position_ms }),
   setVolume: (volume: number) => post<void>("/api/player/volume", { volume }),
