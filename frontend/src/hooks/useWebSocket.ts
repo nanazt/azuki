@@ -1,12 +1,16 @@
 import { useEffect, useRef, useCallback } from "react";
 import { usePlayerStore } from "../stores/playerStore";
 import { useDownloadStore } from "../stores/downloadStore";
+import { useToast } from "./useToast";
 import type { SeqEvent } from "../lib/types";
 
 export function useWebSocket() {
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const retriesRef = useRef(0);
+  const { showToast } = useToast();
+  const showToastRef = useRef(showToast);
+  showToastRef.current = showToast;
 
   const store = usePlayerStore;
 
@@ -156,10 +160,13 @@ export function useWebSocket() {
         break;
       case "download_complete":
         useDownloadStore.getState().completeDownload(ev.download_id, ev.track);
+
         setTimeout(() => useDownloadStore.getState().removeDownload(ev.download_id), 3000);
         break;
       case "download_failed":
         useDownloadStore.getState().failDownload(ev.download_id, ev.error);
+        showToastRef.current(ev.error ?? "Failed to add to queue", "error");
+        setTimeout(() => useDownloadStore.getState().removeDownload(ev.download_id), 3000);
         break;
     }
   };

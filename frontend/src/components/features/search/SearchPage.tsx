@@ -87,7 +87,6 @@ export function SearchPage() {
     setAddingIds((prev) => new Set(prev).add(track.id));
     try {
       await api.addToQueue(track.source_url);
-      showToast("Added to queue", "success");
     } catch (err) {
       console.error("Failed to add to queue", err);
       showToast("Failed to add to queue", "error");

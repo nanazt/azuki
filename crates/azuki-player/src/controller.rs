@@ -76,6 +76,10 @@ pub enum PlayerError {
     InvalidState(String),
     #[error("invalid position")]
     InvalidPosition,
+    #[error("queue is full (max 50)")]
+    QueueFull,
+    #[error("track already in queue or playing")]
+    Duplicate,
 }
 
 #[allow(dead_code)]
@@ -512,11 +516,25 @@ impl PlayerActor {
                 user_id,
                 reply,
             } => {
-                self.queue.enqueue(track, user_id);
-                self.broadcast(PlayerEvent::QueueUpdated {
-                    queue: self.queue.items(),
-                });
-                let _ = reply.send(Ok(()));
+                let now_playing = match &self.state {
+                    PlayState::Playing { track: t, .. }
+                    | PlayState::Paused { track: t, .. }
+                    | PlayState::Loading { track: t }
+                    | PlayState::Error { track: t, .. } => Some(t.id.as_str()),
+                    PlayState::Idle => None,
+                };
+                let is_duplicate = now_playing == Some(track.id.as_str())
+                    || self.queue.contains(&track.id);
+                if is_duplicate {
+                    let _ = reply.send(Err(PlayerError::Duplicate));
+                } else if self.queue.enqueue(track, user_id) {
+                    self.broadcast(PlayerEvent::QueueUpdated {
+                        queue: self.queue.items(),
+                    });
+                    let _ = reply.send(Ok(()));
+                } else {
+                    let _ = reply.send(Err(PlayerError::QueueFull));
+                }
             }
 
             PlayerCommand::Previous { reply } => {

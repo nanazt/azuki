@@ -681,9 +681,21 @@ async fn download_worker(
                         let _ = player.play(track_info.clone(), req.user_id.clone()).await;
                     }
                     _ => {
-                        let _ = player
+                        if let Err(e) = player
                             .enqueue(track_info.clone(), req.user_id.clone())
-                            .await;
+                            .await
+                        {
+                            active.remove(&download_id);
+                            broadcast_web_event(
+                                &web_tx,
+                                &seq,
+                                azuki_web::events::WebEvent::DownloadFailed {
+                                    download_id,
+                                    error: e.to_string(),
+                                },
+                            );
+                            return;
+                        }
                     }
                 }
 
@@ -791,9 +803,21 @@ async fn download_worker(
                             let _ = player.play(track_info.clone(), req.user_id.clone()).await;
                         }
                         _ => {
-                            let _ = player
+                            if let Err(e) = player
                                 .enqueue(track_info.clone(), req.user_id.clone())
-                                .await;
+                                .await
+                            {
+                                active.remove(&download_id);
+                                broadcast_web_event(
+                                    &web_tx,
+                                    &seq,
+                                    azuki_web::events::WebEvent::DownloadFailed {
+                                        download_id,
+                                        error: e.to_string(),
+                                    },
+                                );
+                                return;
+                            }
                         }
                     }
 

@@ -34,8 +34,16 @@ impl Queue {
         }
     }
 
-    pub fn enqueue(&mut self, track: TrackInfo, added_by: String) {
+    pub fn contains(&self, track_id: &str) -> bool {
+        self.items.iter().any(|e| e.track.id == track_id)
+    }
+
+    pub fn enqueue(&mut self, track: TrackInfo, added_by: String) -> bool {
+        if self.items.len() >= 50 {
+            return false;
+        }
         self.items.push_back(QueueEntry { track, added_by });
+        true
     }
 
     pub fn advance(&mut self) -> Option<QueueEntry> {
