@@ -68,6 +68,15 @@ export function usePlayer() {
     setLoop(next);
   }, [loopMode, setLoop]);
 
+  const moveInQueue = useCallback((from: number, to: number) => {
+    const s = usePlayerStore.getState();
+    const newQueue = [...s.queue];
+    const [moved] = newQueue.splice(from, 1);
+    newQueue.splice(to, 0, moved);
+    s.setQueue(newQueue);
+    api.moveInQueue(from, to);
+  }, []);
+
   return {
     playState,
     volume,
@@ -82,5 +91,6 @@ export function usePlayer() {
     setVolume,
     setLoop,
     cycleLoop,
+    moveInQueue,
   };
 }

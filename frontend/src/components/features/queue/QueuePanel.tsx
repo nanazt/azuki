@@ -1,12 +1,27 @@
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import { ListMusic, Search, Loader2 } from "lucide-react";
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragStartEvent,
+  DragOverlay,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
 import { usePlayerStore } from "../../../stores/playerStore";
 import {
   useDownloadStore,
   type DownloadEntry,
 } from "../../../stores/downloadStore";
 import { api } from "../../../lib/api";
-import { QueueItem } from "./QueueItem";
+import { QueueItem, QueueItemContent } from "./QueueItem";
+import { usePlayer } from "../../../hooks/usePlayer";
 import { useToast } from "../../../hooks/useToast";
 import { Avatar } from "../../ui/Avatar";
 import { TrackThumbnail } from "../../ui/TrackThumbnail";
@@ -17,6 +32,7 @@ interface QueuePanelProps {
 
 export function QueuePanel({ onOpenSearch }: QueuePanelProps) {
   const { showToast } = useToast();
+  const { moveInQueue } = usePlayer();
   const playState = usePlayerStore((s) => s.playState);
   const queue = usePlayerStore((s) => s.queue);
   const currentAddedBy = usePlayerStore((s) => s.currentAddedBy);
@@ -24,8 +40,35 @@ export function QueuePanel({ onOpenSearch }: QueuePanelProps) {
   const activeDownloads = Array.from(downloads.values()).filter(
     (d) => d.status === "downloading",
   );
+  const [activeIndex, setActiveIndex] = useState<number | null>(null);
 
   const currentTrack = playState.status !== "idle" ? playState.track : null;
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 5 },
+    }),
+  );
+
+  const sortableIds = queue.map((_, i) => `queue-${i}`);
+
+  const handleDragStart = useCallback((event: DragStartEvent) => {
+    const id = event.active.id as string;
+    const idx = parseInt(id.replace("queue-", ""), 10);
+    setActiveIndex(idx);
+  }, []);
+
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      setActiveIndex(null);
+      const { active, over } = event;
+      if (!over || active.id === over.id) return;
+      const oldIndex = parseInt((active.id as string).replace("queue-", ""), 10);
+      const newIndex = parseInt((over.id as string).replace("queue-", ""), 10);
+      moveInQueue(oldIndex, newIndex);
+    },
+    [moveInQueue],
+  );
 
   const handleRemove = useCallback(
     async (position: number) => {
@@ -105,17 +148,38 @@ export function QueuePanel({ onOpenSearch }: QueuePanelProps) {
                 Up Next
               </span>
             </div>
-            <div className="px-1">
-              {queue.map((entry, index) => (
-                <QueueItem
-                  key={`${entry.track.id}-${index}`}
-                  entry={entry}
-                  index={index}
-                  position={index + 1}
-                  onRemove={handleRemove}
-                />
-              ))}
-            </div>
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragStart={handleDragStart}
+              onDragEnd={handleDragEnd}
+            >
+              <SortableContext
+                items={sortableIds}
+                strategy={verticalListSortingStrategy}
+              >
+                <div className="px-1">
+                  {queue.map((entry, index) => (
+                    <QueueItem
+                      key={`${entry.track.id}-${index}`}
+                      entry={entry}
+                      index={index}
+                      onRemove={handleRemove}
+                    />
+                  ))}
+                </div>
+              </SortableContext>
+              <DragOverlay>
+                {activeIndex != null && queue[activeIndex] && (
+                  <QueueItemContent
+                    entry={queue[activeIndex]}
+                    index={activeIndex}
+                    onRemove={handleRemove}
+                    isOverlay
+                  />
+                )}
+              </DragOverlay>
+            </DndContext>
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center gap-3 px-4 py-10 text-center">

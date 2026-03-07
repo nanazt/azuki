@@ -59,6 +59,11 @@ pub enum PlayerCommand {
         position: usize,
         reply: oneshot::Sender<Result<(), PlayerError>>,
     },
+    MoveInQueue {
+        from: usize,
+        to: usize,
+        reply: oneshot::Sender<Result<(), PlayerError>>,
+    },
     GetState {
         reply: oneshot::Sender<PlayerSnapshot>,
     },
@@ -257,6 +262,17 @@ impl PlayerController {
         let (tx, rx) = oneshot::channel();
         self.send_cmd(PlayerCommand::Remove { position, reply: tx })
             .await;
+        rx.await.unwrap_or(Err(PlayerError::NoTrack))
+    }
+
+    pub async fn move_in_queue(&self, from: usize, to: usize) -> Result<(), PlayerError> {
+        let (tx, rx) = oneshot::channel();
+        self.send_cmd(PlayerCommand::MoveInQueue {
+            from,
+            to,
+            reply: tx,
+        })
+        .await;
         rx.await.unwrap_or(Err(PlayerError::NoTrack))
     }
 
@@ -736,6 +752,17 @@ impl PlayerActor {
 
             PlayerCommand::Remove { position, reply } => {
                 if self.queue.remove(position).is_some() {
+                    self.broadcast(PlayerEvent::QueueUpdated {
+                        queue: self.queue.items(),
+                    });
+                    let _ = reply.send(Ok(()));
+                } else {
+                    let _ = reply.send(Err(PlayerError::InvalidPosition));
+                }
+            }
+
+            PlayerCommand::MoveInQueue { from, to, reply } => {
+                if self.queue.move_item(from, to) {
                     self.broadcast(PlayerEvent::QueueUpdated {
                         queue: self.queue.items(),
                     });

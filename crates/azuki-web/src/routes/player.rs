@@ -29,6 +29,12 @@ pub struct QueueAddRequest {
     pub query_or_url: String,
 }
 
+#[derive(Deserialize)]
+pub struct MoveRequest {
+    pub from: usize,
+    pub to: usize,
+}
+
 pub async fn pause(jar: CookieJar, State(state): State<WebState>) -> Result<StatusCode, ApiError> {
     extract_user_id(&jar, &state).await?;
     state.player.pause().await?;
@@ -187,6 +193,16 @@ pub async fn queue_remove(
     Ok(StatusCode::NO_CONTENT)
 }
 
+pub async fn queue_move(
+    jar: CookieJar,
+    State(state): State<WebState>,
+    Json(body): Json<MoveRequest>,
+) -> Result<StatusCode, ApiError> {
+    extract_user_id(&jar, &state).await?;
+    state.player.move_in_queue(body.from, body.to).await?;
+    Ok(StatusCode::OK)
+}
+
 #[derive(serde::Serialize)]
 pub struct BotSettingsResponse {
     pub default_volume: i64,
@@ -248,6 +264,7 @@ pub fn player_routes() -> axum::Router<WebState> {
         .route("/api/player/loop", axum::routing::post(set_loop))
         .route("/api/queue", axum::routing::get(get_queue))
         .route("/api/queue/add", axum::routing::post(queue_add))
+        .route("/api/queue/move", axum::routing::put(queue_move))
         .route("/api/queue/{position}", axum::routing::delete(queue_remove))
         .route(
             "/api/settings/bot",
