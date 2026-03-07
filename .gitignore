@@ -253,4 +253,8 @@ media/
 *.db-shm
 .omc/
 .claude/
+.omx/
+.codex/
+.agents/
 data/
+.playwright-mcp/
