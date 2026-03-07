@@ -174,6 +174,9 @@ pub async fn start_web(
         ))
         .with_state(state);
 
+    // Serve thumbnails
+    app = app.nest_service("/media/thumbnails", ServeDir::new("media/thumbnails"));
+
     // SPA serving: serve static files with fallback to index.html
     if let Some(dir) = static_dir {
         let index_path = format!("{dir}/index.html");

@@ -9,7 +9,7 @@ use serenity::async_trait;
 use songbird::SerenityInit;
 use songbird::events::{Event, EventContext, EventHandler as SongbirdEventHandler, TrackEvent};
 use tokio_util::sync::CancellationToken;
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 
 use crate::BotState;
 use crate::commands;
@@ -23,6 +23,9 @@ pub struct Handler {
 impl EventHandler for Handler {
     async fn ready(&self, ctx: Context, ready: Ready) {
         info!("{} is connected!", ready.user.name);
+
+        // Share Http with bridge task for embed sending
+        let _ = self.state.http_tx.send(Some(ctx.http.clone()));
 
         if let Err(e) = commands::register_commands(&ctx, self.guild_id).await {
             error!("failed to register commands: {e}");
@@ -54,17 +57,30 @@ impl EventHandler for Handler {
     }
 
     async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
-        if let Interaction::Command(cmd) = interaction {
-            let result = commands::handle_command(&ctx, &cmd, &self.state).await;
+        match interaction {
+            Interaction::Command(cmd) => {
+                let result = commands::handle_command(&ctx, &cmd, &self.state).await;
 
-            if let Err(e) = result {
-                error!("command error: {e}");
-                let msg = CreateInteractionResponseMessage::new()
-                    .content(format!("Error: {e}"))
-                    .ephemeral(true);
-                let response = CreateInteractionResponse::Message(msg);
-                let _ = cmd.create_response(&ctx.http, response).await;
+                if let Err(e) = result {
+                    error!("command error: {e}");
+                    let msg = CreateInteractionResponseMessage::new()
+                        .content(format!("Error: {e}"))
+                        .ephemeral(true);
+                    let response = CreateInteractionResponse::Message(msg);
+                    let _ = cmd.create_response(&ctx.http, response).await;
+                }
             }
+            Interaction::Component(component) => {
+                let custom_id = component.data.custom_id.clone();
+                if let Some(track_id) = custom_id.strip_prefix("play:") {
+                    commands::handle_play_button(&ctx, &component, &self.state, track_id).await;
+                } else if let Some(url) = custom_id.strip_prefix("play-from-clicked-button#") {
+                    commands::handle_legacy_play(&ctx, &component, &self.state, url).await;
+                } else if let Some(url) = custom_id.strip_prefix("play-yt-button-0;") {
+                    commands::handle_legacy_play(&ctx, &component, &self.state, url).await;
+                }
+            }
+            _ => {}
         }
     }
 }
@@ -94,9 +110,11 @@ pub async fn start_bot(
 
     // Store songbird in bot state
     *state.songbird.lock().await = Some(songbird);
+    debug!("start_bot: songbird stored, spawning audio subscriber");
 
     // Spawn audio event subscriber
     tokio::spawn(run_audio_subscriber(state.clone()));
+    debug!("start_bot: audio subscriber spawned");
 
     // Run client with cancellation
     tokio::select! {
@@ -115,6 +133,7 @@ pub async fn start_bot(
 }
 
 async fn run_audio_subscriber(state: Arc<BotState>) {
+    debug!("audio_subscriber: started");
     let mut rx = state.player.subscribe();
     let mut current_track_handle: Option<songbird::tracks::TrackHandle> = None;
     // (file_path, track_id, volume) for re-play on seek
@@ -125,21 +144,29 @@ async fn run_audio_subscriber(state: Arc<BotState>) {
         match rx.recv().await {
             Ok(seq_event) => match seq_event.event {
                 azuki_player::PlayerEvent::TrackStarted { ref track, .. } => {
+                    debug!("audio_subscriber: TrackStarted id={} title={:?} file_path={:?}", track.id, track.title, track.file_path);
                     let Some(ref file_path) = track.file_path else {
+                        debug!("audio_subscriber: file_path is None, skipping");
                         continue;
                     };
                     let sb_guard = state.songbird.lock().await;
                     let Some(sb) = sb_guard.as_ref() else {
+                        debug!("audio_subscriber: songbird not ready");
                         continue;
                     };
 
                     if sb.get(state.guild_id).is_none() {
+                        debug!("audio_subscriber: not in voice, auto-joining");
                         auto_join_default_channel(&state, sb).await;
                     }
+
+                    let in_call = sb.get(state.guild_id).is_some();
+                    debug!("audio_subscriber: in_call={in_call}, playing file={file_path}");
 
                     let notifier_gen = generation.fetch_add(1, Ordering::SeqCst) + 1;
                     let handle =
                         crate::voice::play_file(sb, state.guild_id, file_path).await;
+                    debug!("audio_subscriber: play_file returned handle={}", handle.is_some());
                     if let Some(ref h) = handle {
                         crate::voice::set_volume(h, track.volume);
                         let _ = h.add_event(
@@ -168,9 +195,46 @@ async fn run_audio_subscriber(state: Arc<BotState>) {
                         crate::voice::pause_track(h);
                     }
                 }
-                azuki_player::PlayerEvent::Resumed { .. } => {
+                azuki_player::PlayerEvent::Resumed { position_ms } => {
                     if let Some(ref h) = current_track_handle {
                         crate::voice::resume_track(h);
+                    } else {
+                        // Restored track: no songbird handle yet, need to play from scratch
+                        let snapshot = state.player.get_state().await;
+                        if let azuki_player::PlayStateInfo::Playing { ref track, .. } = snapshot.state
+                            && let Some(ref file_path) = track.file_path
+                        {
+                            debug!("audio_subscriber: resuming restored track, playing from file");
+                            let sb_guard = state.songbird.lock().await;
+                            if let Some(sb) = sb_guard.as_ref() {
+                                if sb.get(state.guild_id).is_none() {
+                                    auto_join_default_channel(&state, sb).await;
+                                }
+                                let notifier_gen = generation.fetch_add(1, Ordering::SeqCst) + 1;
+                                let handle = crate::voice::play_file(sb, state.guild_id, file_path).await;
+                                if let Some(ref h) = handle {
+                                    crate::voice::set_volume(h, track.volume);
+                                    if position_ms > 0 {
+                                        let h2 = h.clone();
+                                        tokio::spawn(async move {
+                                            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+                                            crate::voice::seek_track(&h2, position_ms);
+                                        });
+                                    }
+                                    let _ = h.add_event(
+                                        Event::Track(TrackEvent::End),
+                                        TrackEndNotifier {
+                                            player: state.player.clone(),
+                                            track_id: track.id.clone(),
+                                            generation: notifier_gen,
+                                            current_generation: generation.clone(),
+                                        },
+                                    );
+                                }
+                                current_file = Some((file_path.clone(), track.id.clone(), track.volume));
+                                current_track_handle = handle;
+                            }
+                        }
                     }
                 }
                 azuki_player::PlayerEvent::Seeked { position_ms, paused } => {
@@ -227,6 +291,7 @@ async fn run_audio_subscriber(state: Arc<BotState>) {
             Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
         }
     }
+    debug!("audio_subscriber: EXITED");
 }
 
 struct TrackEndNotifier {

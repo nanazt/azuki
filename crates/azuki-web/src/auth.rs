@@ -95,7 +95,7 @@ pub async fn callback(
     let stored_state = match jar.get(OAUTH_STATE_COOKIE) {
         Some(c) => c.value().to_string(),
         None => {
-            return (StatusCode::BAD_REQUEST, "missing oauth state cookie").into_response();
+            return Redirect::temporary("/auth/login").into_response();
         }
     };
 

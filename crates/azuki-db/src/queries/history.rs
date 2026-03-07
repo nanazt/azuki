@@ -47,17 +47,37 @@ pub async fn record_play(
     pool: &SqlitePool,
     track_id: &str,
     user_id: &str,
+    volume: i64,
 ) -> DbResult<PlayHistory> {
     sqlx::query_as::<_, PlayHistory>(
-        "INSERT INTO play_history (track_id, user_id)
-         VALUES (?1, ?2)
-         RETURNING id, track_id, user_id, played_at, completed",
+        "INSERT INTO play_history (track_id, user_id, volume)
+         VALUES (?1, ?2, ?3)
+         RETURNING id, track_id, user_id, played_at, completed, message_id, volume",
     )
     .bind(track_id)
     .bind(user_id)
+    .bind(volume)
     .fetch_one(pool)
     .await
     .map_err(DbError::from)
+}
+
+pub async fn update_message_id(pool: &SqlitePool, id: i64, message_id: &str) -> DbResult<()> {
+    sqlx::query("UPDATE play_history SET message_id = ?1 WHERE id = ?2")
+        .bind(message_id)
+        .bind(id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+pub async fn update_history_volume(pool: &SqlitePool, id: i64, volume: i64) -> DbResult<()> {
+    sqlx::query("UPDATE play_history SET volume = ?1 WHERE id = ?2")
+        .bind(volume)
+        .bind(id)
+        .execute(pool)
+        .await?;
+    Ok(())
 }
 
 pub async fn mark_completed(pool: &SqlitePool, id: i64) -> DbResult<()> {

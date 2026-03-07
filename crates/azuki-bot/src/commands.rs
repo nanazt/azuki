@@ -1,8 +1,9 @@
 use std::sync::Arc;
 
 use serenity::all::{
-    ChannelId, CommandInteraction, CommandOptionType, Context, CreateCommand,
+    ChannelId, CommandInteraction, CommandOptionType, ComponentInteraction, Context, CreateCommand,
     CreateCommandOption, CreateInteractionResponse, CreateInteractionResponseMessage, GuildId,
+    UserId,
 };
 use tracing::info;
 
@@ -10,10 +11,7 @@ use azuki_player::{LoopMode, TrackInfo};
 
 use crate::BotState;
 
-pub async fn register_commands(
-    ctx: &Context,
-    guild_id: GuildId,
-) -> Result<(), serenity::Error> {
+pub async fn register_commands(ctx: &Context, guild_id: GuildId) -> Result<(), serenity::Error> {
     let commands = vec![
         CreateCommand::new("play")
             .description("Play a track from YouTube or URL")
@@ -48,8 +46,12 @@ pub async fn register_commands(
         CreateCommand::new("seek")
             .description("Seek to position (e.g. 1:30)")
             .add_option(
-                CreateCommandOption::new(CommandOptionType::String, "time", "Time position (e.g. 1:30)")
-                    .required(true),
+                CreateCommandOption::new(
+                    CommandOptionType::String,
+                    "time",
+                    "Time position (e.g. 1:30)",
+                )
+                .required(true),
             ),
         CreateCommand::new("loop")
             .description("Set loop mode")
@@ -115,15 +117,6 @@ fn get_int_option(cmd: &CommandInteraction, name: &str) -> Option<i64> {
         .and_then(|o| o.value.as_i64())
 }
 
-fn get_user_voice_channel(ctx: &Context, cmd: &CommandInteraction) -> Option<ChannelId> {
-    let guild_id = cmd.guild_id?;
-    let guild = ctx.cache.guild(guild_id)?;
-    let voice_state = guild
-        .voice_states
-        .get(&cmd.user.id);
-    voice_state.and_then(|vs| vs.channel_id)
-}
-
 async fn respond(
     ctx: &Context,
     cmd: &CommandInteraction,
@@ -142,19 +135,42 @@ async fn defer(ctx: &Context, cmd: &CommandInteraction) -> Result<(), crate::Bot
         .map_err(|e| crate::BotError::Serenity(e.to_string()))
 }
 
-async fn ensure_voice(ctx: &Context, cmd: &CommandInteraction, state: &Arc<BotState>) -> Result<ChannelId, crate::BotError> {
-    let channel_id = get_user_voice_channel(ctx, cmd)
-        .ok_or_else(|| crate::BotError::NotInVoice)?;
+pub async fn ensure_user_in_voice(
+    ctx: &Context,
+    guild_id: GuildId,
+    user_id: UserId,
+    state: &Arc<BotState>,
+) -> Result<ChannelId, crate::BotError> {
+    let channel_id = {
+        let guild = ctx
+            .cache
+            .guild(guild_id)
+            .ok_or(crate::BotError::NotInVoice)?;
+        guild
+            .voice_states
+            .get(&user_id)
+            .and_then(|vs| vs.channel_id)
+    }
+    .ok_or(crate::BotError::NotInVoice)?;
 
-    // Join the channel if not already in one
     if let Some(sb) = state.songbird.lock().await.as_ref()
-        && sb.get(state.guild_id).is_none() {
-            crate::voice::join_channel(sb, state.guild_id, channel_id)
-                .await
-                .map_err(crate::BotError::Voice)?;
-        }
+        && sb.get(state.guild_id).is_none()
+    {
+        crate::voice::join_channel(sb, state.guild_id, channel_id)
+            .await
+            .map_err(crate::BotError::Voice)?;
+    }
 
     Ok(channel_id)
+}
+
+async fn ensure_voice(
+    ctx: &Context,
+    cmd: &CommandInteraction,
+    state: &Arc<BotState>,
+) -> Result<ChannelId, crate::BotError> {
+    let guild_id = cmd.guild_id.ok_or(crate::BotError::NotInVoice)?;
+    ensure_user_in_voice(ctx, guild_id, cmd.user.id, state).await
 }
 
 async fn handle_play(
@@ -171,20 +187,43 @@ async fn handle_play(
     // Search or download
     let is_url = query.starts_with("http://") || query.starts_with("https://");
     let (file_path, meta) = if is_url {
-        state.ytdlp.download(&query).await.map_err(crate::BotError::Media)?
+        state
+            .ytdlp
+            .download(&query)
+            .await
+            .map_err(crate::BotError::Media)?
     } else {
-        let youtube = state.youtube.read().unwrap().clone()
+        let youtube = state
+            .youtube
+            .read()
+            .unwrap()
+            .clone()
             .ok_or(crate::BotError::NoYouTubeKey)?;
-        let results = youtube.search(&query, 1).await.map_err(crate::BotError::Media)?;
+        let results = youtube
+            .search(&query, 1)
+            .await
+            .map_err(crate::BotError::Media)?;
         let meta = results
             .into_iter()
             .next()
             .ok_or_else(|| crate::BotError::NoResults)?;
-        state.ytdlp.download(&meta.source_url).await.map_err(crate::BotError::Media)?
+        state
+            .ytdlp
+            .download(&meta.source_url)
+            .await
+            .map_err(crate::BotError::Media)?
     };
 
     let track_id = sha_id(&meta.source_url);
     let file_path_str = file_path.to_string_lossy().to_string();
+
+    // Download thumbnail
+    if let Some(ref thumb_url) = meta.thumbnail_url {
+        let thumb_path = std::path::Path::new("media/thumbnails").join(format!("{track_id}.jpg"));
+        if let Err(e) = azuki_media::YtDlp::download_thumbnail(thumb_url, &thumb_path).await {
+            tracing::warn!("thumbnail download failed: {e}");
+        }
+    }
 
     // Save to DB
     azuki_db::queries::tracks::upsert_track(
@@ -202,7 +241,8 @@ async fn handle_play(
     .await
     .ok();
 
-    let track_volume = azuki_db::queries::tracks::get_track(&state.db, &track_id).await
+    let track_volume = azuki_db::queries::tracks::get_track(&state.db, &track_id)
+        .await
         .map(|t| t.volume as u8)
         .unwrap_or(5);
 
@@ -238,10 +278,17 @@ async fn handle_play(
         }
     }
 
-    let content = format!("🎵 **{}** — {}", meta.title, meta.artist.as_deref().unwrap_or("Unknown"));
-    cmd.edit_response(&ctx.http, serenity::all::EditInteractionResponse::new().content(&content))
-        .await
-        .map_err(|e| crate::BotError::Serenity(e.to_string()))?;
+    let content = format!(
+        "🎵 **{}** — {}",
+        meta.title,
+        meta.artist.as_deref().unwrap_or("Unknown")
+    );
+    cmd.edit_response(
+        &ctx.http,
+        serenity::all::EditInteractionResponse::new().content(&content),
+    )
+    .await
+    .map_err(|e| crate::BotError::Serenity(e.to_string()))?;
 
     Ok(())
 }
@@ -251,7 +298,11 @@ async fn handle_pause(
     cmd: &CommandInteraction,
     state: &Arc<BotState>,
 ) -> Result<(), crate::BotError> {
-    state.player.pause().await.map_err(crate::BotError::Player)?;
+    state
+        .player
+        .pause()
+        .await
+        .map_err(crate::BotError::Player)?;
     // Songbird pause is handled by run_audio_subscriber via Paused event
     respond(ctx, cmd, "⏸️ Paused").await
 }
@@ -261,7 +312,11 @@ async fn handle_resume(
     cmd: &CommandInteraction,
     state: &Arc<BotState>,
 ) -> Result<(), crate::BotError> {
-    state.player.resume().await.map_err(crate::BotError::Player)?;
+    state
+        .player
+        .resume()
+        .await
+        .map_err(crate::BotError::Player)?;
     // Audio will be re-triggered via the player event subscriber
     respond(ctx, cmd, "▶️ Resumed").await
 }
@@ -393,9 +448,11 @@ async fn handle_volume(
         .map_err(crate::BotError::Player)?;
     let snapshot = state.player.get_state().await;
     if let azuki_player::PlayStateInfo::Playing { ref track, .. }
-        | azuki_player::PlayStateInfo::Paused { ref track, .. } = snapshot.state
+    | azuki_player::PlayStateInfo::Paused { ref track, .. } = snapshot.state
     {
-        azuki_db::queries::tracks::update_track_volume(&state.db, &track.id, level as i64).await.ok();
+        azuki_db::queries::tracks::update_track_volume(&state.db, &track.id, level as i64)
+            .await
+            .ok();
     }
     respond(ctx, cmd, &format!("🔊 Volume: {level}%")).await
 }
@@ -413,7 +470,12 @@ async fn handle_seek(
         .seek(position_ms)
         .await
         .map_err(crate::BotError::Player)?;
-    respond(ctx, cmd, &format!("⏩ Seeked to {}", format_duration(position_ms))).await
+    respond(
+        ctx,
+        cmd,
+        &format!("⏩ Seeked to {}", format_duration(position_ms)),
+    )
+    .await
 }
 
 async fn handle_loop(
@@ -456,7 +518,8 @@ async fn handle_playlist(
         // TODO: YouTube playlist import
         cmd.edit_response(
             &ctx.http,
-            serenity::all::EditInteractionResponse::new().content("YouTube playlist import coming soon"),
+            serenity::all::EditInteractionResponse::new()
+                .content("YouTube playlist import coming soon"),
         )
         .await
         .map_err(|e| crate::BotError::Serenity(e.to_string()))?;
@@ -464,7 +527,8 @@ async fn handle_playlist(
     }
 
     // Search DB playlists
-    let playlists = azuki_db::queries::playlists::list_playlists(&state.db, &user_id).await
+    let playlists = azuki_db::queries::playlists::list_playlists(&state.db, &user_id)
+        .await
         .map_err(crate::BotError::Db)?;
 
     let playlist = playlists
@@ -472,7 +536,8 @@ async fn handle_playlist(
         .find(|p| p.name.to_lowercase() == name.to_lowercase())
         .ok_or_else(|| crate::BotError::NoResults)?;
 
-    let tracks = azuki_db::queries::playlists::get_playlist_tracks(&state.db, playlist.id).await
+    let tracks = azuki_db::queries::playlists::get_playlist_tracks(&state.db, playlist.id)
+        .await
         .map_err(crate::BotError::Db)?;
 
     for track in &tracks {
@@ -493,8 +558,11 @@ async fn handle_playlist(
 
     cmd.edit_response(
         &ctx.http,
-        serenity::all::EditInteractionResponse::new()
-            .content(format!("📋 Loaded **{}** ({} tracks)", playlist.name, tracks.len())),
+        serenity::all::EditInteractionResponse::new().content(format!(
+            "📋 Loaded **{}** ({} tracks)",
+            playlist.name,
+            tracks.len()
+        )),
     )
     .await
     .map_err(|e| crate::BotError::Serenity(e.to_string()))?;
@@ -521,7 +589,7 @@ fn parse_time(s: &str) -> Option<u64> {
     }
 }
 
-fn format_duration(ms: u64) -> String {
+pub fn format_duration(ms: u64) -> String {
     let total_secs = ms / 1000;
     let mins = total_secs / 60;
     let secs = total_secs % 60;
@@ -538,4 +606,302 @@ fn sha_id(input: &str) -> String {
     use sha2::{Digest, Sha256};
     let hash = Sha256::digest(input.as_bytes());
     hex::encode(&hash[..8])
+}
+
+pub async fn handle_play_button(
+    ctx: &Context,
+    component: &ComponentInteraction,
+    state: &Arc<BotState>,
+    track_id: &str,
+) {
+    // Validate track_id format (16-char hex)
+    if track_id.len() != 16 || !track_id.chars().all(|c| c.is_ascii_hexdigit()) {
+        let _ = component
+            .create_response(
+                &ctx.http,
+                CreateInteractionResponse::Message(
+                    CreateInteractionResponseMessage::new()
+                        .content("잘못된 트랙 ID입니다")
+                        .ephemeral(true),
+                ),
+            )
+            .await;
+        return;
+    }
+
+    let guild_id = match component.guild_id {
+        Some(id) => id,
+        None => return,
+    };
+
+    if ensure_user_in_voice(ctx, guild_id, component.user.id, state)
+        .await
+        .is_err()
+    {
+        let _ = component
+            .create_response(
+                &ctx.http,
+                CreateInteractionResponse::Message(
+                    CreateInteractionResponseMessage::new()
+                        .content("음성 채널에 먼저 접속해주세요")
+                        .ephemeral(true),
+                ),
+            )
+            .await;
+        return;
+    }
+
+    let track = match azuki_db::queries::tracks::get_track(&state.db, track_id).await {
+        Ok(t) => t,
+        Err(_) => {
+            let _ = component
+                .create_response(
+                    &ctx.http,
+                    CreateInteractionResponse::Message(
+                        CreateInteractionResponseMessage::new()
+                            .content("트랙을 찾을 수 없습니다")
+                            .ephemeral(true),
+                    ),
+                )
+                .await;
+            return;
+        }
+    };
+
+    let user_id = component.user.id.to_string();
+    let track_info = TrackInfo {
+        id: track.id.clone(),
+        title: track.title.clone(),
+        artist: track.artist.clone(),
+        duration_ms: track.duration_ms as u64,
+        thumbnail_url: track.thumbnail_url.clone(),
+        source_url: track.source_url.clone(),
+        source_type: track.source_type.clone(),
+        file_path: track.file_path.clone(),
+        youtube_id: track.youtube_id.clone(),
+        volume: track.volume as u8,
+    };
+
+    let has_file = track
+        .file_path
+        .as_ref()
+        .is_some_and(|fp| std::path::Path::new(fp).exists());
+
+    if has_file {
+        let snapshot = state.player.get_state().await;
+        let result = match snapshot.state {
+            azuki_player::PlayStateInfo::Idle => {
+                state.player.play(track_info.clone(), user_id).await
+            }
+            _ => state.player.enqueue(track_info.clone(), user_id).await,
+        };
+
+        let content = if result.is_ok() {
+            format!("🎵 **{}** 재생 대기열에 추가했습니다", track_info.title)
+        } else {
+            "재생에 실패했습니다".to_string()
+        };
+        let _ = component
+            .create_response(
+                &ctx.http,
+                CreateInteractionResponse::Message(
+                    CreateInteractionResponseMessage::new()
+                        .content(content)
+                        .ephemeral(true),
+                ),
+            )
+            .await;
+    } else {
+        let _ = component
+            .create_response(
+                &ctx.http,
+                CreateInteractionResponse::Message(
+                    CreateInteractionResponseMessage::new()
+                        .content(format!(
+                            "🔄 **{}** 다시 다운로드합니다...",
+                            track_info.title
+                        ))
+                        .ephemeral(true),
+                ),
+            )
+            .await;
+
+        let ytdlp = state.ytdlp.clone();
+        let player = state.player.clone();
+        let db = state.db.clone();
+        let source_url = track.source_url.clone();
+        let user_id = component.user.id.to_string();
+
+        tokio::spawn(async move {
+            match ytdlp.download(&source_url).await {
+                Ok((file_path, _meta)) => {
+                    let file_path_str = file_path.to_string_lossy().to_string();
+                    let mut ti = track_info;
+                    ti.file_path = Some(file_path_str.clone());
+
+                    let _ = azuki_db::queries::tracks::upsert_track(
+                        &db,
+                        &ti.id,
+                        &ti.title,
+                        ti.artist.as_deref(),
+                        ti.duration_ms as i64,
+                        ti.thumbnail_url.as_deref(),
+                        &ti.source_url,
+                        &ti.source_type,
+                        Some(&file_path_str),
+                        ti.youtube_id.as_deref(),
+                    )
+                    .await;
+
+                    let snapshot = player.get_state().await;
+                    match snapshot.state {
+                        azuki_player::PlayStateInfo::Idle => {
+                            let _ = player.play(ti, user_id).await;
+                        }
+                        _ => {
+                            let _ = player.enqueue(ti, user_id).await;
+                        }
+                    }
+                }
+                Err(e) => {
+                    tracing::error!("re-download failed: {e}");
+                }
+            }
+        });
+    }
+}
+
+pub async fn handle_legacy_play(
+    ctx: &Context,
+    component: &ComponentInteraction,
+    state: &Arc<BotState>,
+    url: &str,
+) {
+    // URL validation
+    let parsed = match url::Url::parse(url) {
+        Ok(u) => u,
+        Err(_) => {
+            let _ = component
+                .create_response(
+                    &ctx.http,
+                    CreateInteractionResponse::Message(
+                        CreateInteractionResponseMessage::new()
+                            .content("잘못된 URL입니다")
+                            .ephemeral(true),
+                    ),
+                )
+                .await;
+            return;
+        }
+    };
+
+    match parsed.scheme() {
+        "http" | "https" => {}
+        _ => {
+            let _ = component
+                .create_response(
+                    &ctx.http,
+                    CreateInteractionResponse::Message(
+                        CreateInteractionResponseMessage::new()
+                            .content("잘못된 URL 형식입니다")
+                            .ephemeral(true),
+                    ),
+                )
+                .await;
+            return;
+        }
+    }
+
+    let guild_id = match component.guild_id {
+        Some(id) => id,
+        None => return,
+    };
+
+    if ensure_user_in_voice(ctx, guild_id, component.user.id, state)
+        .await
+        .is_err()
+    {
+        let _ = component
+            .create_response(
+                &ctx.http,
+                CreateInteractionResponse::Message(
+                    CreateInteractionResponseMessage::new()
+                        .content("음성 채널에 먼저 접속해주세요")
+                        .ephemeral(true),
+                ),
+            )
+            .await;
+        return;
+    }
+
+    let _ = component
+        .create_response(
+            &ctx.http,
+            CreateInteractionResponse::Message(
+                CreateInteractionResponseMessage::new()
+                    .content("🔄 다운로드 중...")
+                    .ephemeral(true),
+            ),
+        )
+        .await;
+
+    let ytdlp = state.ytdlp.clone();
+    let player = state.player.clone();
+    let db = state.db.clone();
+    let user_id = component.user.id.to_string();
+    let url = url.to_string();
+
+    tokio::spawn(async move {
+        match ytdlp.download(&url).await {
+            Ok((file_path, meta)) => {
+                let track_id = sha_id(&meta.source_url);
+                let file_path_str = file_path.to_string_lossy().to_string();
+
+                let _ = azuki_db::queries::tracks::upsert_track(
+                    &db,
+                    &track_id,
+                    &meta.title,
+                    meta.artist.as_deref(),
+                    meta.duration_ms as i64,
+                    meta.thumbnail_url.as_deref(),
+                    &meta.source_url,
+                    "youtube",
+                    Some(&file_path_str),
+                    meta.youtube_id.as_deref(),
+                )
+                .await;
+
+                let track_volume = azuki_db::queries::tracks::get_track(&db, &track_id)
+                    .await
+                    .map(|t| t.volume as u8)
+                    .unwrap_or(5);
+
+                let track_info = TrackInfo {
+                    id: track_id,
+                    title: meta.title,
+                    artist: meta.artist,
+                    duration_ms: meta.duration_ms,
+                    thumbnail_url: meta.thumbnail_url,
+                    source_url: meta.source_url,
+                    source_type: "youtube".to_string(),
+                    file_path: Some(file_path_str),
+                    youtube_id: meta.youtube_id,
+                    volume: track_volume,
+                };
+
+                let snapshot = player.get_state().await;
+                match snapshot.state {
+                    azuki_player::PlayStateInfo::Idle => {
+                        let _ = player.play(track_info, user_id).await;
+                    }
+                    _ => {
+                        let _ = player.enqueue(track_info, user_id).await;
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::error!("legacy play download failed: {e}");
+            }
+        }
+    });
 }

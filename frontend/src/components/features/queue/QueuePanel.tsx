@@ -113,6 +113,7 @@ export function QueuePanel({ onOpenSearch }: QueuePanelProps) {
                 <QueueItem
                   key={`${entry.track.id}-${index}`}
                   entry={entry}
+                  index={index}
                   position={index + 1}
                   onRemove={handleRemove}
                 />

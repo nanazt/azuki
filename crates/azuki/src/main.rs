@@ -141,8 +141,7 @@ async fn run_normal(config: Config, pool: SqlitePool) -> anyhow::Result<()> {
 
     // Player — restore state from DB
     let restore_entry_to_queue = |e: azuki_db::queries::history::RestoreEntry| {
-        let file_path = e.source_type == "youtube"
-            && e.youtube_id.is_some();
+        let file_path = e.source_type == "youtube" && e.youtube_id.is_some();
         let fp = if file_path {
             let media_dir = &config.media_dir;
             let yt_id = e.youtube_id.as_deref().unwrap();
@@ -181,13 +180,12 @@ async fn run_normal(config: Config, pool: SqlitePool) -> anyhow::Result<()> {
             .map(restore_entry_to_queue)
             .collect();
 
-    let initial_queue: Vec<azuki_player::QueueEntry> =
-        azuki_db::queries::queue::load_queue(&pool)
-            .await
-            .unwrap_or_default()
-            .into_iter()
-            .map(restore_entry_to_queue)
-            .collect();
+    let initial_queue: Vec<azuki_player::QueueEntry> = azuki_db::queries::queue::load_queue(&pool)
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .map(restore_entry_to_queue)
+        .collect();
 
     let initial_loop_mode = match azuki_db::queries::queue::load_loop_mode(&pool)
         .await
@@ -210,7 +208,9 @@ async fn run_normal(config: Config, pool: SqlitePool) -> anyhow::Result<()> {
             "restoring {} queue items, loop_mode={:?}, now_playing={}",
             initial_queue.len(),
             initial_loop_mode,
-            initial_now_playing.as_ref().map_or("none", |e| e.track.title.as_str()),
+            initial_now_playing
+                .as_ref()
+                .map_or("none", |e| e.track.title.as_str()),
         );
     }
 
@@ -255,6 +255,9 @@ async fn run_normal(config: Config, pool: SqlitePool) -> anyhow::Result<()> {
         download_tx,
     };
 
+    // Http watch channel for embed sending
+    let (http_tx, http_rx) = tokio::sync::watch::channel::<Option<Arc<serenity::all::Http>>>(None);
+
     // Bot state
     let bot_state = Arc::new(azuki_bot::BotState {
         player: player.clone(),
@@ -264,6 +267,7 @@ async fn run_normal(config: Config, pool: SqlitePool) -> anyhow::Result<()> {
         songbird: Mutex::new(None),
         youtube: Arc::clone(&youtube),
         voice_channels: Arc::clone(&voice_channels),
+        http_tx,
     });
 
     // Spawn services
@@ -310,27 +314,45 @@ async fn run_normal(config: Config, pool: SqlitePool) -> anyhow::Result<()> {
         }
     });
 
-    // Bridge task: PlayerEvent -> WebEvent with unified seq counter
+    // Bridge task: PlayerEvent -> WebEvent with unified seq counter + Discord embed
     let bridge_web_tx = web_tx.clone();
     let bridge_player = player.clone();
     let bridge_cancel = cancel.clone();
     let bridge_db = pool.clone();
+    let bridge_guild_id = serenity::all::GuildId::new(config.discord_guild_id);
+    let bridge_http_rx = http_rx;
     let seq_counter = Arc::new(AtomicU64::new(0));
     tokio::spawn({
         let seq = Arc::clone(&seq_counter);
         async move {
             let mut player_rx = bridge_player.subscribe();
+
+            // Embed state: (channel_id, message_id, history_record_id, track, display_name, volume)
+            let mut current_history: Option<(
+                serenity::all::ChannelId,
+                serenity::all::MessageId,
+                i64,
+                azuki_player::TrackInfo,
+                String,
+                u8,
+            )> = None;
+
+            // Volume debounce timer (starts far in the future)
+            let debounce_delay = tokio::time::sleep(std::time::Duration::from_secs(86400));
+            tokio::pin!(debounce_delay);
+
             loop {
                 tokio::select! {
                     result = player_rx.recv() => {
                         match result {
                             Ok(player_seq_event) => {
-                                // Record play history and persist now_playing when a track starts
+                                // Record play history, persist now_playing, send embed when a track starts
                                 if let azuki_player::PlayerEvent::TrackStarted { ref track, added_by: ref user_id, .. } = player_seq_event.event {
-                                    let _ = azuki_db::queries::history::record_play(
+                                    let history_result = azuki_db::queries::history::record_play(
                                         &bridge_db,
                                         &track.id,
                                         user_id,
+                                        track.volume as i64,
                                     ).await;
                                     if let Err(e) = azuki_db::queries::queue::save_now_playing(&bridge_db, &track.id, user_id).await {
                                         tracing::warn!("failed to persist now_playing: {e}");
@@ -343,13 +365,95 @@ async fn run_normal(config: Config, pool: SqlitePool) -> anyhow::Result<()> {
                                             user_id: user_id.clone(),
                                         },
                                     });
+
+                                    // Send Discord embed to history channel
+                                    if let Ok(ref history_record) = history_result
+                                        && let Ok(Some(ch_str)) = azuki_db::config::get_config(&bridge_db, "history_channel_id").await
+                                        && let Ok(ch_u64) = ch_str.parse::<u64>()
+                                    {
+                                                let channel_id = serenity::all::ChannelId::new(ch_u64);
+                                                let http = bridge_http_rx.borrow().clone();
+                                                if let Some(ref http) = http {
+                                                    // Resolve display name
+                                                    let uid: u64 = user_id.parse().unwrap_or(0);
+                                                    let display_name = if uid > 0 {
+                                                        match http.get_member(bridge_guild_id, serenity::all::UserId::new(uid)).await {
+                                                            Ok(member) => {
+                                                                member.nick.as_deref()
+                                                                    .or(member.user.global_name.as_deref())
+                                                                    .unwrap_or(&member.user.name)
+                                                                    .to_string()
+                                                            }
+                                                            Err(_) => user_id.clone(),
+                                                        }
+                                                    } else {
+                                                        user_id.clone()
+                                                    };
+
+                                                    // Build thumbnail URL
+                                                    let web_base_url = azuki_db::config::get_config(&bridge_db, "web_base_url").await.ok().flatten();
+                                                    let thumbnail_url = web_base_url.as_ref().map(|base| {
+                                                        format!("{base}/media/thumbnails/{}.jpg", track.id)
+                                                    });
+
+                                                    let embed = azuki_bot::embed::build_track_embed(
+                                                        track, track.volume, &display_name, thumbnail_url.as_deref(),
+                                                    );
+                                                    let button = azuki_bot::embed::build_play_button(&track.id);
+                                                    let msg = serenity::all::CreateMessage::new()
+                                                        .embed(embed)
+                                                        .components(vec![button]);
+
+                                                    match channel_id.send_message(http.as_ref(), msg).await {
+                                                        Ok(sent) => {
+                                                            let _ = azuki_db::queries::history::update_message_id(
+                                                                &bridge_db, history_record.id, &sent.id.to_string(),
+                                                            ).await;
+                                                            current_history = Some((
+                                                                channel_id, sent.id, history_record.id,
+                                                                track.clone(), display_name, track.volume,
+                                                            ));
+                                                        }
+                                                        Err(e) => tracing::warn!("failed to send history embed: {e}"),
+                                                    }
+                                                } else {
+                                                    tracing::warn!("Http not ready, skipping history embed");
+                                                }
+                                    }
                                 }
 
-                                // Clear now_playing when track ends (stop command)
-                                if let azuki_player::PlayerEvent::TrackEnded { .. } = player_seq_event.event
-                                    && let Err(e) = azuki_db::queries::queue::clear_now_playing(&bridge_db).await
+                                // VolumeChanged: update local volume + debounce
+                                if let azuki_player::PlayerEvent::VolumeChanged { volume } = player_seq_event.event
+                                    && let Some((_, _, _, _, _, ref mut v)) = current_history
                                 {
-                                    tracing::warn!("failed to clear now_playing: {e}");
+                                    *v = volume;
+                                    debounce_delay.as_mut().reset(tokio::time::Instant::now() + std::time::Duration::from_secs(2));
+                                }
+
+                                // TrackEnded: flush pending volume update + clear
+                                if let azuki_player::PlayerEvent::TrackEnded { .. } = player_seq_event.event {
+                                    if let Some((channel_id, message_id, history_id, ref track, ref display_name, volume)) = current_history {
+                                        let http = bridge_http_rx.borrow().clone();
+                                        if let Some(ref http) = http {
+                                            let web_base_url = azuki_db::config::get_config(&bridge_db, "web_base_url").await.ok().flatten();
+                                            let thumbnail_url = web_base_url.as_ref().map(|base| {
+                                                format!("{base}/media/thumbnails/{}.jpg", track.id)
+                                            });
+                                            let embed = azuki_bot::embed::build_track_embed(track, volume, display_name, thumbnail_url.as_deref());
+                                            let button = azuki_bot::embed::build_play_button(&track.id);
+                                            let edit = serenity::all::EditMessage::new()
+                                                .embed(embed)
+                                                .components(vec![button]);
+                                            let _ = channel_id.edit_message(http.as_ref(), message_id, edit).await;
+                                        }
+                                        let _ = azuki_db::queries::history::update_history_volume(&bridge_db, history_id, volume as i64).await;
+                                    }
+                                    current_history = None;
+                                    debounce_delay.as_mut().reset(tokio::time::Instant::now() + std::time::Duration::from_secs(86400));
+
+                                    if let Err(e) = azuki_db::queries::queue::clear_now_playing(&bridge_db).await {
+                                        tracing::warn!("failed to clear now_playing: {e}");
+                                    }
                                 }
 
                                 // Persist queue to DB
@@ -388,6 +492,28 @@ async fn run_normal(config: Config, pool: SqlitePool) -> anyhow::Result<()> {
                             Err(broadcast::error::RecvError::Closed) => break,
                         }
                     }
+
+                    // Debounce timer: edit embed with updated volume
+                    _ = &mut debounce_delay, if current_history.is_some() => {
+                        if let Some((channel_id, message_id, history_id, ref track, ref display_name, volume)) = current_history {
+                            let http = bridge_http_rx.borrow().clone();
+                            if let Some(ref http) = http {
+                                let web_base_url = azuki_db::config::get_config(&bridge_db, "web_base_url").await.ok().flatten();
+                                let thumbnail_url = web_base_url.as_ref().map(|base| {
+                                    format!("{base}/media/thumbnails/{}.jpg", track.id)
+                                });
+                                let embed = azuki_bot::embed::build_track_embed(track, volume, display_name, thumbnail_url.as_deref());
+                                let button = azuki_bot::embed::build_play_button(&track.id);
+                                let edit = serenity::all::EditMessage::new()
+                                    .embed(embed)
+                                    .components(vec![button]);
+                                let _ = channel_id.edit_message(http.as_ref(), message_id, edit).await;
+                            }
+                            let _ = azuki_db::queries::history::update_history_volume(&bridge_db, history_id, volume as i64).await;
+                        }
+                        debounce_delay.as_mut().reset(tokio::time::Instant::now() + std::time::Duration::from_secs(86400));
+                    }
+
                     _ = bridge_cancel.cancelled() => break,
                 }
             }
@@ -548,9 +674,10 @@ async fn download_worker(
                     azuki_player::PlayStateInfo::Idle => {
                         let _ = player.play(track_info.clone(), req.user_id.clone()).await;
                     }
-                    azuki_player::PlayStateInfo::Paused { position_ms, ref track }
-                        if position_ms >= track.duration_ms =>
-                    {
+                    azuki_player::PlayStateInfo::Paused {
+                        position_ms,
+                        ref track,
+                    } if position_ms >= track.duration_ms => {
                         let _ = player.play(track_info.clone(), req.user_id.clone()).await;
                     }
                     _ => {
@@ -577,33 +704,47 @@ async fn download_worker(
             let progress_seq = Arc::clone(&seq);
             let progress_active = Arc::clone(&active);
             let progress_id = download_id.clone();
-            let result = ytdlp.download_with_progress(&url, |p| {
-                let pct = p.percent.round().clamp(0.0, 100.0) as u8;
+            let result = ytdlp
+                .download_with_progress(&url, |p| {
+                    let pct = p.percent.round().clamp(0.0, 100.0) as u8;
 
-                if let Some(mut entry) = progress_active.get_mut(&progress_id) {
-                    entry.percent = pct;
-                    entry.speed_bps = p.speed_bps;
-                }
+                    if let Some(mut entry) = progress_active.get_mut(&progress_id) {
+                        entry.percent = pct;
+                        entry.speed_bps = p.speed_bps;
+                    }
 
-                broadcast_web_event(
-                    &progress_web_tx,
-                    &progress_seq,
-                    azuki_web::events::WebEvent::DownloadProgress {
-                        download_id: progress_id.clone(),
-                        stage: match p.stage {
-                            azuki_media::ytdlp::DownloadStage::Resolving => "resolving",
-                            azuki_media::ytdlp::DownloadStage::Downloading => "downloading",
-                            azuki_media::ytdlp::DownloadStage::Converting => "converting",
-                        }.to_string(),
-                        percent: pct,
-                        speed_bps: p.speed_bps,
-                    },
-                );
-            }).await;
+                    broadcast_web_event(
+                        &progress_web_tx,
+                        &progress_seq,
+                        azuki_web::events::WebEvent::DownloadProgress {
+                            download_id: progress_id.clone(),
+                            stage: match p.stage {
+                                azuki_media::ytdlp::DownloadStage::Resolving => "resolving",
+                                azuki_media::ytdlp::DownloadStage::Downloading => "downloading",
+                                azuki_media::ytdlp::DownloadStage::Converting => "converting",
+                            }
+                            .to_string(),
+                            percent: pct,
+                            speed_bps: p.speed_bps,
+                        },
+                    );
+                })
+                .await;
             match result {
                 Ok((file_path, meta)) => {
                     let track_id = azuki_web::util::sha_id(&meta.source_url);
                     let file_path_str = file_path.to_string_lossy().to_string();
+
+                    // Download thumbnail
+                    if let Some(ref thumb_url) = meta.thumbnail_url {
+                        let thumb_path = std::path::Path::new("media/thumbnails")
+                            .join(format!("{track_id}.jpg"));
+                        if let Err(e) =
+                            azuki_media::YtDlp::download_thumbnail(thumb_url, &thumb_path).await
+                        {
+                            tracing::warn!("thumbnail download failed: {e}");
+                        }
+                    }
 
                     let _ = azuki_db::queries::tracks::upsert_track(
                         &db,
@@ -643,9 +784,10 @@ async fn download_worker(
                         azuki_player::PlayStateInfo::Idle => {
                             let _ = player.play(track_info.clone(), req.user_id.clone()).await;
                         }
-                        azuki_player::PlayStateInfo::Paused { position_ms, ref track }
-                            if position_ms >= track.duration_ms =>
-                        {
+                        azuki_player::PlayStateInfo::Paused {
+                            position_ms,
+                            ref track,
+                        } if position_ms >= track.duration_ms => {
                             let _ = player.play(track_info.clone(), req.user_id.clone()).await;
                         }
                         _ => {

@@ -4,11 +4,12 @@ import type { QueueEntry } from "../../../lib/types";
 
 interface QueueItemProps {
   entry: QueueEntry;
+  index: number;
   position: number;
-  onRemove: (position: number) => void;
+  onRemove: (index: number) => void;
 }
 
-export function QueueItem({ entry, position, onRemove }: QueueItemProps) {
+export function QueueItem({ entry, index, position, onRemove }: QueueItemProps) {
   const { track, added_by } = entry;
 
   return (
@@ -46,7 +47,7 @@ export function QueueItem({ entry, position, onRemove }: QueueItemProps) {
         </div>
       </div>
       <button
-        onClick={() => onRemove(position)}
+        onClick={() => onRemove(index)}
         className={clsx(
           "flex-shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center rounded text-[var(--color-text-tertiary)]",
           "opacity-0 group-hover:opacity-100 hover:text-[var(--color-danger)] hover:bg-[var(--color-bg-tertiary)]",

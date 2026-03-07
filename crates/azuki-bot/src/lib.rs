@@ -1,4 +1,5 @@
 pub mod commands;
+pub mod embed;
 pub mod handler;
 pub mod voice;
 
@@ -20,6 +21,7 @@ pub struct BotState {
     pub guild_id: GuildId,
     pub songbird: Mutex<Option<Arc<Songbird>>>,
     pub voice_channels: Arc<RwLock<Vec<(u64, String)>>>,
+    pub http_tx: tokio::sync::watch::Sender<Option<Arc<serenity::http::Http>>>,
 }
 
 #[derive(Debug, thiserror::Error)]

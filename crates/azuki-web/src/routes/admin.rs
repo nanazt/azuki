@@ -173,6 +173,94 @@ pub async fn voice_channel_set(
     Ok(Json(serde_json::json!({ "success": true })))
 }
 
+pub async fn history_channel_get(
+    jar: CookieJar,
+    State(state): State<WebState>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    extract_user_id(&jar, &state).await?;
+
+    let channel_id = azuki_db::config::get_config(&state.db, "history_channel_id")
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    Ok(Json(serde_json::json!({
+        "history_channel_id": channel_id,
+    })))
+}
+
+#[derive(serde::Deserialize)]
+pub struct HistoryChannelRequest {
+    channel_id: String,
+}
+
+pub async fn history_channel_set(
+    jar: CookieJar,
+    State(state): State<WebState>,
+    Json(body): Json<HistoryChannelRequest>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    extract_user_id(&jar, &state).await?;
+
+    // Validate: must be empty (to clear) or a numeric snowflake
+    if !body.channel_id.is_empty() && body.channel_id.parse::<u64>().is_err() {
+        return Err(ApiError::BadRequest(
+            "channel_id must be a numeric Discord snowflake".to_string(),
+        ));
+    }
+
+    azuki_db::config::save_config(&state.db, &[("history_channel_id", &body.channel_id)])
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    Ok(Json(serde_json::json!({ "success": true })))
+}
+
+pub async fn web_base_url_get(
+    jar: CookieJar,
+    State(state): State<WebState>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    extract_user_id(&jar, &state).await?;
+
+    let web_base_url = azuki_db::config::get_config(&state.db, "web_base_url")
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    Ok(Json(serde_json::json!({
+        "web_base_url": web_base_url,
+    })))
+}
+
+#[derive(serde::Deserialize)]
+pub struct WebBaseUrlRequest {
+    url: String,
+}
+
+pub async fn web_base_url_set(
+    jar: CookieJar,
+    State(state): State<WebState>,
+    Json(body): Json<WebBaseUrlRequest>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    extract_user_id(&jar, &state).await?;
+
+    if !body.url.is_empty() {
+        let parsed = url::Url::parse(&body.url)
+            .map_err(|_| ApiError::BadRequest("invalid URL format".to_string()))?;
+        match parsed.scheme() {
+            "http" | "https" => {}
+            _ => {
+                return Err(ApiError::BadRequest(
+                    "URL must use http or https scheme".to_string(),
+                ));
+            }
+        }
+    }
+
+    azuki_db::config::save_config(&state.db, &[("web_base_url", &body.url)])
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    Ok(Json(serde_json::json!({ "success": true })))
+}
+
 pub fn admin_routes() -> axum::Router<WebState> {
     axum::Router::new()
         .route("/api/admin/ytdlp", axum::routing::get(ytdlp_info))
@@ -188,5 +276,13 @@ pub fn admin_routes() -> axum::Router<WebState> {
         .route(
             "/api/admin/voice-channel",
             axum::routing::get(voice_channel_get).put(voice_channel_set),
+        )
+        .route(
+            "/api/admin/history-channel",
+            axum::routing::get(history_channel_get).put(history_channel_set),
+        )
+        .route(
+            "/api/admin/web-base-url",
+            axum::routing::get(web_base_url_get).put(web_base_url_set),
         )
 }

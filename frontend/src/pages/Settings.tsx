@@ -24,7 +24,12 @@ function SegmentedControl({
   value,
   onChange,
 }: {
-  options: { value: string; label: string; shortLabel?: string; disabled?: boolean }[];
+  options: {
+    value: string;
+    label: string;
+    shortLabel?: string;
+    disabled?: boolean;
+  }[];
   value: string;
   onChange: (value: string) => void;
 }) {
@@ -42,7 +47,7 @@ function SegmentedControl({
               ? "bg-[var(--color-accent)] text-white"
               : opt.disabled
                 ? "bg-[var(--color-bg-secondary)] text-[var(--color-text-tertiary)] opacity-50 cursor-not-allowed"
-                : "bg-[var(--color-bg-secondary)] text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover)] cursor-pointer"
+                : "bg-[var(--color-bg-secondary)] text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover)] cursor-pointer",
           )}
         >
           <span className="sm:hidden">{opt.shortLabel ?? opt.label}</span>
@@ -61,13 +66,22 @@ export function Settings() {
   const [prefsLoading, setPrefsLoading] = useState(true);
 
   // Admin state
-  const [ytInfo, setYtInfo] = useState<{ has_key: boolean; key_masked: string | null } | null>(null);
+  const [ytInfo, setYtInfo] = useState<{
+    has_key: boolean;
+    key_masked: string | null;
+  } | null>(null);
   const [newKey, setNewKey] = useState("");
   const [savingKey, setSavingKey] = useState(false);
   const [keySaved, setKeySaved] = useState(false);
   const [ytError, setYtError] = useState<string | null>(null);
-  const [info, setInfo] = useState<{ current_version: string | null; managed: boolean } | null>(null);
-  const [latest, setLatest] = useState<{ latest_version: string; update_available: boolean } | null>(null);
+  const [info, setInfo] = useState<{
+    current_version: string | null;
+    managed: boolean;
+  } | null>(null);
+  const [latest, setLatest] = useState<{
+    latest_version: string;
+    update_available: boolean;
+  } | null>(null);
   const [adminLoading, setAdminLoading] = useState(true);
   const [checking, setChecking] = useState(false);
   const [updating, setUpdating] = useState(false);
@@ -81,34 +95,52 @@ export function Settings() {
   const botVolumeDebounceRef = useRef<ReturnType<typeof setTimeout>>(null);
 
   // Voice channel state
-  const [voiceChannels, setVoiceChannels] = useState<{ id: string; name: string }[]>([]);
-  const [defaultVoiceChannel, setDefaultVoiceChannel] = useState<string | null>(null);
+  const [voiceChannels, setVoiceChannels] = useState<
+    { id: string; name: string }[]
+  >([]);
+  const [defaultVoiceChannel, setDefaultVoiceChannel] = useState<string | null>(
+    null,
+  );
   const [savingVoice, setSavingVoice] = useState(false);
   const [voiceSaved, setVoiceSaved] = useState(false);
 
-  const [me, setMe] = useState<{ id: string; username: string; avatar_url: string | null } | null>(null);
+  const [me, setMe] = useState<{
+    id: string;
+    username: string;
+    avatar_url: string | null;
+  } | null>(null);
 
   useEffect(() => {
-    api.getMe().then(setMe).catch(() => {});
-    api.getPreferences()
+    api
+      .getMe()
+      .then(setMe)
+      .catch(() => {});
+    api
+      .getPreferences()
       .then(setPrefs)
       .catch(() => {})
       .finally(() => setPrefsLoading(false));
 
-    api.getYtdlpInfo()
+    api
+      .getYtdlpInfo()
       .then(setInfo)
       .catch(() => {})
       .finally(() => setAdminLoading(false));
-    api.getYoutubeInfo()
+    api
+      .getYoutubeInfo()
       .then(setYtInfo)
       .catch(() => {});
-    api.getVoiceChannel()
+    api
+      .getVoiceChannel()
       .then((data) => {
         setVoiceChannels(data.channels);
         setDefaultVoiceChannel(data.default_channel_id);
       })
       .catch(() => {});
-    api.getBotSettings().then(s => setBotDefaultVolume(s.default_volume)).catch(() => {});
+    api
+      .getBotSettings()
+      .then((s) => setBotDefaultVolume(s.default_volume))
+      .catch(() => {});
   }, []);
 
   const handleCheck = async () => {
@@ -118,7 +150,9 @@ export function Settings() {
       const result = await api.checkYtdlpUpdate();
       setLatest(result);
     } catch (e) {
-      setAdminError(e instanceof Error ? e.message : "Failed to check for updates");
+      setAdminError(
+        e instanceof Error ? e.message : "Failed to check for updates",
+      );
     } finally {
       setChecking(false);
     }
@@ -129,7 +163,9 @@ export function Settings() {
     setAdminError(null);
     try {
       const result = await api.updateYtdlp();
-      setInfo((prev) => prev ? { ...prev, current_version: result.version } : prev);
+      setInfo((prev) =>
+        prev ? { ...prev, current_version: result.version } : prev,
+      );
       setLatest(null);
     } catch (e) {
       setAdminError(e instanceof Error ? e.message : "Update failed");
@@ -195,7 +231,11 @@ export function Settings() {
               disabled={loggingOut}
               className="hidden md:flex min-h-[44px] px-4 py-2 rounded-lg text-sm font-medium text-red-400 border border-[var(--color-border)] hover:bg-[var(--color-bg-hover)] transition-colors items-center gap-2 cursor-pointer disabled:opacity-50"
             >
-              {loggingOut ? <Loader2 size={16} className="animate-spin" /> : <LogOut size={16} />}
+              {loggingOut ? (
+                <Loader2 size={16} className="animate-spin" />
+              ) : (
+                <LogOut size={16} />
+              )}
               Log out
             </button>
           </div>
@@ -205,7 +245,11 @@ export function Settings() {
             disabled={loggingOut}
             className="md:hidden min-h-[44px] w-full px-4 py-2 rounded-lg text-sm font-medium text-red-400 border border-[var(--color-border)] hover:bg-[var(--color-bg-hover)] transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
           >
-            {loggingOut ? <Loader2 size={16} className="animate-spin" /> : <LogOut size={16} />}
+            {loggingOut ? (
+              <Loader2 size={16} className="animate-spin" />
+            ) : (
+              <LogOut size={16} />
+            )}
             Log out
           </button>
         </div>
@@ -217,7 +261,9 @@ export function Settings() {
           Appearance
         </h2>
         <div className="rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border)] p-4 flex flex-col gap-3">
-          <span className="text-sm text-[var(--color-text-secondary)]">Theme</span>
+          <span className="text-sm text-[var(--color-text-secondary)]">
+            Theme
+          </span>
           <SegmentedControl
             options={[
               { value: "dark", label: "Dark" },
@@ -243,11 +289,28 @@ export function Settings() {
               <Volume2 size={16} className="text-[var(--color-accent)]" />
               Default Volume
             </h3>
-            <span className={clsx(
-              "flex items-center gap-1.5 text-xs transition-opacity duration-300",
-              savingBotVolume ? "opacity-100 text-[var(--color-text-tertiary)]" : botVolumeSaved ? "opacity-100 text-[var(--color-success)]" : "opacity-0 pointer-events-none"
-            )} aria-live="polite">
-              {savingBotVolume ? (<><Loader2 size={12} className="animate-spin" />Saving</>) : (<><CheckCircle size={12} />Saved</>)}
+            <span
+              className={clsx(
+                "flex items-center gap-1.5 text-xs transition-opacity duration-300",
+                savingBotVolume
+                  ? "opacity-100 text-[var(--color-text-tertiary)]"
+                  : botVolumeSaved
+                    ? "opacity-100 text-[var(--color-success)]"
+                    : "opacity-0 pointer-events-none",
+              )}
+              aria-live="polite"
+            >
+              {savingBotVolume ? (
+                <>
+                  <Loader2 size={12} className="animate-spin" />
+                  Saving
+                </>
+              ) : (
+                <>
+                  <CheckCircle size={12} />
+                  Saved
+                </>
+              )}
             </span>
           </div>
           <p className="text-xs text-[var(--color-text-tertiary)] -mt-1">
@@ -255,8 +318,12 @@ export function Settings() {
           </p>
           <div className="flex flex-col gap-3">
             <div className="flex items-center justify-between">
-              <span className="text-sm text-[var(--color-text-secondary)]">Volume</span>
-              <span className="text-sm font-mono text-[var(--color-text)]">{botDefaultVolume}</span>
+              <span className="text-sm text-[var(--color-text-secondary)]">
+                Volume
+              </span>
+              <span className="text-sm font-mono text-[var(--color-text)]">
+                {botDefaultVolume}
+              </span>
             </div>
             <Slider
               value={botDefaultVolume}
@@ -265,15 +332,18 @@ export function Settings() {
               onChange={(v) => {
                 setBotDefaultVolume(v);
                 setBotVolumeSaved(false);
-                if (botVolumeDebounceRef.current) clearTimeout(botVolumeDebounceRef.current);
+                if (botVolumeDebounceRef.current)
+                  clearTimeout(botVolumeDebounceRef.current);
                 botVolumeDebounceRef.current = setTimeout(async () => {
                   setSavingBotVolume(true);
                   try {
                     await api.updateBotSettings({ default_volume: v });
                     setBotVolumeSaved(true);
                     setTimeout(() => setBotVolumeSaved(false), 2000);
-                  } catch {}
-                  finally { setSavingBotVolume(false); }
+                  } catch {
+                  } finally {
+                    setSavingBotVolume(false);
+                  }
                 }, 500);
               }}
               aria-label="Default volume"
@@ -303,14 +373,20 @@ export function Settings() {
                   ? "opacity-100 text-[var(--color-text-tertiary)]"
                   : voiceSaved
                     ? "opacity-100 text-[var(--color-success)]"
-                    : "opacity-0 pointer-events-none"
+                    : "opacity-0 pointer-events-none",
               )}
               aria-live="polite"
             >
               {savingVoice ? (
-                <><Loader2 size={12} className="animate-spin" />Saving</>
+                <>
+                  <Loader2 size={12} className="animate-spin" />
+                  Saving
+                </>
               ) : (
-                <><CheckCircle size={12} />Saved</>
+                <>
+                  <CheckCircle size={12} />
+                  Saved
+                </>
               )}
             </span>
           </div>
@@ -326,99 +402,98 @@ export function Settings() {
               aria-label="Default voice channel"
             >
               {/* None option */}
-              {[{ id: "", name: "None — manual join only" }, ...voiceChannels].map(
-                (ch, idx, arr) => {
-                  const isNone = ch.id === "";
-                  const isSelected = isNone
-                    ? defaultVoiceChannel === null || defaultVoiceChannel === ""
-                    : defaultVoiceChannel === ch.id;
-                  const isLast = idx === arr.length - 1;
+              {[
+                { id: "", name: "None — manual join only" },
+                ...voiceChannels,
+              ].map((ch, idx, arr) => {
+                const isNone = ch.id === "";
+                const isSelected = isNone
+                  ? defaultVoiceChannel === null || defaultVoiceChannel === ""
+                  : defaultVoiceChannel === ch.id;
+                const isLast = idx === arr.length - 1;
 
-                  return (
-                    <button
-                      key={ch.id || "__none__"}
-                      role="radio"
-                      aria-checked={isSelected}
-                      onClick={async () => {
-                        if (isSelected) return;
-                        const val = ch.id;
-                        setDefaultVoiceChannel(val || null);
-                        setSavingVoice(true);
-                        setVoiceSaved(false);
-                        try {
-                          await api.setVoiceChannel(val);
-                          setVoiceSaved(true);
-                          setTimeout(() => setVoiceSaved(false), 2000);
-                        } catch {
-                          // silently fail
-                        } finally {
-                          setSavingVoice(false);
-                        }
-                      }}
+                return (
+                  <button
+                    key={ch.id || "__none__"}
+                    role="radio"
+                    aria-checked={isSelected}
+                    onClick={async () => {
+                      if (isSelected) return;
+                      const val = ch.id;
+                      setDefaultVoiceChannel(val || null);
+                      setSavingVoice(true);
+                      setVoiceSaved(false);
+                      try {
+                        await api.setVoiceChannel(val);
+                        setVoiceSaved(true);
+                        setTimeout(() => setVoiceSaved(false), 2000);
+                      } catch {
+                        // silently fail
+                      } finally {
+                        setSavingVoice(false);
+                      }
+                    }}
+                    className={clsx(
+                      "relative min-h-[44px] w-full flex items-center gap-3 px-3 py-2.5 text-sm text-left transition-colors",
+                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--color-accent)]",
+                      !isLast && "border-b border-[var(--color-border)]",
+                      isSelected
+                        ? "bg-[var(--color-bg-tertiary)]"
+                        : "bg-[var(--color-bg-secondary)] hover:bg-[var(--color-bg-hover)] cursor-pointer",
+                    )}
+                  >
+                    {/* Selection indicator bar */}
+                    <span
                       className={clsx(
-                        "relative min-h-[44px] w-full flex items-center gap-3 px-3 py-2.5 text-sm text-left transition-colors",
-                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--color-accent)]",
-                        !isLast && "border-b border-[var(--color-border)]",
+                        "absolute left-0 top-0 bottom-0 w-0.5 rounded-r-full transition-opacity duration-150",
                         isSelected
-                          ? "bg-[var(--color-bg-tertiary)]"
-                          : "bg-[var(--color-bg-secondary)] hover:bg-[var(--color-bg-hover)] cursor-pointer"
+                          ? "opacity-100 bg-[var(--color-accent)]"
+                          : "opacity-0",
+                      )}
+                    />
+
+                    {/* Icon */}
+                    <span
+                      className={clsx(
+                        "flex-shrink-0 transition-colors",
+                        isNone
+                          ? isSelected
+                            ? "text-[var(--color-text-tertiary)]"
+                            : "text-[var(--color-text-tertiary)]"
+                          : isSelected
+                            ? "text-[var(--color-accent)]"
+                            : "text-[var(--color-text-secondary)]",
                       )}
                     >
-                      {/* Selection indicator bar */}
-                      <span
-                        className={clsx(
-                          "absolute left-0 top-0 bottom-0 w-0.5 rounded-r-full transition-opacity duration-150",
-                          isSelected ? "opacity-100 bg-[var(--color-accent)]" : "opacity-0"
-                        )}
-                      />
+                      {isNone ? <MicOff size={15} /> : <Volume2 size={15} />}
+                    </span>
 
-                      {/* Icon */}
-                      <span
-                        className={clsx(
-                          "flex-shrink-0 transition-colors",
-                          isNone
-                            ? isSelected
-                              ? "text-[var(--color-text-tertiary)]"
-                              : "text-[var(--color-text-tertiary)]"
-                            : isSelected
-                              ? "text-[var(--color-accent)]"
-                              : "text-[var(--color-text-secondary)]"
-                        )}
-                      >
-                        {isNone ? (
-                          <MicOff size={15} />
-                        ) : (
-                          <Volume2 size={15} />
-                        )}
-                      </span>
-
-                      {/* Label */}
-                      <span
-                        className={clsx(
-                          "flex-1 truncate",
-                          isNone
-                            ? isSelected
-                              ? "text-[var(--color-text-tertiary)]"
-                              : "text-[var(--color-text-tertiary)]"
-                            : isSelected
-                              ? "text-[var(--color-text)] font-medium"
-                              : "text-[var(--color-text-secondary)]"
-                        )}
-                      >
-                        {ch.name}
-                      </span>
-
-                      {/* Checkmark for selected */}
-                      {isSelected && (
-                        <CheckCircle
-                          size={15}
-                          className="flex-shrink-0 text-[var(--color-accent)]"
-                        />
+                    {/* Label */}
+                    <span
+                      className={clsx(
+                        "flex-1 truncate",
+                        isNone
+                          ? isSelected
+                            ? "text-[var(--color-text-tertiary)]"
+                            : "text-[var(--color-text-tertiary)]"
+                          : isSelected
+                            ? "text-[var(--color-text)] font-medium"
+                            : "text-[var(--color-text-secondary)]",
                       )}
-                    </button>
-                  );
-                }
-              )}
+                    >
+                      {ch.name}
+                    </span>
+
+                    {/* Checkmark for selected */}
+                    {isSelected && (
+                      <CheckCircle
+                        size={15}
+                        className="flex-shrink-0 text-[var(--color-accent)]"
+                      />
+                    )}
+                  </button>
+                );
+              })}
             </div>
           ) : (
             <div className="flex items-center gap-2 py-1">
@@ -432,10 +507,14 @@ export function Settings() {
 
         {/* yt-dlp */}
         <div className="rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border)] p-4 flex flex-col gap-4">
-          <h3 className="text-sm font-medium text-[var(--color-text)]">yt-dlp</h3>
+          <h3 className="text-sm font-medium text-[var(--color-text)]">
+            yt-dlp
+          </h3>
 
           <div className="flex items-center justify-between">
-            <span className="text-sm text-[var(--color-text-secondary)]">Current version</span>
+            <span className="text-sm text-[var(--color-text-secondary)]">
+              Current version
+            </span>
             <span className="font-mono text-sm text-[var(--color-text)]">
               {info?.current_version ?? "not installed"}
             </span>
@@ -458,15 +537,17 @@ export function Settings() {
 
           {latest && (
             <div className="flex items-center justify-between">
-              <span className="text-sm text-[var(--color-text-secondary)]">Latest version</span>
+              <span className="text-sm text-[var(--color-text-secondary)]">
+                Latest version
+              </span>
               <span className="font-mono text-sm text-[var(--color-accent)]">
                 {latest.latest_version}
               </span>
             </div>
           )}
 
-          {latest && (
-            latest.update_available ? (
+          {latest &&
+            (latest.update_available ? (
               <button
                 onClick={handleUpdate}
                 disabled={updating}
@@ -480,8 +561,7 @@ export function Settings() {
                 <CheckCircle size={16} />
                 Up to date
               </div>
-            )
-          )}
+            ))}
 
           {adminError && (
             <div className="flex items-center gap-2 text-sm text-red-400">
@@ -493,10 +573,14 @@ export function Settings() {
 
         {/* YouTube API */}
         <div className="rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border)] p-4 flex flex-col gap-4">
-          <h3 className="text-sm font-medium text-[var(--color-text)]">YouTube API</h3>
+          <h3 className="text-sm font-medium text-[var(--color-text)]">
+            YouTube API
+          </h3>
 
           <div className="flex items-center justify-between">
-            <span className="text-sm text-[var(--color-text-secondary)]">API Key</span>
+            <span className="text-sm text-[var(--color-text-secondary)]">
+              API Key
+            </span>
             <span className="font-mono text-sm text-[var(--color-text)]">
               {ytInfo?.has_key ? ytInfo.key_masked : "not set"}
             </span>
@@ -506,7 +590,11 @@ export function Settings() {
             <input
               type="password"
               value={newKey}
-              onChange={(e) => { setNewKey(e.target.value); setKeySaved(false); setYtError(null); }}
+              onChange={(e) => {
+                setNewKey(e.target.value);
+                setKeySaved(false);
+                setYtError(null);
+              }}
               placeholder="Enter new API key"
               className="flex-1 min-h-[44px] px-3 py-2 rounded-lg text-sm bg-[var(--color-bg)] border border-[var(--color-border)] text-[var(--color-text)] placeholder:text-[var(--color-text-tertiary)] outline-none focus:border-[var(--color-accent)]"
             />

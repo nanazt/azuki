@@ -409,4 +409,88 @@ impl YtDlp {
     pub fn media_dir(&self) -> &Path {
         &self.media_dir
     }
+
+    pub async fn download_thumbnail(url: &str, save_path: &Path) -> Result<(), MediaError> {
+        if save_path.exists() {
+            return Ok(());
+        }
+
+        // SSRF defense: allowlist known CDN hosts
+        let parsed = url::Url::parse(url)
+            .map_err(|e| MediaError::YtDlp(format!("invalid thumbnail URL: {e}")))?;
+
+        match parsed.scheme() {
+            "http" | "https" => {}
+            scheme => {
+                return Err(MediaError::YtDlp(format!(
+                    "rejected thumbnail scheme: {scheme}"
+                )));
+            }
+        }
+
+        let host = parsed.host_str().unwrap_or("");
+        const ALLOWED_HOSTS: &[&str] = &[
+            "i.ytimg.com",
+            "i1.ytimg.com",
+            "i2.ytimg.com",
+            "i3.ytimg.com",
+            "i4.ytimg.com",
+            "i9.ytimg.com",
+            "img.youtube.com",
+            "i1.sndcdn.com",
+            "i.scdn.co",
+        ];
+        if !ALLOWED_HOSTS.contains(&host) {
+            warn!("thumbnail host not in allowlist: {host}");
+            return Ok(());
+        }
+
+        let client = reqwest::Client::builder()
+            .redirect(reqwest::redirect::Policy::none())
+            .timeout(std::time::Duration::from_secs(10))
+            .build()
+            .map_err(MediaError::Http)?;
+
+        let resp = client.get(url).send().await.map_err(MediaError::Http)?;
+
+        if !resp.status().is_success() {
+            warn!("thumbnail download failed: HTTP {}", resp.status());
+            return Ok(());
+        }
+
+        // Validate content type
+        if let Some(ct) = resp.headers().get(reqwest::header::CONTENT_TYPE) {
+            let ct_str = ct.to_str().unwrap_or("");
+            if !ct_str.starts_with("image/") {
+                warn!("thumbnail has non-image content type: {ct_str}");
+                return Ok(());
+            }
+        }
+
+        let bytes = resp.bytes().await.map_err(MediaError::Http)?;
+
+        // 5MB limit
+        if bytes.len() > 5 * 1024 * 1024 {
+            warn!("thumbnail too large: {} bytes", bytes.len());
+            return Ok(());
+        }
+
+        // Canonical path check
+        if let Some(parent) = save_path.parent() {
+            tokio::fs::create_dir_all(parent).await.map_err(MediaError::Io)?;
+        }
+        tokio::fs::write(save_path, &bytes).await.map_err(MediaError::Io)?;
+
+        // Verify canonical path stays within thumbnails dir
+        if let Ok(canonical) = save_path.canonicalize()
+            && let Some(parent) = save_path.parent()
+            && let Ok(parent_canonical) = parent.canonicalize()
+            && !canonical.starts_with(&parent_canonical)
+        {
+            let _ = tokio::fs::remove_file(save_path).await;
+            return Err(MediaError::PathTraversal);
+        }
+
+        Ok(())
+    }
 }

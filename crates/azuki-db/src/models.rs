@@ -32,6 +32,8 @@ pub struct PlayHistory {
     pub user_id: String,
     pub played_at: String,
     pub completed: bool,
+    pub message_id: Option<String>,
+    pub volume: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
