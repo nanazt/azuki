@@ -9,6 +9,7 @@ pub enum WebEvent {
     TrackStarted {
         track: TrackInfo,
         position_ms: u64,
+        added_by: String,
     },
     TrackEnded {
         track_id: String,
@@ -106,8 +107,8 @@ pub struct DownloadStatus {
 impl From<PlayerEvent> for WebEvent {
     fn from(event: PlayerEvent) -> Self {
         match event {
-            PlayerEvent::TrackStarted { track, position_ms } => {
-                WebEvent::TrackStarted { track, position_ms }
+            PlayerEvent::TrackStarted { track, position_ms, added_by } => {
+                WebEvent::TrackStarted { track, position_ms, added_by }
             }
             PlayerEvent::TrackEnded { track_id } => WebEvent::TrackEnded { track_id },
             PlayerEvent::TrackLoading { track } => WebEvent::TrackLoading { track },

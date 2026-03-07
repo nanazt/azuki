@@ -10,6 +10,7 @@ interface HistoryEntry {
   track: TrackInfo;
   played_at: string;
   user_id: string;
+  play_count: number;
 }
 
 export function Home() {

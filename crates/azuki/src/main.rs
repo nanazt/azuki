@@ -256,6 +256,7 @@ async fn run_normal(config: Config, pool: SqlitePool) -> anyhow::Result<()> {
     let bridge_web_tx = web_tx.clone();
     let bridge_player = player.clone();
     let bridge_cancel = cancel.clone();
+    let bridge_db = pool.clone();
     let seq_counter = Arc::new(AtomicU64::new(0));
     tokio::spawn({
         let seq = Arc::clone(&seq_counter);
@@ -266,6 +267,22 @@ async fn run_normal(config: Config, pool: SqlitePool) -> anyhow::Result<()> {
                     result = player_rx.recv() => {
                         match result {
                             Ok(player_seq_event) => {
+                                // Record play history when a track actually starts playing
+                                if let azuki_player::PlayerEvent::TrackStarted { ref track, added_by: ref user_id, .. } = player_seq_event.event {
+                                    let _ = azuki_db::queries::history::record_play(
+                                        &bridge_db,
+                                        &track.id,
+                                        user_id,
+                                    ).await;
+                                    let s = seq.fetch_add(1, Ordering::Relaxed) + 1;
+                                    let _ = bridge_web_tx.send(azuki_web::events::WebSeqEvent {
+                                        seq: s,
+                                        event: azuki_web::events::WebEvent::HistoryAdded {
+                                            track: track.clone(),
+                                            user_id: user_id.clone(),
+                                        },
+                                    });
+                                }
                                 let web_event: azuki_web::events::WebEvent = player_seq_event.event.into();
                                 let s = seq.fetch_add(1, Ordering::Relaxed) + 1;
                                 let _ = bridge_web_tx.send(azuki_web::events::WebSeqEvent {
@@ -451,22 +468,6 @@ async fn download_worker(
                     }
                 }
 
-                let _ = azuki_db::queries::history::record_play(
-                    &db,
-                    &track_info.id,
-                    &req.user_id,
-                )
-                .await;
-
-                broadcast_web_event(
-                    &web_tx,
-                    &seq,
-                    azuki_web::events::WebEvent::HistoryAdded {
-                        track: track_info.clone(),
-                        user_id: req.user_id,
-                    },
-                );
-
                 active.remove(&download_id);
                 broadcast_web_event(
                     &web_tx,
@@ -561,20 +562,6 @@ async fn download_worker(
                                 .await;
                         }
                     }
-
-                    // Record history on successful download+play
-                    let _ =
-                        azuki_db::queries::history::record_play(&db, &track_info.id, &req.user_id)
-                            .await;
-
-                    broadcast_web_event(
-                        &web_tx,
-                        &seq,
-                        azuki_web::events::WebEvent::HistoryAdded {
-                            track: track_info.clone(),
-                            user_id: req.user_id,
-                        },
-                    );
 
                     active.remove(&download_id);
                     broadcast_web_event(

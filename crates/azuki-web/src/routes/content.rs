@@ -83,6 +83,7 @@ pub async fn history(
             },
             "played_at": e.played_at,
             "user_id": e.user_id,
+            "play_count": e.play_count,
         })
     }).collect();
     let total = items.len() as i64;

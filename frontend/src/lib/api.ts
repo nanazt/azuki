@@ -75,7 +75,7 @@ export const api = {
 
   // History
   getHistory: (page = 1, per_page = 20) =>
-    get<{ items: { track: TrackInfo; played_at: string; user_id: string }[]; total: number }>(
+    get<{ items: { track: TrackInfo; played_at: string; user_id: string; play_count: number }[]; total: number }>(
       `/api/history?page=${page}&per_page=${per_page}`,
     ),
 

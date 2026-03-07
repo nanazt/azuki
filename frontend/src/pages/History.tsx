@@ -10,6 +10,7 @@ interface HistoryEntry {
   track: TrackInfo;
   played_at: string;
   user_id: string;
+  play_count: number;
 }
 
 function formatDate(iso: string): string {
@@ -67,12 +68,17 @@ export function History() {
     const handler = (e: Event) => {
       const detail = (e as CustomEvent).detail;
       if (page === 1 && window.scrollY < 50) {
-        setItems((prev) => [{
-          track: detail.track,
-          played_at: new Date().toISOString(),
-          user_id: detail.user_id,
-        }, ...prev]);
-        setTotal((t) => t + 1);
+        setItems((prev) => {
+          const existing = prev.find((e) => e.track.id === detail.track.id);
+          const filtered = prev.filter((e) => e.track.id !== detail.track.id);
+          if (!existing) setTotal((t) => t + 1);
+          return [{
+            track: detail.track,
+            played_at: new Date().toISOString(),
+            user_id: detail.user_id,
+            play_count: (existing?.play_count ?? 0) + 1,
+          }, ...filtered];
+        });
       } else {
         setHasNewTrack(true);
       }

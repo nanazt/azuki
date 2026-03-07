@@ -17,6 +17,7 @@ pub struct HistoryEntry {
     pub username: String,
     pub played_at: String,
     pub completed: bool,
+    pub play_count: i64,
 }
 
 #[derive(Debug, Serialize, FromRow)]
@@ -78,10 +79,16 @@ pub async fn get_history(
                 t.thumbnail_url,
                 t.source_url,
                 h.user_id,
-                u.username, h.played_at, h.completed
+                u.username, h.played_at, h.completed,
+                (SELECT COUNT(*) FROM play_history h3
+                 WHERE h3.track_id = h.track_id) AS play_count
          FROM play_history h
          JOIN tracks t ON t.id = h.track_id
          JOIN users u ON u.id = h.user_id
+         WHERE h.id = (
+             SELECT MAX(h2.id) FROM play_history h2
+             WHERE h2.track_id = h.track_id
+         )
          ORDER BY h.played_at DESC
          LIMIT ?1 OFFSET ?2",
     )

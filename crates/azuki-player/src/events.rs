@@ -68,6 +68,7 @@ pub enum PlayerEvent {
     TrackStarted {
         track: TrackInfo,
         position_ms: u64,
+        added_by: String,
     },
     TrackEnded {
         track_id: String,

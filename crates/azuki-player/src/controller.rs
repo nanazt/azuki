@@ -323,7 +323,7 @@ impl PlayerActor {
         match cmd {
             PlayerCommand::Play {
                 track,
-                user_id: _,
+                user_id,
                 reply,
             } => {
                 self.broadcast(PlayerEvent::TrackLoading {
@@ -340,6 +340,7 @@ impl PlayerActor {
                 self.broadcast(PlayerEvent::TrackStarted {
                     track,
                     position_ms: 0,
+                    added_by: user_id,
                 });
                 self.broadcast(PlayerEvent::VolumeChanged { volume: self.volume });
                 let _ = reply.send(Ok(()));
@@ -406,6 +407,7 @@ impl PlayerActor {
                 }
 
                 if let Some(next) = self.queue.advance() {
+                    let added_by = next.added_by;
                     let track = next.track;
                     self.volume = track.volume;
                     self.state = PlayState::Playing {
@@ -416,6 +418,7 @@ impl PlayerActor {
                     self.broadcast(PlayerEvent::TrackStarted {
                         track: track.clone(),
                         position_ms: 0,
+                        added_by,
                     });
                     self.broadcast(PlayerEvent::VolumeChanged { volume: self.volume });
                     self.broadcast(PlayerEvent::HistoryUpdated {
@@ -572,6 +575,7 @@ impl PlayerActor {
                         self.queue
                             .push_front(QueueEntry { track: current_track, added_by: String::new() });
                         self.broadcast(PlayerEvent::TrackEnded { track_id: current_id });
+                        let added_by = prev_entry.added_by;
                         let track = prev_entry.track;
                         self.volume = track.volume;
                         self.state = PlayState::Playing {
@@ -582,6 +586,7 @@ impl PlayerActor {
                         self.broadcast(PlayerEvent::TrackStarted {
                             track,
                             position_ms: 0,
+                            added_by,
                         });
                         self.broadcast(PlayerEvent::VolumeChanged { volume: self.volume });
                         self.broadcast(PlayerEvent::QueueUpdated {
@@ -632,6 +637,7 @@ impl PlayerActor {
                     self.queue
                         .push_front(QueueEntry { track: current_track, added_by: String::new() });
                     self.broadcast(PlayerEvent::TrackEnded { track_id: current_id });
+                    let added_by = prev_entry.added_by;
                     let track = prev_entry.track;
                     self.volume = track.volume;
                     self.state = PlayState::Playing {
@@ -642,6 +648,7 @@ impl PlayerActor {
                     self.broadcast(PlayerEvent::TrackStarted {
                         track,
                         position_ms: 0,
+                        added_by,
                     });
                     self.broadcast(PlayerEvent::VolumeChanged { volume: self.volume });
                     self.broadcast(PlayerEvent::QueueUpdated {
@@ -739,6 +746,7 @@ impl PlayerActor {
                 if let Some(next) = self.queue.advance() {
                     // Broadcast TrackEnded only when advancing to the next track
                     self.broadcast(PlayerEvent::TrackEnded { track_id });
+                    let added_by = next.added_by;
                     let track = next.track;
                     self.volume = track.volume;
                     self.state = PlayState::Playing {
@@ -749,6 +757,7 @@ impl PlayerActor {
                     self.broadcast(PlayerEvent::TrackStarted {
                         track,
                         position_ms: 0,
+                        added_by,
                     });
                     self.broadcast(PlayerEvent::VolumeChanged { volume: self.volume });
                     self.broadcast(PlayerEvent::HistoryUpdated {
