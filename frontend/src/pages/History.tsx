@@ -3,8 +3,10 @@ import { api } from "../lib/api";
 import type { TrackInfo } from "../lib/types";
 import { Skeleton } from "../components/ui/Skeleton";
 import { Button } from "../components/ui/Button";
-import { Music, Clock } from "lucide-react";
+import { Music, Clock, Plus, Loader2 } from "lucide-react";
 import { formatTime } from "../lib/utils";
+import { useToast } from "../components/ui/Toast";
+import clsx from "clsx";
 
 interface HistoryEntry {
   track: TrackInfo;
@@ -87,8 +89,23 @@ export function History() {
     return () => window.removeEventListener("history-added", handler);
   }, [page]);
 
-  const handlePlay = (track: TrackInfo) => {
-    api.addToQueue(track.source_url).catch(() => {});
+  const [addingIds, setAddingIds] = useState<Set<string>>(new Set());
+  const { showToast } = useToast();
+
+  const handleAdd = async (track: TrackInfo) => {
+    if (addingIds.has(track.id)) return;
+    setAddingIds(prev => new Set(prev).add(track.id));
+    try {
+      await api.addToQueue(track.source_url);
+    } catch {
+      showToast("Failed to add to queue", "error");
+    } finally {
+      setAddingIds(prev => {
+        const next = new Set(prev);
+        next.delete(track.id);
+        return next;
+      });
+    }
   };
 
   const hasMore = items.length < total;
@@ -105,15 +122,14 @@ export function History() {
       </div>
 
       {loading ? (
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col">
           {Array.from({ length: 8 }).map((_, i) => (
-            <div key={i} className="flex items-center gap-3">
-              <Skeleton className="w-10 h-10 rounded-md flex-shrink-0" />
-              <div className="flex-1 flex flex-col gap-1.5">
-                <Skeleton className="h-4 w-2/3 rounded" />
-                <Skeleton className="h-3 w-1/3 rounded" />
+            <div key={i} className="flex items-center gap-3 px-3 py-2">
+              <Skeleton className="w-12 h-12 rounded flex-shrink-0" />
+              <div className="flex-1 space-y-2">
+                <Skeleton className="h-3 w-3/4 rounded" />
+                <Skeleton className="h-3 w-1/2 rounded" />
               </div>
-              <Skeleton className="h-3 w-12 rounded" />
             </div>
           ))}
         </div>
@@ -137,43 +153,53 @@ export function History() {
               New track played — click to refresh
             </button>
           )}
-          <ul className="flex flex-col gap-1">
+          <ul className="flex flex-col">
             {items.map((entry, i) => (
-              <li key={i}>
-                <button
-                  onClick={() => handlePlay(entry.track)}
-                  className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-[var(--color-bg-secondary)] transition-colors text-left group"
-                >
+              <li key={i} className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-[var(--color-bg-hover)] transition-colors duration-100 group">
                   {entry.track.thumbnail_url ? (
                     <img
                       src={entry.track.thumbnail_url}
                       alt={entry.track.title}
-                      className="w-10 h-10 rounded-md object-cover flex-shrink-0"
+                      className="w-12 h-12 rounded object-cover flex-shrink-0"
                     />
                   ) : (
-                    <div className="w-10 h-10 rounded-md bg-[var(--color-bg-secondary)] flex items-center justify-center flex-shrink-0">
-                      <Music size={16} className="text-[var(--color-text-tertiary)]" />
+                    <div className="w-12 h-12 rounded bg-[var(--color-bg-tertiary)] flex items-center justify-center flex-shrink-0">
+                      <Music size={18} className="text-[var(--color-text-tertiary)]" />
                     </div>
                   )}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-[var(--color-text)] truncate">
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-medium text-[var(--color-text)] truncate">
                       {entry.track.title}
-                    </p>
-                    {entry.track.artist && (
-                      <p className="text-xs text-[var(--color-text-tertiary)] truncate">
-                        {entry.track.artist}
-                      </p>
+                    </div>
+                    <div className="text-xs text-[var(--color-text-secondary)] truncate">
+                      {entry.track.artist ?? "Unknown artist"}
+                      <span className="text-[var(--color-text-tertiary)] ml-2">
+                        {formatDate(entry.played_at)}
+                      </span>
+                      {entry.track.duration_ms > 0 && (
+                        <span className="text-[var(--color-text-tertiary)] ml-1">
+                          · {formatTime(entry.track.duration_ms)}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => handleAdd(entry.track)}
+                    disabled={addingIds.has(entry.track.id)}
+                    className={clsx(
+                      "flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium",
+                      "transition-all duration-150 cursor-pointer",
+                      addingIds.has(entry.track.id)
+                        ? "bg-[var(--color-bg-tertiary)] text-[var(--color-text-tertiary)] cursor-not-allowed"
+                        : "bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] text-white opacity-0 group-hover:opacity-100 [@media(hover:none)]:opacity-100"
                     )}
-                  </div>
-                  <div className="flex flex-col items-end gap-0.5 flex-shrink-0">
-                    <span className="text-xs text-[var(--color-text-tertiary)]">
-                      {formatDate(entry.played_at)}
-                    </span>
-                    <span className="text-xs text-[var(--color-text-tertiary)]">
-                      {formatTime(entry.track.duration_ms)}
-                    </span>
-                  </div>
-                </button>
+                    aria-label={`Add ${entry.track.title} to queue`}
+                  >
+                    {addingIds.has(entry.track.id)
+                      ? <Loader2 size={12} className="animate-spin" />
+                      : <Plus size={12} />}
+                    {addingIds.has(entry.track.id) ? "Adding…" : "Add"}
+                  </button>
               </li>
             ))}
           </ul>
