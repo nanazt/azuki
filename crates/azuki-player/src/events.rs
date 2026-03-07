@@ -86,6 +86,7 @@ pub enum PlayerEvent {
     },
     Seeked {
         position_ms: u64,
+        paused: bool,
     },
     VolumeChanged {
         volume: u8,

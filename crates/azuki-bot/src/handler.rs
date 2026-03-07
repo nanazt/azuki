@@ -173,7 +173,7 @@ async fn run_audio_subscriber(state: Arc<BotState>) {
                         crate::voice::resume_track(h);
                     }
                 }
-                azuki_player::PlayerEvent::Seeked { position_ms } => {
+                azuki_player::PlayerEvent::Seeked { position_ms, paused } => {
                     // Re-play file to avoid songbird backward-seek failures
                     if let Some((ref file_path, ref track_id, volume)) = current_file {
                         let sb_guard = state.songbird.lock().await;
@@ -186,10 +186,16 @@ async fn run_audio_subscriber(state: Arc<BotState>) {
                                 if position_ms > 0 {
                                     // Delay seek to let the driver initialize the track
                                     let h2 = h.clone();
+                                    let should_pause = paused;
                                     tokio::spawn(async move {
                                         tokio::time::sleep(std::time::Duration::from_millis(200)).await;
                                         crate::voice::seek_track(&h2, position_ms);
+                                        if should_pause {
+                                            crate::voice::pause_track(&h2);
+                                        }
                                     });
+                                } else if paused {
+                                    crate::voice::pause_track(h);
                                 }
                                 let _ = h.add_event(
                                     Event::Track(TrackEvent::End),

@@ -430,7 +430,7 @@ impl PlayerActor {
                         started_at: Instant::now(),
                         position_ms,
                     };
-                    self.broadcast(PlayerEvent::Seeked { position_ms });
+                    self.broadcast(PlayerEvent::Seeked { position_ms, paused: false });
                     let _ = reply.send(Ok(()));
                 }
                 PlayState::Paused { track, .. } => {
@@ -439,7 +439,7 @@ impl PlayerActor {
                         track,
                         position_ms,
                     };
-                    self.broadcast(PlayerEvent::Seeked { position_ms });
+                    self.broadcast(PlayerEvent::Seeked { position_ms, paused: true });
                     let _ = reply.send(Ok(()));
                 }
                 _ => {

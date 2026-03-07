@@ -113,7 +113,7 @@ impl From<PlayerEvent> for WebEvent {
             }
             PlayerEvent::Paused { position_ms } => WebEvent::Paused { position_ms },
             PlayerEvent::Resumed { position_ms } => WebEvent::Resumed { position_ms },
-            PlayerEvent::Seeked { position_ms } => WebEvent::Seeked { position_ms },
+            PlayerEvent::Seeked { position_ms, .. } => WebEvent::Seeked { position_ms },
             PlayerEvent::VolumeChanged { volume } => WebEvent::VolumeChanged { volume },
             PlayerEvent::QueueUpdated { queue } => WebEvent::QueueUpdated { queue },
             PlayerEvent::LoopModeChanged { mode } => WebEvent::LoopModeChanged { mode },
