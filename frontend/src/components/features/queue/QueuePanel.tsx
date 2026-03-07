@@ -1,7 +1,10 @@
 import { useCallback } from "react";
 import { ListMusic, Music, Search, Loader2 } from "lucide-react";
 import { usePlayerStore } from "../../../stores/playerStore";
-import { useDownloadStore, type DownloadEntry } from "../../../stores/downloadStore";
+import {
+  useDownloadStore,
+  type DownloadEntry,
+} from "../../../stores/downloadStore";
 import { api } from "../../../lib/api";
 import { QueueItem } from "./QueueItem";
 import { useToast } from "../../../hooks/useToast";
@@ -16,26 +19,31 @@ export function QueuePanel({ onOpenSearch }: QueuePanelProps) {
   const queue = usePlayerStore((s) => s.queue);
   const downloads = useDownloadStore((s) => s.downloads);
   const activeDownloads = Array.from(downloads.values()).filter(
-    (d) => d.status === "downloading"
+    (d) => d.status === "downloading",
   );
 
   const currentTrack = playState.status !== "idle" ? playState.track : null;
 
-  const handleRemove = useCallback(async (position: number) => {
-    try {
-      await api.removeFromQueue(position);
-      showToast("Removed from queue", "success");
-    } catch (err) {
-      console.error("Failed to remove from queue", err);
-      showToast("Failed to remove from queue", "error");
-    }
-  }, [showToast]);
+  const handleRemove = useCallback(
+    async (position: number) => {
+      try {
+        await api.removeFromQueue(position);
+        showToast("Removed from queue", "success");
+      } catch (err) {
+        console.error("Failed to remove from queue", err);
+        showToast("Failed to remove from queue", "error");
+      }
+    },
+    [showToast],
+  );
 
   return (
     <div className="flex flex-col h-full bg-[var(--color-bg-secondary)]">
       <div className="flex items-center gap-2 px-4 py-3 border-b border-[var(--color-border)]">
         <ListMusic size={16} className="text-[var(--color-text-secondary)]" />
-        <span className="text-sm font-semibold text-[var(--color-text)]">Queue</span>
+        <span className="text-sm font-semibold text-[var(--color-text)]">
+          Queue
+        </span>
       </div>
 
       <div className="flex-1 overflow-y-auto py-2">
@@ -56,7 +64,10 @@ export function QueuePanel({ onOpenSearch }: QueuePanelProps) {
                 />
               ) : (
                 <div className="w-9 h-9 rounded bg-[var(--color-bg-hover)] flex items-center justify-center flex-shrink-0">
-                  <Music size={14} className="text-[var(--color-text-tertiary)]" />
+                  <Music
+                    size={14}
+                    className="text-[var(--color-text-tertiary)]"
+                  />
                 </div>
               )}
               <div className="min-w-0 flex-1">
@@ -110,8 +121,13 @@ export function QueuePanel({ onOpenSearch }: QueuePanelProps) {
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center gap-3 px-4 py-10 text-center">
-            <ListMusic size={32} className="text-[var(--color-text-tertiary)]" />
-            <p className="text-sm text-[var(--color-text-secondary)]">Queue is empty</p>
+            <ListMusic
+              size={32}
+              className="text-[var(--color-text-tertiary)]"
+            />
+            <p className="text-sm text-[var(--color-text-secondary)]">
+              Queue is empty
+            </p>
             {onOpenSearch && (
               <button
                 onClick={onOpenSearch}
@@ -137,7 +153,10 @@ function DownloadItem({ download }: { download: DownloadEntry }) {
   return (
     <div className="flex items-center gap-3 py-2 px-1 rounded-lg">
       <div className="w-9 h-9 rounded bg-[var(--color-bg-tertiary)] flex items-center justify-center flex-shrink-0">
-        <Loader2 size={14} className="text-[var(--color-accent)] animate-spin" />
+        <Loader2
+          size={14}
+          className="text-[var(--color-accent)] animate-spin"
+        />
       </div>
       <div className="min-w-0 flex-1">
         <div className="text-sm text-[var(--color-text)] truncate font-medium">
