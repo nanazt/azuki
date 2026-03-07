@@ -146,6 +146,8 @@ export function useWebSocket() {
       case "history_added":
         window.dispatchEvent(new CustomEvent("history-added", { detail: { track: ev.track, user_id: ev.user_id } }));
         break;
+      case "history_updated":
+        break;
       case "download_started":
         useDownloadStore.getState().startDownload(ev.download_id, ev.query);
         break;

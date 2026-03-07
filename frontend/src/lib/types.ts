@@ -74,7 +74,8 @@ export type PlayerEvent =
   | { type: "download_failed"; download_id: string; error: string }
   | { type: "favorite_changed"; track_id: string; user_id: string; favorited: boolean }
   | { type: "playlist_updated"; playlist_id: number }
-  | { type: "history_added"; track: TrackInfo; user_id: string };
+  | { type: "history_added"; track: TrackInfo; user_id: string }
+  | { type: "history_updated"; history: QueueEntry[] };
 
 export interface SeqEvent {
   seq: number;
