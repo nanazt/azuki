@@ -1,8 +1,9 @@
 import { useEffect } from "react";
+import { usePlayerStore } from "../stores/playerStore";
 import { usePlayer } from "./usePlayer";
 
 export function useKeyboardShortcuts() {
-  const { togglePlay, seek, setVolume, volume, playState } = usePlayer();
+  const { togglePlay, seek, setVolume, volume } = usePlayer();
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -22,14 +23,20 @@ export function useKeyboardShortcuts() {
           break;
         case "ArrowLeft":
           e.preventDefault();
-          if (playState.status === "playing" || playState.status === "paused") {
-            seek(Math.max(0, playState.position_ms - 5000));
+          {
+            const ps = usePlayerStore.getState().playState;
+            if (ps.status === "playing" || ps.status === "paused") {
+              seek(Math.max(0, ps.position_ms - 5000));
+            }
           }
           break;
         case "ArrowRight":
           e.preventDefault();
-          if (playState.status === "playing" || playState.status === "paused") {
-            seek(playState.position_ms + 5000);
+          {
+            const ps = usePlayerStore.getState().playState;
+            if (ps.status === "playing" || ps.status === "paused") {
+              seek(ps.position_ms + 5000);
+            }
           }
           break;
         case "ArrowUp":
@@ -49,5 +56,5 @@ export function useKeyboardShortcuts() {
 
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [togglePlay, seek, setVolume, volume, playState]);
+  }, [togglePlay, seek, setVolume, volume]);
 }

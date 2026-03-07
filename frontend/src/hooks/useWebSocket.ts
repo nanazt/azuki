@@ -97,7 +97,7 @@ export function useWebSocket() {
         }
         break;
       case "paused":
-        if (state.playState.status === "playing") {
+        if (state.playState.status === "playing" || state.playState.status === "paused") {
           state.setPlayState({
             status: "paused",
             track: state.playState.track,
@@ -106,7 +106,7 @@ export function useWebSocket() {
         }
         break;
       case "resumed":
-        if (state.playState.status === "paused") {
+        if (state.playState.status === "paused" || state.playState.status === "playing") {
           state.setPlayState({
             status: "playing",
             track: state.playState.track,

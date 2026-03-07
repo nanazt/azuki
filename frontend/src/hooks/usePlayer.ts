@@ -8,32 +8,43 @@ export function usePlayer() {
   const loopMode = usePlayerStore((s) => s.loopMode);
 
   const pause = useCallback(() => {
-    usePlayerStore.getState().setPlayState(
-      playState.status === "playing"
-        ? { status: "paused", track: playState.track, position_ms: playState.position_ms }
-        : playState,
-    );
+    const s = usePlayerStore.getState();
+    if (s.playState.status === "playing") {
+      s.setPlayState({
+        status: "paused",
+        track: s.playState.track,
+        position_ms: s.playState.position_ms,
+      });
+    }
     api.pause();
-  }, [playState]);
+  }, []);
 
   const resume = useCallback(() => {
-    usePlayerStore.getState().setPlayState(
-      playState.status === "paused"
-        ? { status: "playing", track: playState.track, position_ms: playState.position_ms }
-        : playState,
-    );
+    const s = usePlayerStore.getState();
+    if (s.playState.status === "paused") {
+      s.setPlayState({
+        status: "playing",
+        track: s.playState.track,
+        position_ms: s.playState.position_ms,
+      });
+    }
     api.resume();
-  }, [playState]);
+  }, []);
 
   const togglePlay = useCallback(() => {
-    if (playState.status === "playing") pause();
-    else if (playState.status === "paused") resume();
-  }, [playState, pause, resume]);
+    const status = usePlayerStore.getState().playState.status;
+    if (status === "playing") pause();
+    else if (status === "paused") resume();
+  }, [pause, resume]);
 
   const skip = useCallback(() => api.skip(), []);
   const stop = useCallback(() => api.stop(), []);
 
   const seek = useCallback((ms: number) => {
+    const s = usePlayerStore.getState();
+    if (s.playState.status === "playing" || s.playState.status === "paused") {
+      s.setPlayState({ ...s.playState, position_ms: ms });
+    }
     api.seek(ms);
   }, []);
 
