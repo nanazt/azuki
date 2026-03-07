@@ -1,6 +1,6 @@
+use axum::Json;
 use axum::extract::State;
 use axum::http::StatusCode;
-use axum::Json;
 use axum_extra::extract::CookieJar;
 use serde::Deserialize;
 
@@ -29,37 +29,25 @@ pub struct QueueAddRequest {
     pub query_or_url: String,
 }
 
-pub async fn pause(
-    jar: CookieJar,
-    State(state): State<WebState>,
-) -> Result<StatusCode, ApiError> {
+pub async fn pause(jar: CookieJar, State(state): State<WebState>) -> Result<StatusCode, ApiError> {
     extract_user_id(&jar, &state).await?;
     state.player.pause().await?;
     Ok(StatusCode::OK)
 }
 
-pub async fn resume(
-    jar: CookieJar,
-    State(state): State<WebState>,
-) -> Result<StatusCode, ApiError> {
+pub async fn resume(jar: CookieJar, State(state): State<WebState>) -> Result<StatusCode, ApiError> {
     extract_user_id(&jar, &state).await?;
     state.player.resume().await?;
     Ok(StatusCode::OK)
 }
 
-pub async fn skip(
-    jar: CookieJar,
-    State(state): State<WebState>,
-) -> Result<StatusCode, ApiError> {
+pub async fn skip(jar: CookieJar, State(state): State<WebState>) -> Result<StatusCode, ApiError> {
     extract_user_id(&jar, &state).await?;
     state.player.skip().await?;
     Ok(StatusCode::OK)
 }
 
-pub async fn stop(
-    jar: CookieJar,
-    State(state): State<WebState>,
-) -> Result<StatusCode, ApiError> {
+pub async fn stop(jar: CookieJar, State(state): State<WebState>) -> Result<StatusCode, ApiError> {
     extract_user_id(&jar, &state).await?;
     state.player.stop().await?;
     Ok(StatusCode::OK)
@@ -87,9 +75,11 @@ pub async fn volume(
     state.player.set_volume(body.volume).await?;
     let snapshot = state.player.get_state().await;
     if let azuki_player::PlayStateInfo::Playing { ref track, .. }
-        | azuki_player::PlayStateInfo::Paused { ref track, .. } = snapshot.state
+    | azuki_player::PlayStateInfo::Paused { ref track, .. } = snapshot.state
     {
-        azuki_db::queries::tracks::update_track_volume(&state.db, &track.id, body.volume as i64).await.ok();
+        azuki_db::queries::tracks::update_track_volume(&state.db, &track.id, body.volume as i64)
+            .await
+            .ok();
     }
     Ok(StatusCode::OK)
 }
@@ -137,10 +127,13 @@ pub async fn queue_add(
     for entry in state.active_downloads.iter() {
         let existing_hash = crate::util::sha_id(&entry.value().query);
         if existing_hash == url_hash {
-            return Ok((StatusCode::ACCEPTED, Json(serde_json::json!({
-                "download_id": entry.value().download_id,
-                "status": "already_downloading",
-            }))));
+            return Ok((
+                StatusCode::ACCEPTED,
+                Json(serde_json::json!({
+                    "download_id": entry.value().download_id,
+                    "status": "already_downloading",
+                })),
+            ));
         }
     }
 
@@ -151,12 +144,15 @@ pub async fn queue_add(
     };
 
     match state.download_tx.try_send(request) {
-        Ok(_) => Ok((StatusCode::ACCEPTED, Json(serde_json::json!({
-            "download_id": download_id,
-        })))),
-        Err(tokio::sync::mpsc::error::TrySendError::Full(_)) => {
-            Err(ApiError::BadRequest("too many downloads queued, try again later".into()))
-        }
+        Ok(_) => Ok((
+            StatusCode::ACCEPTED,
+            Json(serde_json::json!({
+                "download_id": download_id,
+            })),
+        )),
+        Err(tokio::sync::mpsc::error::TrySendError::Full(_)) => Err(ApiError::BadRequest(
+            "too many downloads queued, try again later".into(),
+        )),
         Err(tokio::sync::mpsc::error::TrySendError::Closed(_)) => {
             Err(ApiError::Internal("download service unavailable".into()))
         }
@@ -188,11 +184,14 @@ pub async fn get_bot_settings(
     State(state): State<WebState>,
 ) -> Result<Json<BotSettingsResponse>, ApiError> {
     extract_user_id(&jar, &state).await?;
-    let vol = azuki_db::config::get_config(&state.db, "default_volume").await
+    let vol = azuki_db::config::get_config(&state.db, "default_volume")
+        .await
         .map_err(ApiError::Db)?
         .and_then(|v| v.parse::<i64>().ok())
         .unwrap_or(5);
-    Ok(Json(BotSettingsResponse { default_volume: vol }))
+    Ok(Json(BotSettingsResponse {
+        default_volume: vol,
+    }))
 }
 
 pub async fn update_bot_settings(
@@ -205,14 +204,18 @@ pub async fn update_bot_settings(
         if !(0..=100).contains(&vol) {
             return Err(ApiError::BadRequest("default_volume must be 0-100".into()));
         }
-        azuki_db::config::save_config(&state.db, &[("default_volume", &vol.to_string())]).await
+        azuki_db::config::save_config(&state.db, &[("default_volume", &vol.to_string())])
+            .await
             .map_err(ApiError::Db)?;
     }
-    let vol = azuki_db::config::get_config(&state.db, "default_volume").await
+    let vol = azuki_db::config::get_config(&state.db, "default_volume")
+        .await
         .map_err(ApiError::Db)?
         .and_then(|v| v.parse::<i64>().ok())
         .unwrap_or(5);
-    Ok(Json(BotSettingsResponse { default_volume: vol }))
+    Ok(Json(BotSettingsResponse {
+        default_volume: vol,
+    }))
 }
 
 pub fn player_routes() -> axum::Router<WebState> {
@@ -227,5 +230,8 @@ pub fn player_routes() -> axum::Router<WebState> {
         .route("/api/queue", axum::routing::get(get_queue))
         .route("/api/queue/add", axum::routing::post(queue_add))
         .route("/api/queue/{position}", axum::routing::delete(queue_remove))
-        .route("/api/settings/bot", axum::routing::get(get_bot_settings).put(update_bot_settings))
+        .route(
+            "/api/settings/bot",
+            axum::routing::get(get_bot_settings).put(update_bot_settings),
+        )
 }

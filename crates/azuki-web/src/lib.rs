@@ -19,7 +19,7 @@ use tower_http::services::{ServeDir, ServeFile};
 use tower_http::set_header::SetResponseHeaderLayer;
 use tracing::info;
 
-use azuki_media::{MediaStore, YtDlp, YouTubeClient};
+use azuki_media::{MediaStore, YouTubeClient, YtDlp};
 use azuki_player::PlayerController;
 
 use crate::events::{DownloadStatus, WebSeqEvent};
@@ -180,13 +180,10 @@ pub async fn start_web(
         let serve_dir = ServeDir::new(&dir);
         let index_fallback = ServeFile::new(&index_path);
         // Use nested fallback: try static files first, then serve index.html for SPA routes
-        app = app
-            .fallback_service(serve_dir.fallback(index_fallback));
+        app = app.fallback_service(serve_dir.fallback(index_fallback));
         info!("serving SPA from {dir}");
     } else {
-        app = app.fallback(|| async {
-            axum::response::Html(NO_FRONTEND_HTML)
-        });
+        app = app.fallback(|| async { axum::response::Html(NO_FRONTEND_HTML) });
     }
 
     let addr = SocketAddr::from(([0, 0, 0, 0], port));

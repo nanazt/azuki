@@ -27,6 +27,10 @@ fn main() {
         "cargo:rerun-if-changed={}",
         frontend_dir.join("tsconfig.json").display()
     );
+    println!(
+        "cargo:rerun-if-changed={}",
+        frontend_dir.join("dist/index.html").display()
+    );
 
     // Skip if explicitly requested
     if std::env::var("SKIP_FRONTEND").is_ok() {
@@ -47,7 +51,10 @@ fn main() {
             .status()
             .expect("failed to run npm install — is npm installed?");
 
-        assert!(status.success(), "npm install failed (exited with {status})");
+        assert!(
+            status.success(),
+            "npm install failed (exited with {status})"
+        );
     }
 
     // Skip build if dist/index.html already exists and is fresh
@@ -64,5 +71,8 @@ fn main() {
         .status()
         .expect("failed to run npm run build — is npm installed?");
 
-    assert!(status.success(), "frontend build failed (npm run build exited with {status})");
+    assert!(
+        status.success(),
+        "frontend build failed (npm run build exited with {status})"
+    );
 }
