@@ -124,11 +124,7 @@ async fn run_normal(config: Config, pool: SqlitePool) -> anyhow::Result<()> {
         &config.media_dir,
         config.max_cache_size_gb,
     )?);
-    let mut ytdlp = azuki_media::YtDlp::new(&config.media_dir, &config.data_dir);
-    if let Err(e) = ytdlp.ensure_installed().await {
-        tracing::warn!("yt-dlp auto-install failed: {e}");
-    }
-    let ytdlp = Arc::new(ytdlp);
+    let ytdlp = Arc::new(azuki_media::YtDlp::new(&config.media_dir, &config.data_dir));
     let youtube_client = config.youtube_api_key.as_ref().map(|key| {
         Arc::new(azuki_media::YouTubeClient::new(
             key.expose_secret().to_string(),
@@ -207,6 +203,14 @@ async fn run_normal(config: Config, pool: SqlitePool) -> anyhow::Result<()> {
     let web_handle = tokio::spawn(async move {
         if let Err(e) = azuki_web::start_web(web_state, web_port, web_cancel).await {
             tracing::error!("web server error: {e}");
+        }
+    });
+
+    // yt-dlp install check (runs concurrently with bot/web startup)
+    let ytdlp_init = ytdlp.clone();
+    tokio::spawn(async move {
+        if let Err(e) = ytdlp_init.ensure_installed().await {
+            tracing::warn!("yt-dlp auto-install failed: {e}");
         }
     });
 

@@ -44,7 +44,7 @@ struct YtDlpOutput {
 pub struct YtDlp {
     media_dir: PathBuf,
     managed_bin: PathBuf,
-    effective_bin: PathBuf,
+    effective_bin: std::sync::Mutex<PathBuf>,
 }
 
 impl YtDlp {
@@ -53,21 +53,21 @@ impl YtDlp {
         let managed_bin = data_dir.join("bin").join("yt-dlp");
         Self {
             media_dir: media_dir.into(),
-            managed_bin: managed_bin.clone(),
-            effective_bin: managed_bin,
+            effective_bin: std::sync::Mutex::new(managed_bin.clone()),
+            managed_bin,
         }
     }
 
-    pub fn bin_path(&self) -> &Path {
-        &self.effective_bin
+    pub fn bin_path(&self) -> PathBuf {
+        self.effective_bin.lock().unwrap().clone()
     }
 
     pub fn is_managed(&self) -> bool {
-        self.effective_bin == self.managed_bin
+        *self.effective_bin.lock().unwrap() == self.managed_bin
     }
 
     pub async fn version(&self) -> Result<String, MediaError> {
-        let output = Command::new(&self.effective_bin)
+        let output = Command::new(self.bin_path())
             .arg("--version")
             .output()
             .await
@@ -78,7 +78,7 @@ impl YtDlp {
         Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
     }
 
-    pub async fn ensure_installed(&mut self) -> Result<(), MediaError> {
+    pub async fn ensure_installed(&self) -> Result<(), MediaError> {
         // 1. Check managed binary
         if self.managed_bin.exists() {
             let output = Command::new(&self.managed_bin)
@@ -86,7 +86,7 @@ impl YtDlp {
                 .output()
                 .await;
             if output.is_ok_and(|o| o.status.success()) {
-                self.effective_bin = self.managed_bin.clone();
+                *self.effective_bin.lock().unwrap() = self.managed_bin.clone();
                 return Ok(());
             }
         }
@@ -95,7 +95,7 @@ impl YtDlp {
         let output = Command::new("yt-dlp").arg("--version").output().await;
         if output.is_ok_and(|o| o.status.success()) {
             warn!("using system yt-dlp from PATH");
-            self.effective_bin = PathBuf::from("yt-dlp");
+            *self.effective_bin.lock().unwrap() = PathBuf::from("yt-dlp");
             return Ok(());
         }
 
@@ -114,7 +114,7 @@ impl YtDlp {
         .await
         .map_err(|_| MediaError::YtDlp("download timed out".to_string()))??;
 
-        self.effective_bin = self.managed_bin.clone();
+        *self.effective_bin.lock().unwrap() = self.managed_bin.clone();
         Ok(())
     }
 
@@ -156,7 +156,7 @@ impl YtDlp {
         let sanitized_url = Self::sanitize_query(url);
         let output_template = self.media_dir.join("%(id)s.%(ext)s").to_string_lossy().to_string();
 
-        let mut child = Command::new(&self.effective_bin)
+        let mut child = Command::new(self.bin_path())
             .args([
                 "--no-exec",
                 "--print-json",
@@ -342,7 +342,7 @@ impl YtDlp {
 
         let sanitized_url = Self::sanitize_query(url);
 
-        let output = Command::new(&self.effective_bin)
+        let output = Command::new(self.bin_path())
             .args([
                 "--no-exec",
                 "--dump-json",
