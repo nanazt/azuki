@@ -6,6 +6,7 @@ import {
   ChevronRight,
   Clock,
   Heart,
+  Home,
   ListMusic,
   Search,
   Settings,
@@ -20,12 +21,14 @@ interface NavItemProps {
   icon: React.ReactNode;
   label: string;
   indent?: boolean;
+  end?: boolean;
 }
 
-function NavItem({ to, icon, label, indent }: NavItemProps) {
+function NavItem({ to, icon, label, indent, end }: NavItemProps) {
   return (
     <NavLink
       to={to}
+      end={end}
       className={({ isActive }) =>
         clsx(
           "flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors duration-100",
@@ -59,6 +62,7 @@ export function Sidebar() {
 
       {/* Navigation */}
       <nav className="flex-1 px-2 space-y-1">
+        <NavItem to="/" icon={<Home size={16} />} label="Home" end />
         <NavItem to="/search" icon={<Search size={16} />} label="Search" />
 
         {/* Library section */}
