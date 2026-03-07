@@ -534,7 +534,22 @@ impl PlayerActor {
                     });
                     self.broadcast(PlayerEvent::VolumeChanged { volume: self.volume });
                 } else {
-                    self.state = PlayState::Idle;
+                    // Keep showing the finished track in paused state
+                    let finished_track = match &self.state {
+                        PlayState::Playing { track, .. }
+                        | PlayState::Error { track, .. } => Some(track.clone()),
+                        _ => None,
+                    };
+                    if let Some(track) = finished_track {
+                        let pos = track.duration_ms;
+                        self.state = PlayState::Paused {
+                            track,
+                            position_ms: pos,
+                        };
+                        self.broadcast(PlayerEvent::Paused { position_ms: pos });
+                    } else {
+                        self.state = PlayState::Idle;
+                    }
                 }
             }
         }
