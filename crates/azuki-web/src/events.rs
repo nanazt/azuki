@@ -9,7 +9,7 @@ pub enum WebEvent {
     TrackStarted {
         track: TrackInfo,
         position_ms: u64,
-        added_by: String,
+        added_by: azuki_player::UserInfo,
     },
     TrackEnded {
         track_id: String,

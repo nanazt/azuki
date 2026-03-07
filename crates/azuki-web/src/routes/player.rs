@@ -146,9 +146,18 @@ pub async fn queue_add(
         }
     }
 
+    let user = azuki_db::queries::users::get_user(&state.db, &user_id)
+        .await
+        .map_err(ApiError::Db)?;
+    let user_info = azuki_player::UserInfo {
+        id: user.id,
+        username: user.username,
+        avatar_url: user.avatar_url,
+    };
+
     let request = crate::DownloadRequest {
         query_or_url: body.query_or_url,
-        user_id,
+        user_info,
         download_id: download_id.clone(),
     };
 

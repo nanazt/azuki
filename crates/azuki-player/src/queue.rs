@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
 
-use crate::events::{LoopMode, QueueEntry, TrackInfo};
+use crate::events::{LoopMode, QueueEntry, TrackInfo, UserInfo};
 
 #[derive(Debug, Default)]
 pub struct Queue {
@@ -38,7 +38,7 @@ impl Queue {
         self.items.iter().any(|e| e.track.id == track_id)
     }
 
-    pub fn enqueue(&mut self, track: TrackInfo, added_by: String) -> bool {
+    pub fn enqueue(&mut self, track: TrackInfo, added_by: UserInfo) -> bool {
         if self.items.len() >= 50 {
             return false;
         }
@@ -158,12 +158,20 @@ mod tests {
         }
     }
 
+    fn test_user() -> UserInfo {
+        UserInfo {
+            id: "user1".into(),
+            username: "User 1".into(),
+            avatar_url: None,
+        }
+    }
+
     #[test]
     fn test_enqueue_and_advance() {
         let mut q = Queue::new();
-        q.enqueue(make_track("1"), "user1".into());
-        q.enqueue(make_track("2"), "user1".into());
-        q.enqueue(make_track("3"), "user1".into());
+        q.enqueue(make_track("1"), test_user());
+        q.enqueue(make_track("2"), test_user());
+        q.enqueue(make_track("3"), test_user());
         assert_eq!(q.len(), 3);
 
         let e = q.advance().unwrap();
@@ -181,8 +189,8 @@ mod tests {
     fn test_loop_one() {
         let mut q = Queue::new();
         q.set_loop_mode(LoopMode::One);
-        q.enqueue(make_track("1"), "user1".into());
-        q.enqueue(make_track("2"), "user1".into());
+        q.enqueue(make_track("1"), test_user());
+        q.enqueue(make_track("2"), test_user());
 
         let e1 = q.advance().unwrap();
         assert_eq!(e1.track.id, "1");
@@ -195,8 +203,8 @@ mod tests {
     fn test_loop_all() {
         let mut q = Queue::new();
         q.set_loop_mode(LoopMode::All);
-        q.enqueue(make_track("1"), "user1".into());
-        q.enqueue(make_track("2"), "user1".into());
+        q.enqueue(make_track("1"), test_user());
+        q.enqueue(make_track("2"), test_user());
 
         let e = q.advance().unwrap();
         assert_eq!(e.track.id, "1");
@@ -210,9 +218,9 @@ mod tests {
     #[test]
     fn test_remove() {
         let mut q = Queue::new();
-        q.enqueue(make_track("1"), "user1".into());
-        q.enqueue(make_track("2"), "user1".into());
-        q.enqueue(make_track("3"), "user1".into());
+        q.enqueue(make_track("1"), test_user());
+        q.enqueue(make_track("2"), test_user());
+        q.enqueue(make_track("3"), test_user());
 
         let removed = q.remove(1).unwrap();
         assert_eq!(removed.track.id, "2");

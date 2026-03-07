@@ -69,7 +69,7 @@ pub async fn get_favorites(
 ) -> DbResult<Vec<Track>> {
     sqlx::query_as::<_, Track>(
         "SELECT t.id, t.title, t.artist, t.duration_ms, t.thumbnail_url,
-                t.source_url, t.source_type, t.file_path, t.youtube_id, t.created_at
+                t.source_url, t.source_type, t.file_path, t.youtube_id, t.volume, t.created_at
          FROM favorites f
          JOIN tracks t ON t.id = f.track_id
          WHERE f.user_id = ?1

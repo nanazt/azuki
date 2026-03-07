@@ -167,7 +167,11 @@ async fn run_normal(config: Config, pool: SqlitePool) -> anyhow::Result<()> {
                 youtube_id: e.youtube_id,
                 volume: e.volume as u8,
             },
-            added_by: e.user_id,
+            added_by: azuki_player::UserInfo {
+                id: e.user_id.clone(),
+                username: e.username.unwrap_or_else(|| e.user_id.clone()),
+                avatar_url: e.avatar_url,
+            },
         }
     };
 
@@ -347,14 +351,14 @@ async fn run_normal(config: Config, pool: SqlitePool) -> anyhow::Result<()> {
                         match result {
                             Ok(player_seq_event) => {
                                 // Record play history, persist now_playing, send embed when a track starts
-                                if let azuki_player::PlayerEvent::TrackStarted { ref track, added_by: ref user_id, .. } = player_seq_event.event {
+                                if let azuki_player::PlayerEvent::TrackStarted { ref track, added_by: ref user_info, .. } = player_seq_event.event {
                                     let history_result = azuki_db::queries::history::record_play(
                                         &bridge_db,
                                         &track.id,
-                                        user_id,
+                                        &user_info.id,
                                         track.volume as i64,
                                     ).await;
-                                    if let Err(e) = azuki_db::queries::queue::save_now_playing(&bridge_db, &track.id, user_id).await {
+                                    if let Err(e) = azuki_db::queries::queue::save_now_playing(&bridge_db, &track.id, &user_info.id).await {
                                         tracing::warn!("failed to persist now_playing: {e}");
                                     }
                                     let s = seq.fetch_add(1, Ordering::Relaxed) + 1;
@@ -362,7 +366,7 @@ async fn run_normal(config: Config, pool: SqlitePool) -> anyhow::Result<()> {
                                         seq: s,
                                         event: azuki_web::events::WebEvent::HistoryAdded {
                                             track: track.clone(),
-                                            user_id: user_id.clone(),
+                                            user_id: user_info.id.clone(),
                                         },
                                     });
 
@@ -374,9 +378,11 @@ async fn run_normal(config: Config, pool: SqlitePool) -> anyhow::Result<()> {
                                                 let channel_id = serenity::all::ChannelId::new(ch_u64);
                                                 let http = bridge_http_rx.borrow().clone();
                                                 if let Some(ref http) = http {
-                                                    // Resolve display name
-                                                    let uid: u64 = user_id.parse().unwrap_or(0);
-                                                    let display_name = if uid > 0 {
+                                                    // Resolve display name: use UserInfo username, fallback to guild member lookup
+                                                    let uid: u64 = user_info.id.parse().unwrap_or(0);
+                                                    let display_name = if !user_info.username.is_empty() {
+                                                        user_info.username.clone()
+                                                    } else if uid > 0 {
                                                         match http.get_member(bridge_guild_id, serenity::all::UserId::new(uid)).await {
                                                             Ok(member) => {
                                                                 member.nick.as_deref()
@@ -384,10 +390,10 @@ async fn run_normal(config: Config, pool: SqlitePool) -> anyhow::Result<()> {
                                                                     .unwrap_or(&member.user.name)
                                                                     .to_string()
                                                             }
-                                                            Err(_) => user_id.clone(),
+                                                            Err(_) => user_info.id.clone(),
                                                         }
                                                     } else {
-                                                        user_id.clone()
+                                                        user_info.id.clone()
                                                     };
 
                                                     // Build thumbnail URL
@@ -460,7 +466,7 @@ async fn run_normal(config: Config, pool: SqlitePool) -> anyhow::Result<()> {
                                 if let azuki_player::PlayerEvent::QueueUpdated { ref queue } = player_seq_event.event {
                                     let items: Vec<(String, String)> = queue
                                         .iter()
-                                        .map(|e| (e.track.id.clone(), e.added_by.clone()))
+                                        .map(|e| (e.track.id.clone(), e.added_by.id.clone()))
                                         .collect();
                                     if let Err(e) = azuki_db::queries::queue::save_queue(&bridge_db, &items).await {
                                         tracing::warn!("failed to persist queue: {e}");
@@ -672,17 +678,17 @@ async fn download_worker(
                 let snapshot = player.get_state().await;
                 match snapshot.state {
                     azuki_player::PlayStateInfo::Idle => {
-                        let _ = player.play(track_info.clone(), req.user_id.clone()).await;
+                        let _ = player.play(track_info.clone(), req.user_info.clone()).await;
                     }
                     azuki_player::PlayStateInfo::Paused {
                         position_ms,
                         ref track,
                     } if position_ms >= track.duration_ms => {
-                        let _ = player.play(track_info.clone(), req.user_id.clone()).await;
+                        let _ = player.play(track_info.clone(), req.user_info.clone()).await;
                     }
                     _ => {
                         if let Err(e) = player
-                            .enqueue(track_info.clone(), req.user_id.clone())
+                            .enqueue(track_info.clone(), req.user_info.clone())
                             .await
                         {
                             active.remove(&download_id);
@@ -794,17 +800,17 @@ async fn download_worker(
                     let snapshot = player.get_state().await;
                     match snapshot.state {
                         azuki_player::PlayStateInfo::Idle => {
-                            let _ = player.play(track_info.clone(), req.user_id.clone()).await;
+                            let _ = player.play(track_info.clone(), req.user_info.clone()).await;
                         }
                         azuki_player::PlayStateInfo::Paused {
                             position_ms,
                             ref track,
                         } if position_ms >= track.duration_ms => {
-                            let _ = player.play(track_info.clone(), req.user_id.clone()).await;
+                            let _ = player.play(track_info.clone(), req.user_info.clone()).await;
                         }
                         _ => {
                             if let Err(e) = player
-                                .enqueue(track_info.clone(), req.user_id.clone())
+                                .enqueue(track_info.clone(), req.user_info.clone())
                                 .await
                             {
                                 active.remove(&download_id);

@@ -1,6 +1,7 @@
 import clsx from "clsx";
 import { X, Music } from "lucide-react";
 import type { QueueEntry } from "../../../lib/types";
+import { Avatar } from "../../ui/Avatar";
 
 interface QueueItemProps {
   entry: QueueEntry;
@@ -37,12 +38,14 @@ export function QueueItem({ entry, index, position, onRemove }: QueueItemProps) 
         <div className="text-sm text-[var(--color-text)] truncate font-medium">
           {track.title}
         </div>
-        <div className="text-xs text-[var(--color-text-secondary)] truncate">
-          {track.artist ?? "Unknown artist"}
-          {added_by && (
-            <span className="text-[var(--color-text-tertiary)]">
-              {" · "}{added_by}
-            </span>
+        <div className="flex items-center gap-1 text-xs text-[var(--color-text-secondary)] min-w-0">
+          <span className="truncate">{track.artist ?? "Unknown artist"}</span>
+          {added_by?.username && (
+            <>
+              <span className="text-[var(--color-text-tertiary)] flex-shrink-0">·</span>
+              <Avatar src={added_by.avatar_url} username={added_by.username} size="xs" className="flex-shrink-0" />
+              <span className="text-[var(--color-text-secondary)] truncate">{added_by.username}</span>
+            </>
           )}
         </div>
       </div>

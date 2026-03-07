@@ -13,7 +13,7 @@ export interface TrackInfo {
 
 export interface QueueEntry {
   track: TrackInfo;
-  added_by: string;
+  added_by: UserInfo;
 }
 
 export interface UserInfo {
@@ -37,6 +37,7 @@ export interface PlayerSnapshot {
   volume: number;
   loop_mode: LoopMode;
   listeners: UserInfo[];
+  current_added_by?: UserInfo | null;
   active_downloads?: DownloadStatus[];
   favorited_track_ids?: string[];
 }
@@ -49,7 +50,7 @@ export type PlayStateInfo =
   | { status: "error"; track: TrackInfo; error: string };
 
 export type PlayerEvent =
-  | { type: "track_started"; track: TrackInfo; position_ms: number }
+  | { type: "track_started"; track: TrackInfo; position_ms: number; added_by: UserInfo }
   | { type: "track_ended"; track_id: string }
   | { type: "track_loading"; track: TrackInfo }
   | { type: "track_error"; track_id: string; error: string }

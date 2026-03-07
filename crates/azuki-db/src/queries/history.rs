@@ -131,6 +131,8 @@ pub struct RestoreEntry {
     pub youtube_id: Option<String>,
     pub volume: i64,
     pub user_id: String,
+    pub username: Option<String>,
+    pub avatar_url: Option<String>,
 }
 
 pub async fn get_history_for_restore(
@@ -145,9 +147,12 @@ pub async fn get_history_for_restore(
                 t.source_type,
                 t.youtube_id,
                 t.volume,
-                h.user_id
+                h.user_id,
+                u.username AS \"username?\",
+                u.avatar_url AS \"avatar_url?\"
          FROM play_history h
          JOIN tracks t ON t.id = h.track_id
+         LEFT JOIN users u ON u.id = h.user_id
          ORDER BY h.played_at DESC
          LIMIT ?1",
     )

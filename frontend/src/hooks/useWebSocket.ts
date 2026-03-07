@@ -84,12 +84,14 @@ export function useWebSocket() {
         break;
       case "track_started":
         state.setPlayState({ status: "playing", track: ev.track, position_ms: ev.position_ms });
+        state.setCurrentAddedBy(ev.added_by ?? null);
         break;
       case "track_loading":
         state.setPlayState({ status: "loading", track: ev.track });
         break;
       case "track_ended":
         state.setPlayState({ status: "idle" });
+        state.setCurrentAddedBy(null);
         break;
       case "track_error":
         if (state.playState.status !== "idle") {

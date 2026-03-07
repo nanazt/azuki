@@ -137,7 +137,7 @@ pub async fn get_playlist_tracks(
 ) -> DbResult<Vec<Track>> {
     sqlx::query_as::<_, Track>(
         "SELECT t.id, t.title, t.artist, t.duration_ms, t.thumbnail_url,
-                t.source_url, t.source_type, t.file_path, t.youtube_id, t.created_at
+                t.source_url, t.source_type, t.file_path, t.youtube_id, t.volume, t.created_at
          FROM playlist_tracks pt
          JOIN tracks t ON t.id = pt.track_id
          WHERE pt.playlist_id = ?1

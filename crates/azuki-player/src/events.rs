@@ -17,7 +17,7 @@ pub struct TrackInfo {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QueueEntry {
     pub track: TrackInfo,
-    pub added_by: String,
+    pub added_by: UserInfo,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -25,6 +25,16 @@ pub struct UserInfo {
     pub id: String,
     pub username: String,
     pub avatar_url: Option<String>,
+}
+
+impl UserInfo {
+    pub fn unknown() -> Self {
+        Self {
+            id: String::new(),
+            username: String::new(),
+            avatar_url: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -44,6 +54,7 @@ pub struct PlayerSnapshot {
     pub volume: u8,
     pub loop_mode: LoopMode,
     pub listeners: Vec<UserInfo>,
+    pub current_added_by: Option<UserInfo>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -68,7 +79,7 @@ pub enum PlayerEvent {
     TrackStarted {
         track: TrackInfo,
         position_ms: u64,
-        added_by: String,
+        added_by: UserInfo,
     },
     TrackEnded {
         track_id: String,

@@ -8,6 +8,7 @@ import {
 import { api } from "../../../lib/api";
 import { QueueItem } from "./QueueItem";
 import { useToast } from "../../../hooks/useToast";
+import { Avatar } from "../../ui/Avatar";
 
 interface QueuePanelProps {
   onOpenSearch?: () => void;
@@ -17,6 +18,7 @@ export function QueuePanel({ onOpenSearch }: QueuePanelProps) {
   const { showToast } = useToast();
   const playState = usePlayerStore((s) => s.playState);
   const queue = usePlayerStore((s) => s.queue);
+  const currentAddedBy = usePlayerStore((s) => s.currentAddedBy);
   const downloads = useDownloadStore((s) => s.downloads);
   const activeDownloads = Array.from(downloads.values()).filter(
     (d) => d.status === "downloading",
@@ -74,11 +76,18 @@ export function QueuePanel({ onOpenSearch }: QueuePanelProps) {
                 <div className="text-sm font-medium text-[var(--color-text)] truncate">
                   {currentTrack.title}
                 </div>
-                {currentTrack.artist && (
-                  <div className="text-xs text-[var(--color-text-secondary)] truncate">
-                    {currentTrack.artist}
-                  </div>
-                )}
+                <div className="flex items-center gap-1 text-xs text-[var(--color-text-secondary)] min-w-0">
+                  {currentTrack.artist && (
+                    <span className="truncate">{currentTrack.artist}</span>
+                  )}
+                  {currentAddedBy?.username && (
+                    <>
+                      {currentTrack.artist && <span className="text-[var(--color-text-tertiary)] flex-shrink-0">·</span>}
+                      <Avatar src={currentAddedBy.avatar_url} username={currentAddedBy.username} size="xs" className="flex-shrink-0" />
+                      <span className="text-[var(--color-text-secondary)] truncate">{currentAddedBy.username}</span>
+                    </>
+                  )}
+                </div>
               </div>
             </div>
           </div>

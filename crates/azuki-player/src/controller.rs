@@ -20,7 +20,7 @@ pub enum TrackEndReason {
 pub enum PlayerCommand {
     Play {
         track: TrackInfo,
-        user_id: String,
+        user_info: UserInfo,
         reply: oneshot::Sender<Result<(), PlayerError>>,
     },
     Pause {
@@ -49,7 +49,7 @@ pub enum PlayerCommand {
     },
     Enqueue {
         track: TrackInfo,
-        user_id: String,
+        user_info: UserInfo,
         reply: oneshot::Sender<Result<(), PlayerError>>,
     },
     Previous {
@@ -141,6 +141,7 @@ impl PlayerController {
         let (cmd_tx, cmd_rx) = mpsc::channel(64);
         let (event_tx, _) = broadcast::channel(BROADCAST_CAPACITY);
 
+        let current_added_by = current_track.as_ref().map(|e| e.added_by.clone());
         let initial_state = match current_track {
             Some(entry) => PlayState::Paused {
                 track: entry.track,
@@ -148,7 +149,6 @@ impl PlayerController {
             },
             None => PlayState::Idle,
         };
-
         let actor = PlayerActor {
             cmd_rx,
             event_tx: event_tx.clone(),
@@ -157,6 +157,7 @@ impl PlayerController {
             volume: 5,
             seq: 0,
             listeners: Vec::new(),
+            current_added_by,
         };
 
         tokio::spawn(actor.run());
@@ -176,11 +177,11 @@ impl PlayerController {
         let _ = self.cmd_tx.send(cmd).await;
     }
 
-    pub async fn play(&self, track: TrackInfo, user_id: String) -> Result<(), PlayerError> {
+    pub async fn play(&self, track: TrackInfo, user_info: UserInfo) -> Result<(), PlayerError> {
         let (tx, rx) = oneshot::channel();
         self.send_cmd(PlayerCommand::Play {
             track,
-            user_id,
+            user_info,
             reply: tx,
         })
         .await;
@@ -241,11 +242,11 @@ impl PlayerController {
         rx.await.unwrap_or(Err(PlayerError::NoTrack))
     }
 
-    pub async fn enqueue(&self, track: TrackInfo, user_id: String) -> Result<(), PlayerError> {
+    pub async fn enqueue(&self, track: TrackInfo, user_info: UserInfo) -> Result<(), PlayerError> {
         let (tx, rx) = oneshot::channel();
         self.send_cmd(PlayerCommand::Enqueue {
             track,
-            user_id,
+            user_info,
             reply: tx,
         })
         .await;
@@ -269,6 +270,7 @@ impl PlayerController {
             volume: 5,
             loop_mode: LoopMode::Off,
             listeners: Vec::new(),
+            current_added_by: None,
         })
     }
 
@@ -286,6 +288,7 @@ struct PlayerActor {
     volume: u8,
     seq: u64,
     listeners: Vec<UserInfo>,
+    current_added_by: Option<UserInfo>,
 }
 
 impl PlayerActor {
@@ -337,6 +340,7 @@ impl PlayerActor {
             volume: self.volume,
             loop_mode: self.queue.loop_mode(),
             listeners: self.listeners.clone(),
+            current_added_by: self.current_added_by.clone(),
         }
     }
 
@@ -344,15 +348,14 @@ impl PlayerActor {
         match cmd {
             PlayerCommand::Play {
                 track,
-                user_id,
+                user_info,
                 reply,
             } => {
                 self.broadcast(PlayerEvent::TrackLoading {
                     track: track.clone(),
                 });
-                // Transition to Playing (in real code, Loading → download → Playing)
-                // For now, go directly to Playing since download happens externally
                 self.volume = track.volume;
+                self.current_added_by = Some(user_info.clone());
                 self.state = PlayState::Playing {
                     track: track.clone(),
                     started_at: Instant::now(),
@@ -361,7 +364,7 @@ impl PlayerActor {
                 self.broadcast(PlayerEvent::TrackStarted {
                     track,
                     position_ms: 0,
-                    added_by: user_id,
+                    added_by: user_info,
                 });
                 self.broadcast(PlayerEvent::VolumeChanged { volume: self.volume });
                 let _ = reply.send(Ok(()));
@@ -415,7 +418,7 @@ impl PlayerActor {
                     | PlayState::Loading { track }
                     | PlayState::Error { track, .. } => Some(QueueEntry {
                         track: track.clone(),
-                        added_by: String::new(),
+                        added_by: self.current_added_by.clone().unwrap_or_else(UserInfo::unknown),
                     }),
                     PlayState::Idle => None,
                 };
@@ -428,6 +431,7 @@ impl PlayerActor {
                 }
 
                 if let Some(next) = self.queue.advance() {
+                    self.current_added_by = Some(next.added_by.clone());
                     let added_by = next.added_by;
                     let track = next.track;
                     self.volume = track.volume;
@@ -463,6 +467,7 @@ impl PlayerActor {
                     });
                 }
                 self.state = PlayState::Idle;
+                self.current_added_by = None;
                 self.queue.clear();
                 self.broadcast(PlayerEvent::QueueUpdated {
                     queue: Vec::new(),
@@ -513,7 +518,7 @@ impl PlayerActor {
 
             PlayerCommand::Enqueue {
                 track,
-                user_id,
+                user_info,
                 reply,
             } => {
                 let now_playing = match &self.state {
@@ -527,7 +532,7 @@ impl PlayerActor {
                     || self.queue.contains(&track.id);
                 if is_duplicate {
                     let _ = reply.send(Err(PlayerError::Duplicate));
-                } else if self.queue.enqueue(track, user_id) {
+                } else if self.queue.enqueue(track, user_info) {
                     self.broadcast(PlayerEvent::QueueUpdated {
                         queue: self.queue.items(),
                     });
@@ -608,8 +613,9 @@ impl PlayerActor {
                         let current_id = current_track.id.clone();
                         // Push current back to front of queue
                         self.queue
-                            .push_front(QueueEntry { track: current_track, added_by: String::new() });
+                            .push_front(QueueEntry { track: current_track, added_by: self.current_added_by.clone().unwrap_or_else(UserInfo::unknown) });
                         self.broadcast(PlayerEvent::TrackEnded { track_id: current_id });
+                        self.current_added_by = Some(prev_entry.added_by.clone());
                         let added_by = prev_entry.added_by;
                         let track = prev_entry.track;
                         self.volume = track.volume;
@@ -670,8 +676,9 @@ impl PlayerActor {
                     let current_id = current_track.id.clone();
                     // Push current track to front of queue
                     self.queue
-                        .push_front(QueueEntry { track: current_track, added_by: String::new() });
+                        .push_front(QueueEntry { track: current_track, added_by: self.current_added_by.clone().unwrap_or_else(UserInfo::unknown) });
                     self.broadcast(PlayerEvent::TrackEnded { track_id: current_id });
+                    self.current_added_by = Some(prev_entry.added_by.clone());
                     let added_by = prev_entry.added_by;
                     let track = prev_entry.track;
                     self.volume = track.volume;
@@ -773,7 +780,7 @@ impl PlayerActor {
                 if let Some(ref track) = current_track {
                     self.queue.push_to_history(QueueEntry {
                         track: track.clone(),
-                        added_by: String::new(),
+                        added_by: self.current_added_by.clone().unwrap_or_else(UserInfo::unknown),
                     });
                 }
 
@@ -781,6 +788,7 @@ impl PlayerActor {
                 if let Some(next) = self.queue.advance() {
                     // Broadcast TrackEnded only when advancing to the next track
                     self.broadcast(PlayerEvent::TrackEnded { track_id });
+                    self.current_added_by = Some(next.added_by.clone());
                     let added_by = next.added_by;
                     let track = next.track;
                     self.volume = track.volume;

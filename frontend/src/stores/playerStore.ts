@@ -11,6 +11,7 @@ import type {
 interface PlayerState {
   playState: PlayStateInfo;
   queue: QueueEntry[];
+  currentAddedBy: UserInfo | null;
 
   volume: number;
   loopMode: LoopMode;
@@ -26,6 +27,7 @@ interface PlayerState {
   applySnapshot: (snapshot: PlayerSnapshot, seq?: number) => void;
   setPlayState: (s: PlayStateInfo) => void;
   setQueue: (q: QueueEntry[]) => void;
+  setCurrentAddedBy: (u: UserInfo | null) => void;
 
   setVolume: (v: number) => void;
   setLoopMode: (m: LoopMode) => void;
@@ -40,6 +42,7 @@ interface PlayerState {
 export const usePlayerStore = create<PlayerState>((set, get) => ({
   playState: { status: "idle" },
   queue: [],
+  currentAddedBy: null,
 
   volume: 5,
   loopMode: "off",
@@ -61,6 +64,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     set({
       playState: snapshot.state,
       queue: snapshot.queue,
+      currentAddedBy: snapshot.current_added_by ?? null,
 
       volume: snapshot.volume,
       loopMode: snapshot.loop_mode,
@@ -71,6 +75,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   setPlayState: (s) => set({ playState: s }),
   setQueue: (q) => set({ queue: q }),
+  setCurrentAddedBy: (u) => set({ currentAddedBy: u }),
 
   setVolume: (v) => set({ volume: v }),
   setLoopMode: (m) => set({ loopMode: m }),

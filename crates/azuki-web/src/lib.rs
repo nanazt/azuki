@@ -28,7 +28,7 @@ use crate::events::{DownloadStatus, WebSeqEvent};
 #[derive(Debug)]
 pub struct DownloadRequest {
     pub query_or_url: String,
-    pub user_id: String,
+    pub user_info: azuki_player::UserInfo,
     pub download_id: String,
 }
 

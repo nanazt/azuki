@@ -7,9 +7,17 @@ use serenity::all::{
 };
 use tracing::info;
 
-use azuki_player::{LoopMode, TrackInfo};
+use azuki_player::{LoopMode, TrackInfo, UserInfo};
 
 use crate::BotState;
+
+fn user_info_from(user: &serenity::all::User) -> UserInfo {
+    UserInfo {
+        id: user.id.to_string(),
+        username: user.global_name.as_deref().unwrap_or(&user.name).to_string(),
+        avatar_url: user.avatar_url(),
+    }
+}
 
 pub async fn register_commands(ctx: &Context, guild_id: GuildId) -> Result<(), serenity::Error> {
     let commands = vec![
@@ -182,7 +190,7 @@ async fn handle_play(
     defer(ctx, cmd).await?;
 
     let query = get_string_option(cmd, "query").unwrap_or_default();
-    let user_id = cmd.user.id.to_string();
+    let user_info = user_info_from(&cmd.user);
 
     // Search or download
     let is_url = query.starts_with("http://") || query.starts_with("https://");
@@ -265,14 +273,14 @@ async fn handle_play(
         azuki_player::PlayStateInfo::Idle => {
             state
                 .player
-                .play(track_info.clone(), user_id)
+                .play(track_info.clone(), user_info)
                 .await
                 .map_err(crate::BotError::Player)?;
         }
         _ => {
             state
                 .player
-                .enqueue(track_info.clone(), user_id)
+                .enqueue(track_info.clone(), user_info)
                 .await
                 .map_err(crate::BotError::Player)?;
         }
@@ -511,7 +519,7 @@ async fn handle_playlist(
     defer(ctx, cmd).await?;
 
     let name = get_string_option(cmd, "name").unwrap_or_default();
-    let user_id = cmd.user.id.to_string();
+    let user_info = user_info_from(&cmd.user);
 
     // Check if it's a URL (YouTube playlist)
     if name.starts_with("http") {
@@ -527,7 +535,7 @@ async fn handle_playlist(
     }
 
     // Search DB playlists
-    let playlists = azuki_db::queries::playlists::list_playlists(&state.db, &user_id)
+    let playlists = azuki_db::queries::playlists::list_playlists(&state.db, &user_info.id)
         .await
         .map_err(crate::BotError::Db)?;
 
@@ -553,7 +561,7 @@ async fn handle_playlist(
             youtube_id: track.youtube_id.clone(),
             volume: track.volume as u8,
         };
-        state.player.enqueue(track_info, user_id.clone()).await.ok();
+        state.player.enqueue(track_info, user_info.clone()).await.ok();
     }
 
     cmd.edit_response(
@@ -668,7 +676,7 @@ pub async fn handle_play_button(
         }
     };
 
-    let user_id = component.user.id.to_string();
+    let ui = user_info_from(&component.user);
     let track_info = TrackInfo {
         id: track.id.clone(),
         title: track.title.clone(),
@@ -691,9 +699,9 @@ pub async fn handle_play_button(
         let snapshot = state.player.get_state().await;
         let result = match snapshot.state {
             azuki_player::PlayStateInfo::Idle => {
-                state.player.play(track_info.clone(), user_id).await
+                state.player.play(track_info.clone(), ui.clone()).await
             }
-            _ => state.player.enqueue(track_info.clone(), user_id).await,
+            _ => state.player.enqueue(track_info.clone(), ui).await,
         };
 
         let content = if result.is_ok() {
@@ -730,7 +738,7 @@ pub async fn handle_play_button(
         let player = state.player.clone();
         let db = state.db.clone();
         let source_url = track.source_url.clone();
-        let user_id = component.user.id.to_string();
+        let ui = user_info_from(&component.user);
 
         tokio::spawn(async move {
             match ytdlp.download(&source_url).await {
@@ -756,10 +764,10 @@ pub async fn handle_play_button(
                     let snapshot = player.get_state().await;
                     match snapshot.state {
                         azuki_player::PlayStateInfo::Idle => {
-                            let _ = player.play(ti, user_id).await;
+                            let _ = player.play(ti, ui.clone()).await;
                         }
                         _ => {
-                            let _ = player.enqueue(ti, user_id).await;
+                            let _ = player.enqueue(ti, ui).await;
                         }
                     }
                 }
@@ -848,7 +856,7 @@ pub async fn handle_legacy_play(
     let ytdlp = state.ytdlp.clone();
     let player = state.player.clone();
     let db = state.db.clone();
-    let user_id = component.user.id.to_string();
+    let ui = user_info_from(&component.user);
     let url = url.to_string();
 
     tokio::spawn(async move {
@@ -892,10 +900,10 @@ pub async fn handle_legacy_play(
                 let snapshot = player.get_state().await;
                 match snapshot.state {
                     azuki_player::PlayStateInfo::Idle => {
-                        let _ = player.play(track_info, user_id).await;
+                        let _ = player.play(track_info, ui.clone()).await;
                     }
                     _ => {
-                        let _ = player.enqueue(track_info, user_id).await;
+                        let _ = player.enqueue(track_info, ui).await;
                     }
                 }
             }
