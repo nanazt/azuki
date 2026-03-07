@@ -34,6 +34,7 @@ export function PlayerBar() {
   const track =
     playState.status !== "idle" ? playState.track : null;
   const favorited = track ? favoritedTrackIds.has(track.id) : false;
+  const connected = usePlayerStore((s) => s.connected);
   const isPlaying = playState.status === "playing";
   const positionMs =
     playState.status === "playing" || playState.status === "paused"
@@ -43,7 +44,7 @@ export function PlayerBar() {
 
   // Update elapsed with RAF when playing
   useEffect(() => {
-    if (playState.status === "playing") {
+    if (playState.status === "playing" && connected) {
       lastUpdateRef.current = Date.now();
       const basePosition = playState.position_ms;
 
@@ -68,7 +69,7 @@ export function PlayerBar() {
         rafRef.current = null;
       }
     };
-  }, [playState, positionMs, duration]);
+  }, [playState, positionMs, duration, connected]);
 
   const handleSeekStart = useCallback(() => {
     setIsSeeking(true);

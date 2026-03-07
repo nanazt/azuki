@@ -22,6 +22,18 @@ impl Queue {
         }
     }
 
+    pub fn with_state(
+        items: Vec<QueueEntry>,
+        history: Vec<QueueEntry>,
+        loop_mode: LoopMode,
+    ) -> Self {
+        Self {
+            items: VecDeque::from(items),
+            loop_mode,
+            history,
+        }
+    }
+
     pub fn enqueue(&mut self, track: TrackInfo, added_by: String) {
         self.items.push_back(QueueEntry { track, added_by });
     }

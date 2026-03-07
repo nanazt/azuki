@@ -125,14 +125,31 @@ impl PlayerController {
     }
 
     pub fn with_history(history: Vec<QueueEntry>) -> Self {
+        Self::with_state(Vec::new(), history, LoopMode::Off, None)
+    }
+
+    pub fn with_state(
+        queue_items: Vec<QueueEntry>,
+        history: Vec<QueueEntry>,
+        loop_mode: LoopMode,
+        current_track: Option<QueueEntry>,
+    ) -> Self {
         let (cmd_tx, cmd_rx) = mpsc::channel(64);
         let (event_tx, _) = broadcast::channel(BROADCAST_CAPACITY);
+
+        let initial_state = match current_track {
+            Some(entry) => PlayState::Paused {
+                track: entry.track,
+                position_ms: 0,
+            },
+            None => PlayState::Idle,
+        };
 
         let actor = PlayerActor {
             cmd_rx,
             event_tx: event_tx.clone(),
-            state: PlayState::Idle,
-            queue: Queue::with_history(history),
+            state: initial_state,
+            queue: Queue::with_state(queue_items, history, loop_mode),
             volume: 5,
             seq: 0,
             listeners: Vec::new(),

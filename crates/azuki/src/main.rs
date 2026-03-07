@@ -139,13 +139,23 @@ async fn run_normal(config: Config, pool: SqlitePool) -> anyhow::Result<()> {
     let voice_channels: Arc<std::sync::RwLock<Vec<(u64, String)>>> =
         Arc::new(std::sync::RwLock::new(Vec::new()));
 
-    // Player — restore in-memory history from DB
-    let initial_history = azuki_db::queries::history::get_history_for_restore(&pool, 50)
-        .await
-        .unwrap_or_default()
-        .into_iter()
-        .rev() // DB returns newest-first, history Vec is oldest-first
-        .map(|e| azuki_player::QueueEntry {
+    // Player — restore state from DB
+    let restore_entry_to_queue = |e: azuki_db::queries::history::RestoreEntry| {
+        let file_path = e.source_type == "youtube"
+            && e.youtube_id.is_some();
+        let fp = if file_path {
+            let media_dir = &config.media_dir;
+            let yt_id = e.youtube_id.as_deref().unwrap();
+            let path = format!("{media_dir}/{yt_id}.opus");
+            if std::path::Path::new(&path).exists() {
+                Some(path)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+        azuki_player::QueueEntry {
             track: azuki_player::TrackInfo {
                 id: e.track_id,
                 title: e.title,
@@ -154,14 +164,62 @@ async fn run_normal(config: Config, pool: SqlitePool) -> anyhow::Result<()> {
                 thumbnail_url: e.thumbnail_url,
                 source_url: e.source_url,
                 source_type: e.source_type,
-                file_path: None,
+                file_path: fp,
                 youtube_id: e.youtube_id,
                 volume: e.volume as u8,
             },
             added_by: e.user_id,
-        })
-        .collect();
-    let player = azuki_player::PlayerController::with_history(initial_history);
+        }
+    };
+
+    let initial_history: Vec<azuki_player::QueueEntry> =
+        azuki_db::queries::history::get_history_for_restore(&pool, 50)
+            .await
+            .unwrap_or_default()
+            .into_iter()
+            .rev() // DB returns newest-first, history Vec is oldest-first
+            .map(restore_entry_to_queue)
+            .collect();
+
+    let initial_queue: Vec<azuki_player::QueueEntry> =
+        azuki_db::queries::queue::load_queue(&pool)
+            .await
+            .unwrap_or_default()
+            .into_iter()
+            .map(restore_entry_to_queue)
+            .collect();
+
+    let initial_loop_mode = match azuki_db::queries::queue::load_loop_mode(&pool)
+        .await
+        .unwrap_or_default()
+        .as_str()
+    {
+        "one" => azuki_player::LoopMode::One,
+        "all" => azuki_player::LoopMode::All,
+        _ => azuki_player::LoopMode::Off,
+    };
+
+    let initial_now_playing: Option<azuki_player::QueueEntry> =
+        azuki_db::queries::queue::load_now_playing(&pool)
+            .await
+            .unwrap_or(None)
+            .map(&restore_entry_to_queue);
+
+    if !initial_queue.is_empty() || initial_now_playing.is_some() {
+        info!(
+            "restoring {} queue items, loop_mode={:?}, now_playing={}",
+            initial_queue.len(),
+            initial_loop_mode,
+            initial_now_playing.as_ref().map_or("none", |e| e.track.title.as_str()),
+        );
+    }
+
+    let player = azuki_player::PlayerController::with_state(
+        initial_queue,
+        initial_history,
+        initial_loop_mode,
+        initial_now_playing,
+    );
 
     let cancel = CancellationToken::new();
 
@@ -267,13 +325,16 @@ async fn run_normal(config: Config, pool: SqlitePool) -> anyhow::Result<()> {
                     result = player_rx.recv() => {
                         match result {
                             Ok(player_seq_event) => {
-                                // Record play history when a track actually starts playing
+                                // Record play history and persist now_playing when a track starts
                                 if let azuki_player::PlayerEvent::TrackStarted { ref track, added_by: ref user_id, .. } = player_seq_event.event {
                                     let _ = azuki_db::queries::history::record_play(
                                         &bridge_db,
                                         &track.id,
                                         user_id,
                                     ).await;
+                                    if let Err(e) = azuki_db::queries::queue::save_now_playing(&bridge_db, &track.id, user_id).await {
+                                        tracing::warn!("failed to persist now_playing: {e}");
+                                    }
                                     let s = seq.fetch_add(1, Ordering::Relaxed) + 1;
                                     let _ = bridge_web_tx.send(azuki_web::events::WebSeqEvent {
                                         seq: s,
@@ -283,6 +344,37 @@ async fn run_normal(config: Config, pool: SqlitePool) -> anyhow::Result<()> {
                                         },
                                     });
                                 }
+
+                                // Clear now_playing when track ends (stop command)
+                                if let azuki_player::PlayerEvent::TrackEnded { .. } = player_seq_event.event
+                                    && let Err(e) = azuki_db::queries::queue::clear_now_playing(&bridge_db).await
+                                {
+                                    tracing::warn!("failed to clear now_playing: {e}");
+                                }
+
+                                // Persist queue to DB
+                                if let azuki_player::PlayerEvent::QueueUpdated { ref queue } = player_seq_event.event {
+                                    let items: Vec<(String, String)> = queue
+                                        .iter()
+                                        .map(|e| (e.track.id.clone(), e.added_by.clone()))
+                                        .collect();
+                                    if let Err(e) = azuki_db::queries::queue::save_queue(&bridge_db, &items).await {
+                                        tracing::warn!("failed to persist queue: {e}");
+                                    }
+                                }
+
+                                // Persist loop mode to DB
+                                if let azuki_player::PlayerEvent::LoopModeChanged { mode } = player_seq_event.event {
+                                    let mode_str = match mode {
+                                        azuki_player::LoopMode::Off => "off",
+                                        azuki_player::LoopMode::One => "one",
+                                        azuki_player::LoopMode::All => "all",
+                                    };
+                                    if let Err(e) = azuki_db::queries::queue::save_loop_mode(&bridge_db, mode_str).await {
+                                        tracing::warn!("failed to persist loop mode: {e}");
+                                    }
+                                }
+
                                 let web_event: azuki_web::events::WebEvent = player_seq_event.event.into();
                                 let s = seq.fetch_add(1, Ordering::Relaxed) + 1;
                                 let _ = bridge_web_tx.send(azuki_web::events::WebSeqEvent {
