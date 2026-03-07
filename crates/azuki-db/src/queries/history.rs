@@ -12,6 +12,7 @@ pub struct HistoryEntry {
     pub artist: Option<String>,
     pub duration_ms: i64,
     pub thumbnail_url: Option<String>,
+    pub source_url: String,
     pub user_id: String,
     pub username: String,
     pub played_at: String,
@@ -74,7 +75,9 @@ pub async fn get_history(
     sqlx::query_as::<_, HistoryEntry>(
         "SELECT h.id, h.track_id,
                 t.title, t.artist, t.duration_ms,
-                t.thumbnail_url, h.user_id,
+                t.thumbnail_url,
+                t.source_url,
+                h.user_id,
                 u.username, h.played_at, h.completed
          FROM play_history h
          JOIN tracks t ON t.id = h.track_id
@@ -84,6 +87,44 @@ pub async fn get_history(
     )
     .bind(limit)
     .bind(offset)
+    .fetch_all(pool)
+    .await
+    .map_err(DbError::from)
+}
+
+#[derive(Debug, FromRow)]
+pub struct RestoreEntry {
+    pub track_id: String,
+    pub title: String,
+    pub artist: Option<String>,
+    pub duration_ms: i64,
+    pub thumbnail_url: Option<String>,
+    pub source_url: String,
+    pub source_type: String,
+    pub youtube_id: Option<String>,
+    pub volume: i64,
+    pub user_id: String,
+}
+
+pub async fn get_history_for_restore(
+    pool: &SqlitePool,
+    limit: i64,
+) -> DbResult<Vec<RestoreEntry>> {
+    sqlx::query_as::<_, RestoreEntry>(
+        "SELECT h.track_id,
+                t.title, t.artist, t.duration_ms,
+                t.thumbnail_url,
+                t.source_url,
+                t.source_type,
+                t.youtube_id,
+                t.volume,
+                h.user_id
+         FROM play_history h
+         JOIN tracks t ON t.id = h.track_id
+         ORDER BY h.played_at DESC
+         LIMIT ?1",
+    )
+    .bind(limit)
     .fetch_all(pool)
     .await
     .map_err(DbError::from)

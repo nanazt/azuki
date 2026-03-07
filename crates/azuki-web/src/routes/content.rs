@@ -79,7 +79,7 @@ pub async fn history(
                 "artist": e.artist,
                 "duration_ms": e.duration_ms,
                 "thumbnail_url": e.thumbnail_url,
-                "source_url": "",
+                "source_url": e.source_url,
             },
             "played_at": e.played_at,
             "user_id": e.user_id,

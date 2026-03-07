@@ -139,8 +139,29 @@ async fn run_normal(config: Config, pool: SqlitePool) -> anyhow::Result<()> {
     let voice_channels: Arc<std::sync::RwLock<Vec<(u64, String)>>> =
         Arc::new(std::sync::RwLock::new(Vec::new()));
 
-    // Player
-    let player = azuki_player::PlayerController::new();
+    // Player — restore in-memory history from DB
+    let initial_history = azuki_db::queries::history::get_history_for_restore(&pool, 50)
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .rev() // DB returns newest-first, history Vec is oldest-first
+        .map(|e| azuki_player::QueueEntry {
+            track: azuki_player::TrackInfo {
+                id: e.track_id,
+                title: e.title,
+                artist: e.artist,
+                duration_ms: e.duration_ms as u64,
+                thumbnail_url: e.thumbnail_url,
+                source_url: e.source_url,
+                source_type: e.source_type,
+                file_path: None,
+                youtube_id: e.youtube_id,
+                volume: e.volume as u8,
+            },
+            added_by: e.user_id,
+        })
+        .collect();
+    let player = azuki_player::PlayerController::with_history(initial_history);
 
     let cancel = CancellationToken::new();
 
@@ -418,6 +439,11 @@ async fn download_worker(
                     azuki_player::PlayStateInfo::Idle => {
                         let _ = player.play(track_info.clone(), req.user_id.clone()).await;
                     }
+                    azuki_player::PlayStateInfo::Paused { position_ms, ref track }
+                        if position_ms >= track.duration_ms =>
+                    {
+                        let _ = player.play(track_info.clone(), req.user_id.clone()).await;
+                    }
                     _ => {
                         let _ = player
                             .enqueue(track_info.clone(), req.user_id.clone())
@@ -522,6 +548,11 @@ async fn download_worker(
                     let snapshot = player.get_state().await;
                     match snapshot.state {
                         azuki_player::PlayStateInfo::Idle => {
+                            let _ = player.play(track_info.clone(), req.user_id.clone()).await;
+                        }
+                        azuki_player::PlayStateInfo::Paused { position_ms, ref track }
+                            if position_ms >= track.duration_ms =>
+                        {
                             let _ = player.play(track_info.clone(), req.user_id.clone()).await;
                         }
                         _ => {

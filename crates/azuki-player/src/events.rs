@@ -40,6 +40,7 @@ pub enum LoopMode {
 pub struct PlayerSnapshot {
     pub state: PlayStateInfo,
     pub queue: Vec<QueueEntry>,
+    pub history: Vec<QueueEntry>,
     pub volume: u8,
     pub loop_mode: LoopMode,
     pub listeners: Vec<UserInfo>,
@@ -105,6 +106,9 @@ pub enum PlayerEvent {
     },
     ListenersUpdated {
         users: Vec<UserInfo>,
+    },
+    HistoryUpdated {
+        history: Vec<QueueEntry>,
     },
     StateSnapshot {
         state: PlayerSnapshot,

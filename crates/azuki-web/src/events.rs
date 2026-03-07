@@ -84,6 +84,9 @@ pub enum WebEvent {
         track: TrackInfo,
         user_id: String,
     },
+    HistoryUpdated {
+        history: Vec<azuki_player::QueueEntry>,
+    },
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -129,6 +132,7 @@ impl From<PlayerEvent> for WebEvent {
                 server_timestamp_ms,
             },
             PlayerEvent::ListenersUpdated { users } => WebEvent::ListenersUpdated { users },
+            PlayerEvent::HistoryUpdated { history } => WebEvent::HistoryUpdated { history },
             PlayerEvent::StateSnapshot { state } => WebEvent::StateSnapshot {
                 state,
                 active_downloads: Vec::new(),

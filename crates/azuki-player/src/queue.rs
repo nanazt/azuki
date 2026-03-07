@@ -14,31 +14,63 @@ impl Queue {
         Self::default()
     }
 
+    pub fn with_history(history: Vec<QueueEntry>) -> Self {
+        Self {
+            items: VecDeque::new(),
+            loop_mode: LoopMode::Off,
+            history,
+        }
+    }
+
     pub fn enqueue(&mut self, track: TrackInfo, added_by: String) {
         self.items.push_back(QueueEntry { track, added_by });
     }
 
     pub fn advance(&mut self) -> Option<QueueEntry> {
         match self.loop_mode {
-            LoopMode::Off => {
-                let entry = self.items.pop_front();
-                if let Some(ref e) = entry {
-                    self.history.push(e.clone());
-                }
-                entry
-            }
-            LoopMode::One => {
-                // Return a clone of the front item without removing it
-                self.items.front().cloned()
-            }
+            LoopMode::Off => self.items.pop_front(),
+            LoopMode::One => self.items.front().cloned(),
             LoopMode::All => {
                 let entry = self.items.pop_front();
                 if let Some(ref e) = entry {
                     self.items.push_back(e.clone());
                 }
-                // Return the item that was at front (now at back)
                 entry
             }
+        }
+    }
+
+    pub fn push_to_history(&mut self, entry: QueueEntry) {
+        self.push_history(entry);
+    }
+
+    pub fn go_previous(&mut self) -> Option<QueueEntry> {
+        self.history.pop()
+    }
+
+    pub fn push_front(&mut self, entry: QueueEntry) {
+        self.items.push_front(entry);
+    }
+
+    pub fn pop_back(&mut self) -> Option<QueueEntry> {
+        self.items.pop_back()
+    }
+
+    pub fn history(&self) -> &[QueueEntry] {
+        &self.history
+    }
+
+    fn push_history(&mut self, entry: QueueEntry) {
+        // Deduplicate consecutive entries
+        if let Some(last) = self.history.last()
+            && last.track.id == entry.track.id
+        {
+            return;
+        }
+        self.history.push(entry);
+        // Cap history at 50
+        if self.history.len() > 50 {
+            self.history.remove(0);
         }
     }
 

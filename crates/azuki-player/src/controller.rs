@@ -4,7 +4,7 @@ use tokio::sync::{broadcast, mpsc, oneshot};
 use tracing::{info, warn};
 
 use crate::events::{
-    LoopMode, PlayStateInfo, PlayerEvent, PlayerSnapshot, SeqEvent, TrackInfo, UserInfo,
+    LoopMode, PlayStateInfo, PlayerEvent, PlayerSnapshot, QueueEntry, SeqEvent, TrackInfo, UserInfo,
 };
 use crate::queue::Queue;
 
@@ -50,6 +50,9 @@ pub enum PlayerCommand {
     Enqueue {
         track: TrackInfo,
         user_id: String,
+        reply: oneshot::Sender<Result<(), PlayerError>>,
+    },
+    Previous {
         reply: oneshot::Sender<Result<(), PlayerError>>,
     },
     Remove {
@@ -118,6 +121,10 @@ impl Default for PlayerController {
 
 impl PlayerController {
     pub fn new() -> Self {
+        Self::with_history(Vec::new())
+    }
+
+    pub fn with_history(history: Vec<QueueEntry>) -> Self {
         let (cmd_tx, cmd_rx) = mpsc::channel(64);
         let (event_tx, _) = broadcast::channel(BROADCAST_CAPACITY);
 
@@ -125,7 +132,7 @@ impl PlayerController {
             cmd_rx,
             event_tx: event_tx.clone(),
             state: PlayState::Idle,
-            queue: Queue::new(),
+            queue: Queue::with_history(history),
             volume: 5,
             seq: 0,
             listeners: Vec::new(),
@@ -207,6 +214,12 @@ impl PlayerController {
         rx.await.unwrap_or(Err(PlayerError::NoTrack))
     }
 
+    pub async fn previous(&self) -> Result<(), PlayerError> {
+        let (tx, rx) = oneshot::channel();
+        self.send_cmd(PlayerCommand::Previous { reply: tx }).await;
+        rx.await.unwrap_or(Err(PlayerError::NoTrack))
+    }
+
     pub async fn enqueue(&self, track: TrackInfo, user_id: String) -> Result<(), PlayerError> {
         let (tx, rx) = oneshot::channel();
         self.send_cmd(PlayerCommand::Enqueue {
@@ -231,6 +244,7 @@ impl PlayerController {
         rx.await.unwrap_or_else(|_| PlayerSnapshot {
             state: PlayStateInfo::Idle,
             queue: Vec::new(),
+            history: Vec::new(),
             volume: 5,
             loop_mode: LoopMode::Off,
             listeners: Vec::new(),
@@ -298,6 +312,7 @@ impl PlayerActor {
         PlayerSnapshot {
             state: state_info,
             queue: self.queue.items(),
+            history: self.queue.history().to_vec(),
             volume: self.volume,
             loop_mode: self.queue.loop_mode(),
             listeners: self.listeners.clone(),
@@ -372,16 +387,22 @@ impl PlayerActor {
             },
 
             PlayerCommand::Skip { reply } => {
-                let current_track_id = match &self.state {
+                let current_entry = match &self.state {
                     PlayState::Playing { track, .. }
                     | PlayState::Paused { track, .. }
                     | PlayState::Loading { track }
-                    | PlayState::Error { track, .. } => Some(track.id.clone()),
+                    | PlayState::Error { track, .. } => Some(QueueEntry {
+                        track: track.clone(),
+                        added_by: String::new(),
+                    }),
                     PlayState::Idle => None,
                 };
 
-                if let Some(id) = current_track_id {
-                    self.broadcast(PlayerEvent::TrackEnded { track_id: id });
+                if let Some(ref entry) = current_entry {
+                    self.broadcast(PlayerEvent::TrackEnded {
+                        track_id: entry.track.id.clone(),
+                    });
+                    self.queue.push_to_history(entry.clone());
                 }
 
                 if let Some(next) = self.queue.advance() {
@@ -397,6 +418,9 @@ impl PlayerActor {
                         position_ms: 0,
                     });
                     self.broadcast(PlayerEvent::VolumeChanged { volume: self.volume });
+                    self.broadcast(PlayerEvent::HistoryUpdated {
+                        history: self.queue.history().to_vec(),
+                    });
                     let _ = reply.send(Ok(Some(track)));
                 } else {
                     self.state = PlayState::Idle;
@@ -475,6 +499,189 @@ impl PlayerActor {
                 let _ = reply.send(Ok(()));
             }
 
+            PlayerCommand::Previous { reply } => {
+                const RESTART_THRESHOLD_MS: u64 = 5000;
+
+                let (current_pos, has_track) = match &self.state {
+                    PlayState::Playing {
+                        track: _,
+                        started_at,
+                        position_ms,
+                    } => (*position_ms + started_at.elapsed().as_millis() as u64, true),
+                    PlayState::Paused {
+                        track: _,
+                        position_ms,
+                    } => (*position_ms, true),
+                    _ => (0, false),
+                };
+
+                if !has_track {
+                    let _ = reply.send(Err(PlayerError::InvalidState(
+                        "no track to go back from".to_string(),
+                    )));
+                    return;
+                }
+
+                // LoopMode::One or position > threshold → seek to 0
+                let should_restart = self.queue.loop_mode() == LoopMode::One
+                    || current_pos > RESTART_THRESHOLD_MS;
+
+                if should_restart {
+                    match &self.state {
+                        PlayState::Playing { track, .. } => {
+                            let track = track.clone();
+                            self.state = PlayState::Playing {
+                                track,
+                                started_at: Instant::now(),
+                                position_ms: 0,
+                            };
+                            self.broadcast(PlayerEvent::Seeked {
+                                position_ms: 0,
+                                paused: false,
+                            });
+                        }
+                        PlayState::Paused { track, .. } => {
+                            let track = track.clone();
+                            self.state = PlayState::Paused {
+                                track,
+                                position_ms: 0,
+                            };
+                            self.broadcast(PlayerEvent::Seeked {
+                                position_ms: 0,
+                                paused: true,
+                            });
+                        }
+                        _ => unreachable!(),
+                    }
+                    let _ = reply.send(Ok(()));
+                    return;
+                }
+
+                // LoopMode::All and position <= threshold → rotate queue backward
+                if self.queue.loop_mode() == LoopMode::All {
+                    // Pop the last item in queue (which was the previous track rotated to back)
+                    let prev = self.queue.pop_back();
+                    if let Some(prev_entry) = prev {
+                        let current_track = match &self.state {
+                            PlayState::Playing { track, .. }
+                            | PlayState::Paused { track, .. } => track.clone(),
+                            _ => unreachable!(),
+                        };
+                        let current_id = current_track.id.clone();
+                        // Push current back to front of queue
+                        self.queue
+                            .push_front(QueueEntry { track: current_track, added_by: String::new() });
+                        self.broadcast(PlayerEvent::TrackEnded { track_id: current_id });
+                        let track = prev_entry.track;
+                        self.volume = track.volume;
+                        self.state = PlayState::Playing {
+                            track: track.clone(),
+                            started_at: Instant::now(),
+                            position_ms: 0,
+                        };
+                        self.broadcast(PlayerEvent::TrackStarted {
+                            track,
+                            position_ms: 0,
+                        });
+                        self.broadcast(PlayerEvent::VolumeChanged { volume: self.volume });
+                        self.broadcast(PlayerEvent::QueueUpdated {
+                            queue: self.queue.items(),
+                        });
+                    } else {
+                        // Empty queue in All mode, just seek to 0
+                        match &self.state {
+                            PlayState::Playing { track, .. } => {
+                                let track = track.clone();
+                                self.state = PlayState::Playing {
+                                    track,
+                                    started_at: Instant::now(),
+                                    position_ms: 0,
+                                };
+                                self.broadcast(PlayerEvent::Seeked {
+                                    position_ms: 0,
+                                    paused: false,
+                                });
+                            }
+                            PlayState::Paused { track, .. } => {
+                                let track = track.clone();
+                                self.state = PlayState::Paused {
+                                    track,
+                                    position_ms: 0,
+                                };
+                                self.broadcast(PlayerEvent::Seeked {
+                                    position_ms: 0,
+                                    paused: true,
+                                });
+                            }
+                            _ => unreachable!(),
+                        }
+                    }
+                    let _ = reply.send(Ok(()));
+                    return;
+                }
+
+                // LoopMode::Off and position <= threshold → go to history
+                if let Some(prev_entry) = self.queue.go_previous() {
+                    let current_track = match &self.state {
+                        PlayState::Playing { track, .. }
+                        | PlayState::Paused { track, .. } => track.clone(),
+                        _ => unreachable!(),
+                    };
+                    let current_id = current_track.id.clone();
+                    // Push current track to front of queue
+                    self.queue
+                        .push_front(QueueEntry { track: current_track, added_by: String::new() });
+                    self.broadcast(PlayerEvent::TrackEnded { track_id: current_id });
+                    let track = prev_entry.track;
+                    self.volume = track.volume;
+                    self.state = PlayState::Playing {
+                        track: track.clone(),
+                        started_at: Instant::now(),
+                        position_ms: 0,
+                    };
+                    self.broadcast(PlayerEvent::TrackStarted {
+                        track,
+                        position_ms: 0,
+                    });
+                    self.broadcast(PlayerEvent::VolumeChanged { volume: self.volume });
+                    self.broadcast(PlayerEvent::QueueUpdated {
+                        queue: self.queue.items(),
+                    });
+                    self.broadcast(PlayerEvent::HistoryUpdated {
+                        history: self.queue.history().to_vec(),
+                    });
+                } else {
+                    // No history, seek to 0
+                    match &self.state {
+                        PlayState::Playing { track, .. } => {
+                            let track = track.clone();
+                            self.state = PlayState::Playing {
+                                track,
+                                started_at: Instant::now(),
+                                position_ms: 0,
+                            };
+                            self.broadcast(PlayerEvent::Seeked {
+                                position_ms: 0,
+                                paused: false,
+                            });
+                        }
+                        PlayState::Paused { track, .. } => {
+                            let track = track.clone();
+                            self.state = PlayState::Paused {
+                                track,
+                                position_ms: 0,
+                            };
+                            self.broadcast(PlayerEvent::Seeked {
+                                position_ms: 0,
+                                paused: true,
+                            });
+                        }
+                        _ => unreachable!(),
+                    }
+                }
+                let _ = reply.send(Ok(()));
+            }
+
             PlayerCommand::Remove { position, reply } => {
                 if self.queue.remove(position).is_some() {
                     self.broadcast(PlayerEvent::QueueUpdated {
@@ -507,20 +714,31 @@ impl PlayerActor {
                     return;
                 }
 
-                match reason {
-                    TrackEndReason::Finished | TrackEndReason::Replaced => {
-                        self.broadcast(PlayerEvent::TrackEnded { track_id });
-                    }
-                    TrackEndReason::Error(ref err) => {
-                        self.broadcast(PlayerEvent::TrackError {
-                            track_id: track_id.clone(),
-                            error: err.clone(),
-                        });
-                    }
+                if let TrackEndReason::Error(ref err) = reason {
+                    self.broadcast(PlayerEvent::TrackError {
+                        track_id: track_id.clone(),
+                        error: err.clone(),
+                    });
+                }
+
+                // Push current track to history before advancing
+                let current_track = match &self.state {
+                    PlayState::Playing { track, .. }
+                    | PlayState::Loading { track }
+                    | PlayState::Error { track, .. } => Some(track.clone()),
+                    _ => None,
+                };
+                if let Some(ref track) = current_track {
+                    self.queue.push_to_history(QueueEntry {
+                        track: track.clone(),
+                        added_by: String::new(),
+                    });
                 }
 
                 // Auto-advance
                 if let Some(next) = self.queue.advance() {
+                    // Broadcast TrackEnded only when advancing to the next track
+                    self.broadcast(PlayerEvent::TrackEnded { track_id });
                     let track = next.track;
                     self.volume = track.volume;
                     self.state = PlayState::Playing {
@@ -533,8 +751,12 @@ impl PlayerActor {
                         position_ms: 0,
                     });
                     self.broadcast(PlayerEvent::VolumeChanged { volume: self.volume });
+                    self.broadcast(PlayerEvent::HistoryUpdated {
+                        history: self.queue.history().to_vec(),
+                    });
                 } else {
-                    // Keep showing the finished track in paused state
+                    // No next track: keep showing the finished track in paused state
+                    // Do NOT broadcast TrackEnded — frontend keeps track info from Paused
                     let finished_track = match &self.state {
                         PlayState::Playing { track, .. }
                         | PlayState::Error { track, .. } => Some(track.clone()),
@@ -547,6 +769,9 @@ impl PlayerActor {
                             position_ms: pos,
                         };
                         self.broadcast(PlayerEvent::Paused { position_ms: pos });
+                        self.broadcast(PlayerEvent::HistoryUpdated {
+                            history: self.queue.history().to_vec(),
+                        });
                     } else {
                         self.state = PlayState::Idle;
                     }
