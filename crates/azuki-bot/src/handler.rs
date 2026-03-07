@@ -1,16 +1,18 @@
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use serenity::all::{
-    ChannelId, ChannelType, Context, CreateInteractionResponse,
-    CreateInteractionResponseMessage, EventHandler, GatewayIntents, GuildId, Interaction, Ready,
+    ChannelId, ChannelType, Context, CreateInteractionResponse, CreateInteractionResponseMessage,
+    EventHandler, GatewayIntents, GuildId, Interaction, Ready,
 };
 use serenity::async_trait;
 use songbird::SerenityInit;
+use songbird::events::{Event, EventContext, EventHandler as SongbirdEventHandler, TrackEvent};
 use tokio_util::sync::CancellationToken;
 use tracing::{error, info, warn};
 
-use crate::commands;
 use crate::BotState;
+use crate::commands;
 
 pub struct Handler {
     pub state: Arc<BotState>,
@@ -30,19 +32,7 @@ impl EventHandler for Handler {
         {
             let sb_guard = self.state.songbird.lock().await;
             if let Some(ref sb) = *sb_guard {
-                match azuki_db::config::get_config(&self.state.db, "default_voice_channel_id").await {
-                    Ok(Some(ch_id_str)) => {
-                        if let Ok(ch_id) = ch_id_str.parse::<u64>() {
-                            let channel_id = ChannelId::new(ch_id);
-                            info!("auto-joining voice channel {channel_id} on startup");
-                            if let Err(e) = crate::voice::join_channel(sb, self.guild_id, channel_id).await {
-                                error!("auto-join failed: {e}");
-                            }
-                        }
-                    }
-                    Ok(None) => info!("no default voice channel configured, skipping auto-join"),
-                    Err(e) => error!("failed to read default voice channel config: {e}"),
-                }
+                auto_join_default_channel(&self.state, sb).await;
             } else {
                 warn!("songbird not ready at startup, skipping auto-join");
             }
@@ -106,58 +96,7 @@ pub async fn start_bot(
     *state.songbird.lock().await = Some(songbird);
 
     // Spawn audio event subscriber
-    let event_state = state.clone();
-    tokio::spawn(async move {
-        let mut rx = event_state.player.subscribe();
-        let mut current_track_handle: Option<songbird::tracks::TrackHandle> = None;
-        loop {
-            match rx.recv().await {
-                Ok(seq_event) => {
-                    if let azuki_player::PlayerEvent::TrackStarted { ref track, .. } = seq_event.event
-                        && let Some(ref file_path) = track.file_path
-                    {
-                        let sb_guard = event_state.songbird.lock().await;
-                        if let Some(sb) = sb_guard.as_ref() {
-                            // Auto-join default voice channel if not in one
-                            if sb.get(event_state.guild_id).is_none() {
-                                match azuki_db::config::get_config(&event_state.db, "default_voice_channel_id").await {
-                                    Ok(Some(ch_id_str)) => {
-                                        if let Ok(ch_id) = ch_id_str.parse::<u64>() {
-                                            let channel_id = ChannelId::new(ch_id);
-                                            info!("auto-joining voice channel {channel_id}");
-                                            if let Err(e) = crate::voice::join_channel(sb, event_state.guild_id, channel_id).await {
-                                                error!("auto-join failed: {e}");
-                                            }
-                                        }
-                                    }
-                                    Ok(None) => {
-                                        warn!("no default voice channel configured, skipping auto-join");
-                                    }
-                                    Err(e) => {
-                                        error!("failed to read default voice channel config: {e}");
-                                    }
-                                }
-                            }
-                            let handle = crate::voice::play_file(sb, event_state.guild_id, file_path).await;
-                            if let Some(ref h) = handle {
-                                crate::voice::set_volume(h, track.volume);
-                            }
-                            current_track_handle = handle;
-                        }
-                    }
-
-                    if let azuki_player::PlayerEvent::VolumeChanged { volume } = seq_event.event
-                        && let Some(ref h) = current_track_handle {
-                            crate::voice::set_volume(h, volume);
-                        }
-                }
-                Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
-                    tracing::warn!("audio subscriber lagged by {n} events");
-                }
-                Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
-            }
-        }
-    });
+    tokio::spawn(run_audio_subscriber(state.clone()));
 
     // Run client with cancellation
     tokio::select! {
@@ -173,4 +112,156 @@ pub async fn start_bot(
     }
 
     Ok(())
+}
+
+async fn run_audio_subscriber(state: Arc<BotState>) {
+    let mut rx = state.player.subscribe();
+    let mut current_track_handle: Option<songbird::tracks::TrackHandle> = None;
+    // (file_path, track_id, volume) for re-play on seek
+    let mut current_file: Option<(String, String, u8)> = None;
+    let generation = Arc::new(AtomicU64::new(0));
+
+    loop {
+        match rx.recv().await {
+            Ok(seq_event) => match seq_event.event {
+                azuki_player::PlayerEvent::TrackStarted { ref track, .. } => {
+                    let Some(ref file_path) = track.file_path else {
+                        continue;
+                    };
+                    let sb_guard = state.songbird.lock().await;
+                    let Some(sb) = sb_guard.as_ref() else {
+                        continue;
+                    };
+
+                    if sb.get(state.guild_id).is_none() {
+                        auto_join_default_channel(&state, sb).await;
+                    }
+
+                    let notifier_gen = generation.fetch_add(1, Ordering::SeqCst) + 1;
+                    let handle =
+                        crate::voice::play_file(sb, state.guild_id, file_path).await;
+                    if let Some(ref h) = handle {
+                        crate::voice::set_volume(h, track.volume);
+                        let _ = h.add_event(
+                            Event::Track(TrackEvent::End),
+                            TrackEndNotifier {
+                                player: state.player.clone(),
+                                track_id: track.id.clone(),
+                                generation: notifier_gen,
+                                current_generation: generation.clone(),
+                            },
+                        );
+                    }
+                    current_file = Some((file_path.clone(), track.id.clone(), track.volume));
+                    current_track_handle = handle;
+                }
+                azuki_player::PlayerEvent::VolumeChanged { volume } => {
+                    if let Some(ref h) = current_track_handle {
+                        crate::voice::set_volume(h, volume);
+                    }
+                    if let Some((_, _, ref mut v)) = current_file {
+                        *v = volume;
+                    }
+                }
+                azuki_player::PlayerEvent::Paused { .. } => {
+                    if let Some(ref h) = current_track_handle {
+                        crate::voice::pause_track(h);
+                    }
+                }
+                azuki_player::PlayerEvent::Resumed { .. } => {
+                    if let Some(ref h) = current_track_handle {
+                        crate::voice::resume_track(h);
+                    }
+                }
+                azuki_player::PlayerEvent::Seeked { position_ms } => {
+                    // Re-play file to avoid songbird backward-seek failures
+                    if let Some((ref file_path, ref track_id, volume)) = current_file {
+                        let sb_guard = state.songbird.lock().await;
+                        if let Some(sb) = sb_guard.as_ref() {
+                            let notifier_gen = generation.fetch_add(1, Ordering::SeqCst) + 1;
+                            let handle =
+                                crate::voice::play_file(sb, state.guild_id, file_path).await;
+                            if let Some(ref h) = handle {
+                                crate::voice::set_volume(h, volume);
+                                if position_ms > 0 {
+                                    // Delay seek to let the driver initialize the track
+                                    let h2 = h.clone();
+                                    tokio::spawn(async move {
+                                        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+                                        crate::voice::seek_track(&h2, position_ms);
+                                    });
+                                }
+                                let _ = h.add_event(
+                                    Event::Track(TrackEvent::End),
+                                    TrackEndNotifier {
+                                        player: state.player.clone(),
+                                        track_id: track_id.clone(),
+                                        generation: notifier_gen,
+                                        current_generation: generation.clone(),
+                                    },
+                                );
+                            }
+                            current_track_handle = handle;
+                        }
+                    }
+                }
+                azuki_player::PlayerEvent::TrackEnded { .. } => {
+                    current_track_handle = None;
+                    current_file = None;
+                }
+                _ => {}
+            },
+            Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
+                warn!("audio subscriber lagged by {n} events");
+            }
+            Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+        }
+    }
+}
+
+struct TrackEndNotifier {
+    player: azuki_player::PlayerController,
+    track_id: String,
+    generation: u64,
+    current_generation: Arc<AtomicU64>,
+}
+
+#[async_trait]
+impl SongbirdEventHandler for TrackEndNotifier {
+    async fn act(&self, _ctx: &EventContext<'_>) -> Option<Event> {
+        // Only fire if this notifier's generation is still current
+        // (stale notifiers from seek/re-play are ignored)
+        if self.generation == self.current_generation.load(Ordering::SeqCst) {
+            self.player
+                .on_track_end(
+                    self.track_id.clone(),
+                    azuki_player::TrackEndReason::Finished,
+                )
+                .await;
+        }
+        None
+    }
+}
+
+async fn auto_join_default_channel(state: &BotState, sb: &Arc<songbird::Songbird>) {
+    let config = match azuki_db::config::get_config(&state.db, "default_voice_channel_id").await {
+        Ok(Some(val)) => val,
+        Ok(None) => {
+            warn!("no default voice channel configured, skipping auto-join");
+            return;
+        }
+        Err(e) => {
+            error!("failed to read default voice channel config: {e}");
+            return;
+        }
+    };
+
+    let Ok(ch_id) = config.parse::<u64>() else {
+        return;
+    };
+    let channel_id = ChannelId::new(ch_id);
+    info!("auto-joining voice channel {channel_id}");
+    if let Err(e) = crate::voice::join_channel(sb, state.guild_id, channel_id).await {
+        error!("auto-join failed: {e}");
+    }
 }

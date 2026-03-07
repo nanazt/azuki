@@ -252,11 +252,7 @@ async fn handle_pause(
     state: &Arc<BotState>,
 ) -> Result<(), crate::BotError> {
     state.player.pause().await.map_err(crate::BotError::Player)?;
-    if let Some(sb) = state.songbird.lock().await.as_ref()
-        && let Some(call) = sb.get(state.guild_id) {
-            let mut handler = call.lock().await;
-            handler.stop();
-        }
+    // Songbird pause is handled by run_audio_subscriber via Paused event
     respond(ctx, cmd, "⏸️ Paused").await
 }
 
