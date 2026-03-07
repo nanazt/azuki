@@ -11,6 +11,7 @@ import {
   Repeat1,
   Heart,
   Music,
+  ChevronUp,
 } from "lucide-react";
 import { usePlayer } from "../../../hooks/usePlayer";
 import { usePlayerStore } from "../../../stores/playerStore";
@@ -22,6 +23,8 @@ export function PlayerBar() {
   const { playState, volume, loopMode, togglePlay, skip, previous, seek, setVolume, cycleLoop } =
     usePlayer();
   const favoritedTrackIds = usePlayerStore((s) => s.favoritedTrackIds);
+  const boostMode = usePlayerStore((s) => s.boostMode);
+  const setBoostMode = usePlayerStore((s) => s.setBoostMode);
   const [elapsed, setElapsed] = useState(0);
   const [isSeeking, setIsSeeking] = useState(false);
   const [seekValue, setSeekValue] = useState(0);
@@ -119,6 +122,9 @@ export function PlayerBar() {
 
   const displayElapsed = isSeeking ? seekValue : elapsed;
   const sliderMax = duration > 0 ? duration : 1;
+
+  const effectiveBoost = boostMode || volume > 10;
+  const volumeSliderMax = effectiveBoost ? 100 : 10;
 
   if (!track) {
     return (
@@ -230,13 +236,35 @@ export function PlayerBar() {
               <Slider
                 value={volume}
                 min={0}
-                max={100}
+                max={volumeSliderMax}
                 onChange={handleVolumeChange}
                 className="w-24"
                 aria-label="Volume"
               />
-              <span className="text-[9px] font-bold text-[var(--color-text-tertiary)] uppercase tracking-wider select-none" title="Discord bot volume">BOT</span>
-              <span className={clsx("text-[10px] transition-opacity duration-300", volumeSaved ? "opacity-100 text-[var(--color-success)]" : "opacity-0")}>Saved</span>
+              <span className={clsx(
+                "text-xs tabular-nums w-7 text-right select-none transition-colors duration-300",
+                volumeSaved ? "text-[var(--color-success)]" : "text-[var(--color-text-tertiary)]"
+              )}>
+                {volume}%
+              </span>
+              <button
+                onClick={() => {
+                  if (volume <= 10) setBoostMode(!boostMode);
+                }}
+                disabled={volume > 10}
+                className={clsx(
+                  "p-1 rounded transition-colors",
+                  volume > 10
+                    ? "text-[var(--color-accent)] cursor-default"
+                    : effectiveBoost
+                      ? "text-[var(--color-accent)] hover:bg-[var(--color-bg-hover)] cursor-pointer"
+                      : "text-[var(--color-text-tertiary)] hover:text-[var(--color-text)] hover:bg-[var(--color-bg-hover)] cursor-pointer"
+                )}
+                aria-label={effectiveBoost ? "Disable volume boost" : "Enable volume boost"}
+                title={effectiveBoost ? "Volume boost on (0-100%)" : "Volume boost off (0-10%)"}
+              >
+                <ChevronUp size={14} />
+              </button>
             </div>
           </div>
         </div>

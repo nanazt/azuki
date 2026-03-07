@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useRef } from "react";
 import { usePlayerStore } from "../stores/playerStore";
 import { api } from "../lib/api";
 
@@ -6,6 +6,7 @@ export function usePlayer() {
   const playState = usePlayerStore((s) => s.playState);
   const volume = usePlayerStore((s) => s.volume);
   const loopMode = usePlayerStore((s) => s.loopMode);
+  const volumeDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const pause = useCallback(() => {
     const s = usePlayerStore.getState();
@@ -51,7 +52,10 @@ export function usePlayer() {
 
   const setVolume = useCallback((v: number) => {
     usePlayerStore.getState().setVolume(v);
-    api.setVolume(v);
+    if (volumeDebounceRef.current) clearTimeout(volumeDebounceRef.current);
+    volumeDebounceRef.current = setTimeout(() => {
+      api.setVolume(v);
+    }, 150);
   }, []);
 
   const setLoop = useCallback((mode: "off" | "one" | "all") => {

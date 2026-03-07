@@ -41,15 +41,15 @@ export function useKeyboardShortcuts() {
           break;
         case "ArrowUp":
           e.preventDefault();
-          setVolume(Math.min(100, volume + 5));
+          setVolume(Math.min(100, volume + 1));
           break;
         case "ArrowDown":
           e.preventDefault();
-          setVolume(Math.max(0, volume - 5));
+          setVolume(Math.max(0, volume - 1));
           break;
         case "m":
         case "M":
-          setVolume(volume > 0 ? 0 : 50);
+          setVolume(volume > 0 ? 0 : 5);
           break;
       }
     };

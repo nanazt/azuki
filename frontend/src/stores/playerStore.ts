@@ -18,6 +18,7 @@ interface PlayerState {
   lastSeq: number;
   connected: boolean;
   favoritedTrackIds: Set<string>;
+  boostMode: boolean;
 
   currentTrack: () => TrackInfo | null;
   isPlaying: () => boolean;
@@ -31,6 +32,7 @@ interface PlayerState {
   setListeners: (l: UserInfo[]) => void;
   setLastSeq: (s: number) => void;
   setConnected: (c: boolean) => void;
+  setBoostMode: (v: boolean) => void;
   setFavoritedTrackIds: (ids: Set<string>) => void;
   toggleFavoritedTrackId: (id: string, favorited: boolean) => void;
 }
@@ -45,6 +47,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   lastSeq: 0,
   connected: false,
   favoritedTrackIds: new Set(),
+  boostMode: false,
 
   currentTrack: () => {
     const s = get().playState;
@@ -74,6 +77,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   setListeners: (l) => set({ listeners: l }),
   setLastSeq: (s) => set({ lastSeq: s }),
   setConnected: (c) => set({ connected: c }),
+  setBoostMode: (v) => set({ boostMode: v }),
   setFavoritedTrackIds: (ids) => set({ favoritedTrackIds: ids }),
   toggleFavoritedTrackId: (id, favorited) =>
     set((state) => {
