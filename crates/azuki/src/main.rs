@@ -176,20 +176,22 @@ async fn run_normal(config: Config, pool: SqlitePool) -> anyhow::Result<()> {
     };
 
     let initial_history: Vec<azuki_player::QueueEntry> =
-        azuki_db::queries::history::get_history_for_restore(&pool, 50)
-            .await
-            .unwrap_or_default()
-            .into_iter()
-            .rev() // DB returns newest-first, history Vec is oldest-first
-            .map(restore_entry_to_queue)
-            .collect();
+        match azuki_db::queries::history::get_history_for_restore(&pool, 50).await {
+            Ok(entries) => entries.into_iter().rev().map(restore_entry_to_queue).collect(),
+            Err(e) => {
+                tracing::error!("failed to restore history: {e}");
+                Vec::new()
+            }
+        };
 
-    let initial_queue: Vec<azuki_player::QueueEntry> = azuki_db::queries::queue::load_queue(&pool)
-        .await
-        .unwrap_or_default()
-        .into_iter()
-        .map(restore_entry_to_queue)
-        .collect();
+    let initial_queue: Vec<azuki_player::QueueEntry> =
+        match azuki_db::queries::queue::load_queue(&pool).await {
+            Ok(entries) => entries.into_iter().map(restore_entry_to_queue).collect(),
+            Err(e) => {
+                tracing::error!("failed to restore queue: {e}");
+                Vec::new()
+            }
+        };
 
     let initial_loop_mode = match azuki_db::queries::queue::load_loop_mode(&pool)
         .await
@@ -202,10 +204,13 @@ async fn run_normal(config: Config, pool: SqlitePool) -> anyhow::Result<()> {
     };
 
     let initial_now_playing: Option<azuki_player::QueueEntry> =
-        azuki_db::queries::queue::load_now_playing(&pool)
-            .await
-            .unwrap_or(None)
-            .map(&restore_entry_to_queue);
+        match azuki_db::queries::queue::load_now_playing(&pool).await {
+            Ok(entry) => entry.map(&restore_entry_to_queue),
+            Err(e) => {
+                tracing::error!("failed to restore now_playing: {e}");
+                None
+            }
+        };
 
     if !initial_queue.is_empty() || initial_now_playing.is_some() {
         info!(

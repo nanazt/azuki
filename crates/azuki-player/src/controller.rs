@@ -446,6 +446,9 @@ impl PlayerActor {
                         added_by,
                     });
                     self.broadcast(PlayerEvent::VolumeChanged { volume: self.volume });
+                    self.broadcast(PlayerEvent::QueueUpdated {
+                        queue: self.queue.items(),
+                    });
                     self.broadcast(PlayerEvent::HistoryUpdated {
                         history: self.queue.history().to_vec(),
                     });
@@ -803,6 +806,9 @@ impl PlayerActor {
                         added_by,
                     });
                     self.broadcast(PlayerEvent::VolumeChanged { volume: self.volume });
+                    self.broadcast(PlayerEvent::QueueUpdated {
+                        queue: self.queue.items(),
+                    });
                     self.broadcast(PlayerEvent::HistoryUpdated {
                         history: self.queue.history().to_vec(),
                     });

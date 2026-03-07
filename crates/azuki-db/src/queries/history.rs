@@ -148,8 +148,8 @@ pub async fn get_history_for_restore(
                 t.youtube_id,
                 t.volume,
                 h.user_id,
-                u.username AS \"username?\",
-                u.avatar_url AS \"avatar_url?\"
+                u.username,
+                u.avatar_url
          FROM play_history h
          JOIN tracks t ON t.id = h.track_id
          LEFT JOIN users u ON u.id = h.user_id

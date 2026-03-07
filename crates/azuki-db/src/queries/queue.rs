@@ -38,8 +38,8 @@ pub async fn load_queue(pool: &SqlitePool) -> DbResult<Vec<RestoreEntry>> {
                 t.youtube_id,
                 t.volume,
                 q.added_by AS user_id,
-                u.username AS \"username?\",
-                u.avatar_url AS \"avatar_url?\"
+                u.username,
+                u.avatar_url
          FROM queue_items q
          JOIN tracks t ON t.id = q.track_id
          LEFT JOIN users u ON u.id = q.added_by
@@ -124,8 +124,8 @@ pub async fn load_now_playing(pool: &SqlitePool) -> DbResult<Option<RestoreEntry
                 t.youtube_id,
                 t.volume,
                 ?1 AS user_id,
-                u.username AS \"username?\",
-                u.avatar_url AS \"avatar_url?\"
+                u.username,
+                u.avatar_url
          FROM tracks t
          LEFT JOIN users u ON u.id = ?1
          WHERE t.id = ?2",
