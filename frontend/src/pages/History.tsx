@@ -17,7 +17,8 @@ interface HistoryEntry {
 }
 
 function formatDate(iso: string): string {
-  const date = new Date(iso);
+  // SQLite CURRENT_TIMESTAMP omits timezone — append Z to interpret as UTC
+  const date = new Date(iso.endsWith("Z") || iso.includes("+") ? iso : iso + "Z");
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
   const diffMins = Math.floor(diffMs / 60000);
