@@ -1,9 +1,12 @@
 import { useEffect } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import { usePlayerStore } from "../stores/playerStore";
 import { usePlayer } from "./usePlayer";
 
 export function useKeyboardShortcuts() {
   const { togglePlay, seek, setVolume, volume } = usePlayer();
+  const navigate = useNavigate();
+  const location = useLocation();
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -15,6 +18,22 @@ export function useKeyboardShortcuts() {
         active instanceof HTMLTextAreaElement ||
         active instanceof HTMLSelectElement ||
         (active as HTMLElement)?.isContentEditable;
+
+      // "/" works even when not focused on input
+      if (e.key === "/") {
+        if (isInput) return;
+        e.preventDefault();
+        if (location.pathname === "/search") {
+          // Already on search page — focus the search input
+          const input = document.querySelector<HTMLInputElement>(
+            'input[placeholder="Search for music…"]',
+          );
+          input?.focus();
+        } else {
+          navigate("/search");
+        }
+        return;
+      }
 
       if (isInput) return;
 
@@ -58,5 +77,5 @@ export function useKeyboardShortcuts() {
 
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [togglePlay, seek, setVolume, volume]);
+  }, [togglePlay, seek, setVolume, volume, navigate, location.pathname]);
 }
