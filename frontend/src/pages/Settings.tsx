@@ -15,7 +15,10 @@ import {
   Mic,
   Hash,
   Globe,
+  HelpCircle,
+  ChevronRight,
 } from "lucide-react";
+import { Link } from "react-router-dom";
 import clsx from "clsx";
 
 function SegmentedControl({
@@ -271,6 +274,15 @@ export function Settings() {
             )}
             Log out
           </button>
+          {/* Mobile help link */}
+          <Link
+            to="/help"
+            className="md:hidden flex items-center gap-3 min-h-[44px] px-3 py-2 rounded-lg text-sm text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover)] transition-colors"
+          >
+            <HelpCircle size={16} />
+            <span className="flex-1">Help</span>
+            <ChevronRight size={16} className="text-[var(--color-text-tertiary)]" />
+          </Link>
         </div>
       </section>
 

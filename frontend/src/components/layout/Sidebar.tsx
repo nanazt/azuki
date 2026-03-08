@@ -2,6 +2,7 @@ import { NavLink } from "react-router-dom";
 import {
   BarChart3,
   Clock,
+  HelpCircle,
   Home,
   ListMusic,
   Search,
@@ -70,8 +71,9 @@ export function Sidebar() {
         </div>
       </nav>
 
-      {/* Settings */}
+      {/* Help & Settings */}
       <div className="px-2 py-2 border-t border-[var(--color-border)] flex-shrink-0">
+        <NavItem to="/help" icon={<HelpCircle size={16} />} label="Help" />
         <NavItem to="/settings" icon={<Settings size={16} />} label="Settings" />
       </div>
 

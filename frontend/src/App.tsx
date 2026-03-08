@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router-dom";
 import { ToastProvider, ToastContainer } from "./components/ui/Toast";
 import { useAuthStore } from "./stores/authStore";
@@ -16,9 +16,11 @@ import { Playlists } from "./pages/Playlists";
 import { History } from "./pages/History";
 import { Stats } from "./pages/Stats";
 import { Settings } from "./pages/Settings";
+import { Help } from "./pages/Help";
 import { SearchPage } from "./components/features/search/SearchPage";
 import { QueuePanel } from "./components/features/queue";
 import { UploadsPage } from "./components/features/uploads/UploadsPage";
+import { WelcomeModal } from "./components/features/onboarding/WelcomeModal";
 
 function ProtectedRoute() {
   const { authenticated, checking, setAuthenticated, setChecking, setIsAdmin } = useAuthStore();
@@ -58,6 +60,9 @@ function AuthenticatedLayout() {
   useKeyboardShortcuts();
   usePasteDetection();
   const { isDragging, droppedFile, clearDroppedFile, triggerFileInput } = useFileDrop();
+  const [showWelcome, setShowWelcome] = useState(
+    () => !localStorage.getItem("azuki-welcome-dismissed"),
+  );
 
   return (
     <>
@@ -68,6 +73,10 @@ function AuthenticatedLayout() {
       {droppedFile && (
         <UploadMetadataModal file={droppedFile} onClose={clearDroppedFile} />
       )}
+      <WelcomeModal
+        open={showWelcome}
+        onClose={() => setShowWelcome(false)}
+      />
     </>
   );
 }
@@ -87,6 +96,7 @@ export default function App() {
             <Route path="/uploads" element={<UploadsPage />} />
             <Route path="/stats" element={<Stats />} />
             <Route path="/settings" element={<Settings />} />
+            <Route path="/help" element={<Help />} />
             <Route path="/queue" element={<QueuePanel />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
