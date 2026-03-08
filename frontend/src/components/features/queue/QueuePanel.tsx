@@ -224,30 +224,82 @@ function DownloadItem({ download }: { download: DownloadEntry }) {
   const speed = download.speed_bps
     ? `${(download.speed_bps / 1024 / 1024).toFixed(1)} MB/s`
     : null;
+  const hasMetadata = !!download.title;
 
   return (
-    <div className="flex items-center gap-3 py-2 px-1 rounded-lg">
-      <div className="w-9 h-9 rounded bg-[var(--color-bg-tertiary)] flex items-center justify-center flex-shrink-0">
-        <Loader2
-          size={14}
-          className="text-[var(--color-accent)] animate-spin"
-        />
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className="text-sm text-[var(--color-text)] truncate font-medium">
-          {download.query}
-        </div>
-        <div className="flex items-center gap-2 mt-1">
-          <div className="flex-1 h-1.5 rounded-full bg-[var(--color-bg-tertiary)] overflow-hidden">
-            <div
-              className="h-full rounded-full bg-[var(--color-accent)] transition-all duration-300"
-              style={{ width: `${percent}%` }}
-            />
+    <div className="relative border-l-2 border-[var(--color-accent)] rounded-lg overflow-hidden">
+      <div className="flex items-center gap-3 px-3 py-2">
+        {/* Thumbnail / Skeleton */}
+        {hasMetadata ? (
+          <div className="relative w-9 h-9 flex-shrink-0 rounded overflow-hidden">
+            {download.thumbnail_url ? (
+              <img
+                src={download.thumbnail_url}
+                alt=""
+                className="w-full h-full object-cover brightness-50"
+              />
+            ) : (
+              <div className="w-full h-full bg-[var(--color-bg-tertiary)]" />
+            )}
+            <div className="absolute inset-0 flex items-center justify-center">
+              <Loader2 size={14} className="text-[var(--color-accent)] animate-spin" />
+            </div>
           </div>
+        ) : (
+          <div className="w-9 h-9 flex-shrink-0 rounded bg-[var(--color-bg-tertiary)] animate-pulse" />
+        )}
+
+        {/* Text content */}
+        <div className="min-w-0 flex-1">
+          {hasMetadata ? (
+            <>
+              <div className="text-sm font-medium text-[var(--color-text)] truncate">
+                {download.title}
+              </div>
+              <div className="flex items-center gap-1 text-xs text-[var(--color-text-secondary)] min-w-0">
+                {download.artist && (
+                  <span className="truncate">{download.artist}</span>
+                )}
+                {download.user_info?.username && (
+                  <>
+                    {download.artist && <span className="text-[var(--color-text-tertiary)] flex-shrink-0">·</span>}
+                    <Avatar src={download.user_info.avatar_url ?? null} username={download.user_info.username} size="xs" className="flex-shrink-0" />
+                    <span className="truncate">{download.user_info.username}</span>
+                  </>
+                )}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="h-4 w-[70%] rounded bg-[var(--color-bg-tertiary)] animate-pulse" />
+              <div className="flex items-center gap-1 mt-1">
+                <div className="h-3 w-[40%] rounded bg-[var(--color-bg-tertiary)] animate-pulse" />
+                {download.user_info?.username && (
+                  <>
+                    <span className="text-[var(--color-text-tertiary)] flex-shrink-0">·</span>
+                    <Avatar src={download.user_info.avatar_url ?? null} username={download.user_info.username} size="xs" className="flex-shrink-0" />
+                    <span className="text-xs text-[var(--color-text-secondary)] truncate">{download.user_info.username}</span>
+                  </>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Speed/percent */}
+        {hasMetadata && percent > 0 && (
           <span className="text-[10px] text-[var(--color-text-tertiary)] tabular-nums flex-shrink-0">
             {percent}%{speed && ` · ${speed}`}
           </span>
-        </div>
+        )}
+      </div>
+
+      {/* Bottom progress bar */}
+      <div className="h-0.5 bg-[var(--color-bg-tertiary)]">
+        <div
+          className="h-full bg-[var(--color-accent)] transition-all duration-300"
+          style={{ width: percent > 0 ? `${percent}%` : '0%' }}
+        />
       </div>
     </div>
   );

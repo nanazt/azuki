@@ -29,6 +29,12 @@ export interface DownloadStatus {
   query: string;
   percent: number;
   speed_bps: number | null;
+  user_info?: UserInfo | null;
+  title?: string | null;
+  artist?: string | null;
+  thumbnail_url?: string | null;
+  duration_ms?: number | null;
+  source_url?: string | null;
 }
 
 export interface PlayerSnapshot {
@@ -69,7 +75,8 @@ export type PlayerEvent =
     }
   | { type: "listeners_updated"; users: UserInfo[] }
   | { type: "state_snapshot"; state: PlayerSnapshot }
-  | { type: "download_started"; download_id: string; query: string }
+  | { type: "download_started"; download_id: string; query: string; user_info: UserInfo }
+  | { type: "download_metadata_resolved"; download_id: string; title: string; artist: string | null; thumbnail_url: string | null; duration_ms: number; source_url: string }
   | { type: "download_progress"; download_id: string; percent: number; speed_bps: number | null }
   | { type: "download_complete"; download_id: string; track: TrackInfo }
   | { type: "download_failed"; download_id: string; error: string }

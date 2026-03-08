@@ -50,11 +50,20 @@ export function useWebSocket() {
     reconnectTimer.current = setTimeout(connect, delay);
   }, [connect]);
 
-  const restoreActiveDownloads = (downloads?: { download_id: string; query: string; percent: number; speed_bps: number | null }[]) => {
+  const restoreActiveDownloads = (downloads?: import("../lib/types").DownloadStatus[]) => {
     if (!downloads?.length) return;
     const dlStore = useDownloadStore.getState();
     for (const dl of downloads) {
-      dlStore.startDownload(dl.download_id, dl.query);
+      dlStore.startDownload(dl.download_id, dl.query, dl.user_info ?? undefined);
+      if (dl.title) {
+        dlStore.resolveMetadata(dl.download_id, {
+          title: dl.title,
+          artist: dl.artist ?? null,
+          thumbnail_url: dl.thumbnail_url ?? null,
+          duration_ms: dl.duration_ms ?? 0,
+          source_url: dl.source_url ?? "",
+        });
+      }
       if (dl.percent > 0) dlStore.updateProgress(dl.download_id, "downloading", dl.percent, dl.speed_bps);
     }
   };
@@ -155,7 +164,16 @@ export function useWebSocket() {
       case "history_updated":
         break;
       case "download_started":
-        useDownloadStore.getState().startDownload(ev.download_id, ev.query);
+        useDownloadStore.getState().startDownload(ev.download_id, ev.query, ev.user_info);
+        break;
+      case "download_metadata_resolved":
+        useDownloadStore.getState().resolveMetadata(ev.download_id, {
+          title: ev.title,
+          artist: ev.artist,
+          thumbnail_url: ev.thumbnail_url,
+          duration_ms: ev.duration_ms,
+          source_url: ev.source_url,
+        });
         break;
       case "download_progress":
         useDownloadStore.getState().updateProgress(ev.download_id, ev.stage ?? "downloading", ev.percent, ev.speed_bps);

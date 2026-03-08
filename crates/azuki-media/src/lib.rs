@@ -11,7 +11,7 @@ pub use store::MediaStore;
 pub use types::TrackMeta;
 pub use ytdlp::YtDlp;
 pub use ytdlp_updater::ReleaseInfo;
-pub use youtube::YouTubeClient;
+pub use youtube::{extract_video_id, YouTubeClient};
 
 #[derive(Debug, thiserror::Error)]
 pub enum MediaError {

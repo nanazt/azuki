@@ -603,6 +603,12 @@ async fn download_worker(
                     query: req.query_or_url.clone(),
                     percent: 0,
                     speed_bps: None,
+                    user_info: Some(req.user_info.clone()),
+                    title: None,
+                    artist: None,
+                    thumbnail_url: None,
+                    duration_ms: None,
+                    source_url: None,
                 },
             );
 
@@ -612,6 +618,7 @@ async fn download_worker(
                 azuki_web::events::WebEvent::DownloadStarted {
                     download_id: download_id.clone(),
                     query: req.query_or_url.clone(),
+                    user_info: req.user_info.clone(),
                 },
             );
 
@@ -619,13 +626,61 @@ async fn download_worker(
             let is_url =
                 req.query_or_url.starts_with("http://") || req.query_or_url.starts_with("https://");
             let url = if is_url {
+                // For direct URLs, try to resolve metadata via YouTube API (fast)
+                let url_meta_pair = azuki_media::extract_video_id(&req.query_or_url)
+                    .zip(youtube.read().unwrap().clone());
+                if let Some((vid, client)) = url_meta_pair
+                    && let Ok(meta) = client.get_video(&vid).await
+                {
+                    broadcast_web_event(
+                        &web_tx,
+                        &seq,
+                        azuki_web::events::WebEvent::DownloadMetadataResolved {
+                            download_id: download_id.clone(),
+                            title: meta.title.clone(),
+                            artist: meta.artist.clone(),
+                            thumbnail_url: meta.thumbnail_url.clone(),
+                            duration_ms: meta.duration_ms,
+                            source_url: meta.source_url.clone(),
+                        },
+                    );
+                    if let Some(mut entry) = active.get_mut(&download_id) {
+                        entry.title = Some(meta.title);
+                        entry.artist = meta.artist;
+                        entry.thumbnail_url = meta.thumbnail_url;
+                        entry.duration_ms = Some(meta.duration_ms);
+                        entry.source_url = Some(meta.source_url);
+                    }
+                }
                 req.query_or_url.clone()
             } else {
                 let yt = youtube.read().unwrap().clone();
                 match yt {
                     Some(client) => match client.search(&req.query_or_url, 1).await {
                         Ok(results) => match results.into_iter().next() {
-                            Some(meta) => meta.source_url,
+                            Some(meta) => {
+                                // Broadcast resolved metadata from search result
+                                broadcast_web_event(
+                                    &web_tx,
+                                    &seq,
+                                    azuki_web::events::WebEvent::DownloadMetadataResolved {
+                                        download_id: download_id.clone(),
+                                        title: meta.title.clone(),
+                                        artist: meta.artist.clone(),
+                                        thumbnail_url: meta.thumbnail_url.clone(),
+                                        duration_ms: meta.duration_ms,
+                                        source_url: meta.source_url.clone(),
+                                    },
+                                );
+                                if let Some(mut entry) = active.get_mut(&download_id) {
+                                    entry.title = Some(meta.title.clone());
+                                    entry.artist = meta.artist.clone();
+                                    entry.thumbnail_url = meta.thumbnail_url.clone();
+                                    entry.duration_ms = Some(meta.duration_ms);
+                                    entry.source_url = Some(meta.source_url.clone());
+                                }
+                                meta.source_url
+                            }
                             None => {
                                 finish_download_failed(
                                     &web_tx,

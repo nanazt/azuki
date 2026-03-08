@@ -123,6 +123,71 @@ impl YouTubeClient {
 
         Ok(results)
     }
+
+    /// Fetch metadata for a single video by ID using the YouTube Data API.
+    pub async fn get_video(&self, video_id: &str) -> Result<TrackMeta, MediaError> {
+        let snippet_url = Url::parse_with_params(
+            "https://www.googleapis.com/youtube/v3/videos",
+            &[
+                ("part", "snippet,contentDetails"),
+                ("id", video_id),
+                ("key", &self.api_key),
+            ],
+        )
+        .map_err(|e| MediaError::YouTube(format!("failed to build video URL: {e}")))?;
+
+        let resp: VideoSnippetResponse = self
+            .client
+            .get(snippet_url)
+            .send()
+            .await
+            .map_err(|e| MediaError::YouTube(sanitize_error(e)))?
+            .error_for_status()
+            .map_err(|e| MediaError::YouTube(sanitize_error(e)))?
+            .json()
+            .await
+            .map_err(|e| MediaError::YouTube(sanitize_error(e)))?;
+
+        let item = resp
+            .items
+            .into_iter()
+            .next()
+            .ok_or_else(|| MediaError::YouTube("video not found".to_string()))?;
+
+        let duration_ms = parse_iso8601_duration(&item.content_details.duration);
+        let thumbnail_url = item.snippet.thumbnails.default.map(|t| t.url);
+
+        Ok(TrackMeta {
+            youtube_id: Some(video_id.to_string()),
+            title: item.snippet.title,
+            artist: Some(item.snippet.channel_title),
+            duration_ms,
+            thumbnail_url,
+            source_url: format!("https://www.youtube.com/watch?v={video_id}"),
+        })
+    }
+}
+
+/// Extract a YouTube video ID from a URL, if present.
+pub fn extract_video_id(url: &str) -> Option<String> {
+    let parsed = Url::parse(url).ok()?;
+    match parsed.host_str()? {
+        "www.youtube.com" | "youtube.com" | "m.youtube.com" | "music.youtube.com" => {
+            parsed
+                .query_pairs()
+                .find(|(k, _)| k == "v")
+                .map(|(_, v)| v.to_string())
+        }
+        "youtu.be" => {
+            let path = parsed.path().strip_prefix('/')?;
+            if path.is_empty() {
+                None
+            } else {
+                Some(path.split('/').next()?.to_string())
+            }
+        }
+        _ => None,
+    }
 }
 
 fn sanitize_error(e: reqwest::Error) -> String {
@@ -228,4 +293,16 @@ struct VideoItem {
 #[derive(Deserialize)]
 struct ContentDetails {
     duration: String,
+}
+
+#[derive(Deserialize)]
+struct VideoSnippetResponse {
+    items: Vec<VideoSnippetItem>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct VideoSnippetItem {
+    snippet: Snippet,
+    content_details: ContentDetails,
 }

@@ -58,6 +58,15 @@ pub enum WebEvent {
     DownloadStarted {
         download_id: String,
         query: String,
+        user_info: azuki_player::UserInfo,
+    },
+    DownloadMetadataResolved {
+        download_id: String,
+        title: String,
+        artist: Option<String>,
+        thumbnail_url: Option<String>,
+        duration_ms: u64,
+        source_url: String,
     },
     DownloadProgress {
         download_id: String,
@@ -102,6 +111,12 @@ pub struct DownloadStatus {
     pub query: String,
     pub percent: u8,
     pub speed_bps: Option<u64>,
+    pub user_info: Option<azuki_player::UserInfo>,
+    pub title: Option<String>,
+    pub artist: Option<String>,
+    pub thumbnail_url: Option<String>,
+    pub duration_ms: Option<u64>,
+    pub source_url: Option<String>,
 }
 
 impl From<PlayerEvent> for WebEvent {
