@@ -337,6 +337,47 @@ pub async fn update_track(
     Ok(Json(serde_json::json!(updated)))
 }
 
+pub async fn delete_track(
+    jar: CookieJar,
+    State(state): State<WebState>,
+    Path(track_id): Path<String>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let user_id = extract_user_id(&jar, &state).await?;
+
+    let user = azuki_db::queries::users::get_user(&state.db, &user_id).await?;
+    if !user.is_admin {
+        return Err(ApiError::Forbidden);
+    }
+
+    let track = azuki_db::queries::tracks::get_track(&state.db, &track_id).await?;
+    if track.source_type != "upload" {
+        return Err(ApiError::BadRequest("only upload tracks can be deleted".into()));
+    }
+
+    // If currently playing this track, skip to next
+    let snapshot = state.player.get_state().await;
+    let current_track_id = match &snapshot.state {
+        azuki_player::PlayStateInfo::Playing { track, .. }
+        | azuki_player::PlayStateInfo::Paused { track, .. }
+        | azuki_player::PlayStateInfo::Loading { track } => Some(track.id.clone()),
+        _ => None,
+    };
+    if current_track_id.as_deref() == Some(&track_id) {
+        let _ = state.player.skip().await;
+    }
+
+    let file_path =
+        azuki_db::queries::tracks::delete_track_cascade(&state.db, &track_id).await?;
+
+    if let Some(ref fp) = file_path
+        && let Ok(resolved) = state.media_store.resolve_path(fp)
+    {
+        let _ = tokio::fs::remove_file(resolved).await;
+    }
+
+    Ok(Json(serde_json::json!({ "deleted": true })))
+}
+
 // --- oEmbed proxy ---
 
 const OEMBED_ALLOWED_HOSTS: &[&str] = &[
@@ -430,7 +471,7 @@ pub fn content_routes() -> axum::Router<WebState> {
         .route("/api/uploads", axum::routing::get(list_uploads))
         .route(
             "/api/tracks/{track_id}",
-            axum::routing::put(update_track),
+            axum::routing::put(update_track).delete(delete_track),
         )
         .route("/api/oembed", axum::routing::get(oembed_proxy))
 }

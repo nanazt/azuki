@@ -110,7 +110,8 @@ export const api = {
   updateYtdlp: () => post<{ version: string | null; success: boolean }>("/api/admin/ytdlp/update"),
 
   // Me
-  getMe: () => get<{ id: string; username: string; avatar_url: string | null }>("/api/me"),
+  getMe: () => get<{ id: string; username: string; avatar_url: string | null; is_admin: boolean }>("/api/me"),
+  deleteTrack: (trackId: string) => del<void>(`/api/tracks/${trackId}`),
 
   // Preferences
   getPreferences: () => get<{ theme: string }>("/api/preferences"),

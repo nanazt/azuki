@@ -8,6 +8,7 @@ pub struct User {
     pub avatar_url: Option<String>,
     pub token_version: i64,
     pub created_at: String,
+    pub is_admin: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]

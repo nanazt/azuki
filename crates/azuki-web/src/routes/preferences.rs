@@ -56,6 +56,7 @@ pub struct MeResponse {
     pub id: String,
     pub username: String,
     pub avatar_url: Option<String>,
+    pub is_admin: bool,
 }
 
 async fn get_me(
@@ -69,6 +70,7 @@ async fn get_me(
         id: user.id,
         username: user.username,
         avatar_url: user.avatar_url,
+        is_admin: user.is_admin,
     }))
 }
 

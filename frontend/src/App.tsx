@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router-dom";
 import { ToastProvider, ToastContainer } from "./components/ui/Toast";
 import { useAuthStore } from "./stores/authStore";
+import { api } from "./lib/api";
 import { useWebSocket } from "./hooks/useWebSocket";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 import { usePasteDetection } from "./hooks/usePasteDetection";
@@ -21,19 +22,22 @@ import { QueuePanel } from "./components/features/queue";
 import { UploadsPage } from "./components/features/uploads/UploadsPage";
 
 function ProtectedRoute() {
-  const { authenticated, checking, setAuthenticated, setChecking } = useAuthStore();
+  const { authenticated, checking, setAuthenticated, setChecking, setIsAdmin } = useAuthStore();
 
   useEffect(() => {
     if (!checking) return;
     fetch("/api/stats/me", { credentials: "include" })
       .then((res) => {
         setAuthenticated(res.ok);
+        if (res.ok) {
+          api.getMe().then((me) => setIsAdmin(me.is_admin));
+        }
       })
       .catch(() => {
         setAuthenticated(false);
         setChecking(false);
       });
-  }, [checking, setAuthenticated, setChecking]);
+  }, [checking, setAuthenticated, setChecking, setIsAdmin]);
 
   if (checking) {
     return (

@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from "react";
-import { Upload, Plus, Loader2 } from "lucide-react";
+import { Upload, Plus, Loader2, Trash2 } from "lucide-react";
 import clsx from "clsx";
 import { api } from "../../../lib/api";
 import { useToast } from "../../../hooks/useToast";
+import { useAuthStore } from "../../../stores/authStore";
 import type { TrackInfo } from "../../../lib/types";
 
 function formatDuration(ms: number): string {
@@ -15,14 +16,20 @@ function formatDuration(ms: number): string {
 function UploadRow({
   track,
   onUpdate,
+  isAdmin,
+  onDelete,
 }: {
   track: TrackInfo;
   onUpdate: () => void;
+  isAdmin: boolean;
+  onDelete: (id: string) => void;
 }) {
   const { showToast } = useToast();
   const [editing, setEditing] = useState<"title" | "artist" | null>(null);
   const [editValue, setEditValue] = useState("");
   const [adding, setAdding] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const handleEdit = (field: "title" | "artist") => {
     setEditing(field);
@@ -54,6 +61,20 @@ function UploadRow({
       showToast(err instanceof Error ? err.message : "Failed", "error");
     } finally {
       setAdding(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    setDeleting(true);
+    try {
+      await api.deleteTrack(track.id);
+      onDelete(track.id);
+      showToast("Deleted", "success");
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Delete failed", "error");
+      setConfirmDelete(false);
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -111,20 +132,58 @@ function UploadRow({
         </div>
       </div>
 
-      {/* Add button */}
-      <button
-        onClick={handleAddToQueue}
-        disabled={adding}
-        className={clsx(
-          "p-2 rounded-md transition-colors touch-manipulation min-w-[44px] min-h-[44px] flex items-center justify-center",
-          "text-[var(--color-text-tertiary)] hover:text-[var(--color-accent)] hover:bg-[var(--color-bg-tertiary)]",
-          "opacity-0 group-hover:opacity-100 focus:opacity-100",
-          adding && "opacity-100"
+      {/* Actions */}
+      <div className={clsx(
+        "flex items-center gap-1",
+        !confirmDelete && "opacity-0 group-hover:opacity-100 focus-within:opacity-100",
+        (adding || deleting) && "opacity-100",
+        confirmDelete && "opacity-100",
+      )}>
+        {confirmDelete ? (
+          <>
+            <button
+              onClick={() => setConfirmDelete(false)}
+              disabled={deleting}
+              className="px-2 py-1.5 text-xs rounded-md transition-colors touch-manipulation min-h-[44px] text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-tertiary)]"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleDelete}
+              disabled={deleting}
+              className="px-2 py-1.5 text-xs rounded-md transition-colors touch-manipulation min-h-[44px] text-[var(--color-danger)] hover:bg-[var(--color-danger)]/10 font-medium"
+            >
+              {deleting ? <Loader2 size={16} className="animate-spin" /> : "Delete?"}
+            </button>
+          </>
+        ) : (
+          <>
+            <button
+              onClick={handleAddToQueue}
+              disabled={adding}
+              className={clsx(
+                "p-2 rounded-md transition-colors touch-manipulation min-w-[44px] min-h-[44px] flex items-center justify-center",
+                "text-[var(--color-text-tertiary)] hover:text-[var(--color-accent)] hover:bg-[var(--color-bg-tertiary)]",
+              )}
+              aria-label="Add to queue"
+            >
+              {adding ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
+            </button>
+            {isAdmin && (
+              <button
+                onClick={() => setConfirmDelete(true)}
+                className={clsx(
+                  "p-2 rounded-md transition-colors touch-manipulation min-w-[44px] min-h-[44px] flex items-center justify-center",
+                  "text-[var(--color-text-tertiary)] hover:text-[var(--color-danger)] hover:bg-[var(--color-bg-tertiary)]",
+                )}
+                aria-label="Delete track"
+              >
+                <Trash2 size={16} />
+              </button>
+            )}
+          </>
         )}
-        aria-label="Add to queue"
-      >
-        {adding ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
-      </button>
+      </div>
     </div>
   );
 }
@@ -135,6 +194,7 @@ export function UploadsPage() {
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const perPage = 20;
+  const isAdmin = useAuthStore((s) => s.isAdmin);
 
   const fetchUploads = useCallback(async () => {
     setLoading(true);
@@ -152,6 +212,12 @@ export function UploadsPage() {
   useEffect(() => {
     fetchUploads();
   }, [fetchUploads]);
+
+  const handleDelete = useCallback((id: string) => {
+    setTracks((prev) => prev.filter((t) => t.id !== id));
+    setTotal((t) => t - 1);
+    if (tracks.length === 1 && page > 1) setPage((p) => p - 1);
+  }, [tracks.length, page]);
 
   const totalPages = Math.ceil(total / perPage);
 
@@ -186,7 +252,13 @@ export function UploadsPage() {
         )}
 
         {tracks.map((track) => (
-          <UploadRow key={track.id} track={track} onUpdate={fetchUploads} />
+          <UploadRow
+            key={track.id}
+            track={track}
+            onUpdate={fetchUploads}
+            isAdmin={isAdmin}
+            onDelete={handleDelete}
+          />
         ))}
 
         {/* Pagination */}

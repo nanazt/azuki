@@ -10,10 +10,10 @@ pub async fn upsert_user(
     avatar_url: Option<&str>,
 ) -> DbResult<User> {
     sqlx::query_as::<_, User>(
-        "INSERT INTO users (id, username, avatar_url)
-         VALUES (?1, ?2, ?3)
+        "INSERT INTO users (id, username, avatar_url, is_admin)
+         VALUES (?1, ?2, ?3, (SELECT CASE WHEN COUNT(*) = 0 THEN 1 ELSE 0 END FROM users))
          ON CONFLICT(id) DO UPDATE SET username = ?2, avatar_url = ?3
-         RETURNING id, username, avatar_url, token_version, created_at",
+         RETURNING id, username, avatar_url, token_version, created_at, is_admin",
     )
     .bind(id)
     .bind(username)
@@ -25,7 +25,7 @@ pub async fn upsert_user(
 
 pub async fn get_user(pool: &SqlitePool, id: &str) -> DbResult<User> {
     sqlx::query_as::<_, User>(
-        "SELECT id, username, avatar_url, token_version, created_at FROM users WHERE id = ?1",
+        "SELECT id, username, avatar_url, token_version, created_at, is_admin FROM users WHERE id = ?1",
     )
     .bind(id)
     .fetch_optional(pool)

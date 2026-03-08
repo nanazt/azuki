@@ -123,6 +123,45 @@ pub async fn count_uploads(pool: &SqlitePool) -> DbResult<i64> {
     Ok(row.0)
 }
 
+pub async fn delete_track_cascade(pool: &SqlitePool, track_id: &str) -> DbResult<Option<String>> {
+    let mut tx = pool.begin().await?;
+    let file_path: Option<String> =
+        sqlx::query_scalar("SELECT file_path FROM tracks WHERE id = ?1")
+            .bind(track_id)
+            .fetch_optional(&mut *tx)
+            .await?;
+    if file_path.is_none() {
+        tx.rollback().await?;
+        return Err(DbError::NotFound);
+    }
+    sqlx::query("DELETE FROM queue_items WHERE track_id = ?1")
+        .bind(track_id)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("DELETE FROM lyrics_cache WHERE track_id = ?1")
+        .bind(track_id)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("DELETE FROM favorites WHERE track_id = ?1")
+        .bind(track_id)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("DELETE FROM playlist_tracks WHERE track_id = ?1")
+        .bind(track_id)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("DELETE FROM play_history WHERE track_id = ?1")
+        .bind(track_id)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("DELETE FROM tracks WHERE id = ?1")
+        .bind(track_id)
+        .execute(&mut *tx)
+        .await?;
+    tx.commit().await?;
+    Ok(file_path)
+}
+
 pub async fn update_track_metadata(
     pool: &SqlitePool,
     track_id: &str,
