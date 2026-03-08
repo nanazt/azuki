@@ -74,7 +74,6 @@ export function Slider({
         aria-label={ariaLabel}
         className={clsx(
           "absolute inset-x-0 w-full h-full opacity-0 cursor-pointer",
-          // Custom thumb via CSS class
           "slider-input"
         )}
         style={{ margin: 0 }}

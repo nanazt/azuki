@@ -7,6 +7,8 @@ export function useKeyboardShortcuts() {
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      if (e.repeat) return;
+
       const active = document.activeElement;
       const isInput =
         active instanceof HTMLInputElement ||
