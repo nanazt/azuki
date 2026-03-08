@@ -123,7 +123,6 @@ export const QueueItemContent = forwardRef<HTMLDivElement, QueueItemContentProps
                 onClick={() => onPlayAt(index)}
                 className={clsx(
                   "flex-shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center rounded text-[var(--color-text-tertiary)]",
-                  "opacity-0 group-hover:opacity-100 [@media(hover:none)]:opacity-100",
                   "hover:text-[var(--color-accent)] hover:bg-[var(--color-bg-tertiary)]",
                   "transition-all duration-100 cursor-pointer touch-manipulation",
                 )}
@@ -136,7 +135,7 @@ export const QueueItemContent = forwardRef<HTMLDivElement, QueueItemContentProps
               onClick={() => onRemove(index)}
               className={clsx(
                 "flex-shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center rounded text-[var(--color-text-tertiary)]",
-                "opacity-0 group-hover:opacity-100 hover:text-[var(--color-danger)] hover:bg-[var(--color-bg-tertiary)]",
+                "hover:text-[var(--color-danger)] hover:bg-[var(--color-bg-tertiary)]",
                 "transition-all duration-100 cursor-pointer touch-manipulation",
               )}
               aria-label={`Remove ${track.title} from queue`}
