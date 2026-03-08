@@ -41,7 +41,7 @@ async fn handle_ws(socket: WebSocket, state: WebState, user_id: String) {
 
     debug!("WebSocket connected: {user_id}");
 
-    // Send initial state snapshot with active downloads and favorited track ids
+    // Send initial state snapshot with active downloads
     let snapshot = state.player.get_state().await;
     let downloads: Vec<_> = state
         .active_downloads
@@ -49,15 +49,9 @@ async fn handle_ws(socket: WebSocket, state: WebState, user_id: String) {
         .map(|entry| entry.value().clone())
         .collect();
 
-    // Load user's favorited track ids
-    let favorited_ids = azuki_db::queries::favorites::get_favorite_track_ids(&state.db, &user_id)
-        .await
-        .unwrap_or_default();
-
     let snapshot_event = WebEvent::StateSnapshot {
         state: snapshot,
         active_downloads: downloads,
-        favorited_track_ids: favorited_ids,
     };
     if let Ok(json) = serde_json::to_string(&snapshot_event) {
         let _ = sender.send(Message::Text(json.into())).await;
@@ -65,7 +59,6 @@ async fn handle_ws(socket: WebSocket, state: WebState, user_id: String) {
 
     // Forward web events to WebSocket
     let state_clone = state.clone();
-    let ws_user_id = user_id.clone();
     let forward_task = tokio::spawn(async move {
         loop {
             match event_rx.recv().await {
@@ -84,18 +77,11 @@ async fn handle_ws(socket: WebSocket, state: WebState, user_id: String) {
                         .iter()
                         .map(|entry| entry.value().clone())
                         .collect();
-                    let favorited_ids = azuki_db::queries::favorites::get_favorite_track_ids(
-                        &state_clone.db,
-                        &ws_user_id,
-                    )
-                    .await
-                    .unwrap_or_default();
                     let event = crate::events::WebSeqEvent {
                         seq: 0,
                         event: WebEvent::StateSnapshot {
                             state: snapshot,
                             active_downloads: downloads,
-                            favorited_track_ids: favorited_ids,
                         },
                     };
                     if let Ok(json) = serde_json::to_string(&event)

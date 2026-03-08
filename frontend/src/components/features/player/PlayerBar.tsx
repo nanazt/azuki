@@ -9,20 +9,24 @@ import {
   VolumeX,
   Repeat,
   Repeat1,
-  Heart,
   ChevronUp,
+  ListMusic,
 } from "lucide-react";
 import { usePlayer } from "../../../hooks/usePlayer";
 import { usePlayerStore } from "../../../stores/playerStore";
-import { api } from "../../../lib/api";
 import { Slider } from "../../ui/Slider";
 import { TrackThumbnail } from "../../ui/TrackThumbnail";
+import { Skeleton } from "../../ui/Skeleton";
 import { formatTime } from "../../../lib/utils";
 
-export function PlayerBar() {
+interface PlayerBarProps {
+  onToggleQueue?: () => void;
+  queueDrawerOpen?: boolean;
+}
+
+export function PlayerBar({ onToggleQueue, queueDrawerOpen }: PlayerBarProps) {
   const { playState, volume, loopMode, togglePlay, skip, previous, seek, setVolume, cycleLoop } =
     usePlayer();
-  const favoritedTrackIds = usePlayerStore((s) => s.favoritedTrackIds);
   const boostMode = usePlayerStore((s) => s.boostMode);
   const setBoostMode = usePlayerStore((s) => s.setBoostMode);
   const [elapsed, setElapsed] = useState(0);
@@ -36,7 +40,6 @@ export function PlayerBar() {
 
   const track =
     playState.status !== "idle" ? playState.track : null;
-  const favorited = track ? favoritedTrackIds.has(track.id) : false;
   const connected = usePlayerStore((s) => s.connected);
   const isPlaying = playState.status === "playing";
   const positionMs =
@@ -102,17 +105,6 @@ export function PlayerBar() {
     [setVolume]
   );
 
-  const handleToggleFavorite = useCallback(async () => {
-    if (!track) return;
-    const isFav = favoritedTrackIds.has(track.id);
-    usePlayerStore.getState().toggleFavoritedTrackId(track.id, !isFav);
-    try {
-      await api.toggleFavorite(track.id);
-    } catch {
-      usePlayerStore.getState().toggleFavoritedTrackId(track.id, isFav);
-    }
-  }, [track, favoritedTrackIds]);
-
   const loopIcon = () => {
     if (loopMode === "one") return <Repeat1 size={16} />;
     return <Repeat size={16} />;
@@ -126,16 +118,6 @@ export function PlayerBar() {
   const effectiveBoost = boostMode || volume > 10;
   const volumeSliderMax = effectiveBoost ? 100 : 10;
 
-  if (!track) {
-    return (
-      <div className="h-[80px] flex items-center justify-center bg-[var(--color-bg-secondary)] border-t border-[var(--color-border)]">
-        <span className="text-[var(--color-text-tertiary)] text-sm">
-          Nothing playing
-        </span>
-      </div>
-    );
-  }
-
   return (
     <>
       {/* Desktop layout */}
@@ -144,61 +126,82 @@ export function PlayerBar() {
         <div className="flex items-center gap-4">
           {/* Left: track info */}
           <div className="flex items-center gap-3 min-w-0 w-[30%]">
-            <TrackThumbnail track={track} sizeClass="w-12 h-12" iconSize={20} className="rounded" />
-            <div className="min-w-0">
-              <div className="text-sm font-medium text-[var(--color-text)] truncate">
-                {track.title}
-              </div>
-              {track.artist && (
-                <div className="text-xs text-[var(--color-text-secondary)] truncate">
-                  {track.artist}
+            {track ? (
+              <>
+                <TrackThumbnail track={track} sizeClass="w-12 h-12" iconSize={20} className="rounded" />
+                <div className="min-w-0">
+                  <div className="text-sm font-medium text-[var(--color-text)] truncate">
+                    {track.title}
+                  </div>
+                  {track.artist && (
+                    <div className="text-xs text-[var(--color-text-secondary)] truncate">
+                      {track.artist}
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-            <button
-              onClick={handleToggleFavorite}
-              className={clsx(
-                "flex-shrink-0 p-1.5 rounded-full transition-colors duration-150 cursor-pointer",
-                favorited
-                  ? "text-[var(--color-danger)]"
-                  : "text-[var(--color-text-tertiary)] hover:text-[var(--color-text)]"
-              )}
-              aria-label={favorited ? "Remove from favorites" : "Add to favorites"}
-            >
-              <Heart size={16} fill={favorited ? "currentColor" : "none"} />
-            </button>
+              </>
+            ) : (
+              <>
+                <Skeleton variant="rect" className="w-12 h-12 rounded" />
+                <div className="flex flex-col gap-1.5">
+                  <Skeleton variant="text" className="h-3 w-32 rounded-full" />
+                  <Skeleton variant="text" className="h-2.5 w-20 rounded-full" />
+                </div>
+              </>
+            )}
           </div>
 
           {/* Center: controls */}
           <div className="flex items-center gap-2 justify-center flex-1">
             <button
               onClick={previous}
-              className="p-2 text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors cursor-pointer rounded-full hover:bg-[var(--color-bg-hover)]"
+              disabled={!track}
+              className={clsx(
+                "p-2 transition-colors rounded-full",
+                track
+                  ? "text-[var(--color-text-secondary)] hover:text-[var(--color-text)] cursor-pointer hover:bg-[var(--color-bg-hover)]"
+                  : "text-[var(--color-text-tertiary)] opacity-30 cursor-default"
+              )}
               aria-label="Previous"
             >
               <SkipBack size={18} />
             </button>
             <button
               onClick={togglePlay}
-              className="p-2.5 bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] text-white rounded-full transition-colors cursor-pointer"
+              disabled={!track}
+              className={clsx(
+                "p-2.5 text-white rounded-full transition-colors",
+                track
+                  ? "bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] cursor-pointer"
+                  : "bg-[var(--color-accent)] opacity-40 cursor-default"
+              )}
               aria-label={isPlaying ? "Pause" : "Play"}
             >
               {isPlaying ? <Pause size={20} fill="white" /> : <Play size={20} fill="white" />}
             </button>
             <button
               onClick={skip}
-              className="p-2 text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors cursor-pointer rounded-full hover:bg-[var(--color-bg-hover)]"
+              disabled={!track}
+              className={clsx(
+                "p-2 transition-colors rounded-full",
+                track
+                  ? "text-[var(--color-text-secondary)] hover:text-[var(--color-text)] cursor-pointer hover:bg-[var(--color-bg-hover)]"
+                  : "text-[var(--color-text-tertiary)] opacity-30 cursor-default"
+              )}
               aria-label="Skip"
             >
               <SkipForward size={18} />
             </button>
             <button
               onClick={cycleLoop}
+              disabled={!track}
               className={clsx(
-                "p-2 rounded-full transition-colors cursor-pointer",
-                loopActive
-                  ? "text-[var(--color-accent)] hover:bg-[var(--color-bg-hover)]"
-                  : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-bg-hover)]"
+                "p-2 rounded-full transition-colors",
+                !track
+                  ? "text-[var(--color-text-tertiary)] opacity-30 cursor-default"
+                  : loopActive
+                    ? "text-[var(--color-accent)] hover:bg-[var(--color-bg-hover)] cursor-pointer"
+                    : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-bg-hover)] cursor-pointer"
               )}
               aria-label={`Loop: ${loopMode}`}
             >
@@ -208,7 +211,10 @@ export function PlayerBar() {
 
           {/* Right: volume + toggles */}
           <div className="flex items-center gap-3 justify-end w-[30%]">
-            <div className="flex items-center gap-2">
+            <div className={clsx(
+              "flex items-center gap-2",
+              !track && "opacity-40 pointer-events-none"
+            )}>
               <button
                 onClick={() => {
                   if (volume > 0) {
@@ -235,7 +241,7 @@ export function PlayerBar() {
                 "text-xs tabular-nums w-7 text-right select-none transition-colors duration-300",
                 volumeSaved ? "text-[var(--color-success)]" : "text-[var(--color-text-tertiary)]"
               )}>
-                {volume}%
+                {track ? `${volume}%` : "--"}
               </span>
               <button
                 onClick={() => {
@@ -256,13 +262,30 @@ export function PlayerBar() {
                 <ChevronUp size={14} />
               </button>
             </div>
+            {onToggleQueue && (
+              <button
+                onClick={onToggleQueue}
+                className={clsx(
+                  "hidden md:flex lg:hidden p-1.5 rounded-full transition-colors cursor-pointer",
+                  queueDrawerOpen
+                    ? "text-[var(--color-accent)] hover:bg-[var(--color-bg-hover)]"
+                    : "text-[var(--color-text-tertiary)] hover:text-[var(--color-text)] hover:bg-[var(--color-bg-hover)]"
+                )}
+                aria-label="Toggle queue"
+              >
+                <ListMusic size={18} />
+              </button>
+            )}
           </div>
         </div>
 
         {/* Row 2: seek bar */}
-        <div className="flex items-center gap-3">
+        <div className={clsx(
+          "flex items-center gap-3",
+          !track && "opacity-30 pointer-events-none"
+        )}>
           <span className="text-xs text-[var(--color-text-tertiary)] w-10 text-right tabular-nums">
-            {formatTime(displayElapsed)}
+            {track ? formatTime(displayElapsed) : "--:--"}
           </span>
           <Slider
             value={isSeeking ? seekValue : displayElapsed}
@@ -277,34 +300,58 @@ export function PlayerBar() {
             aria-label="Seek"
           />
           <span className="text-xs text-[var(--color-text-tertiary)] w-10 tabular-nums">
-            {formatTime(duration)}
+            {track ? formatTime(duration) : "--:--"}
           </span>
         </div>
       </div>
 
       {/* Mobile mini player */}
       <div className="flex md:hidden items-center gap-3 h-[60px] bg-[var(--color-bg-secondary)] border-t border-[var(--color-border)] px-3">
-        <TrackThumbnail track={track} sizeClass="w-10 h-10" iconSize={16} className="rounded" />
-        <div className="min-w-0 flex-1">
-          <div className="text-sm font-medium text-[var(--color-text)] truncate">
-            {track.title}
-          </div>
-          {track.artist && (
-            <div className="text-xs text-[var(--color-text-secondary)] truncate">
-              {track.artist}
+        {track ? (
+          <>
+            <TrackThumbnail track={track} sizeClass="w-10 h-10" iconSize={16} className="rounded" />
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-medium text-[var(--color-text)] truncate">
+                {track.title}
+              </div>
+              {track.artist && (
+                <div className="text-xs text-[var(--color-text-secondary)] truncate">
+                  {track.artist}
+                </div>
+              )}
             </div>
-          )}
-        </div>
+          </>
+        ) : (
+          <div className="flex items-center gap-3 min-w-0 flex-1">
+            <Skeleton variant="rect" className="w-10 h-10 rounded" />
+            <div className="flex flex-col gap-1.5">
+              <Skeleton variant="text" className="h-3 w-28 rounded-full" />
+              <Skeleton variant="text" className="h-2.5 w-16 rounded-full" />
+            </div>
+          </div>
+        )}
         <button
           onClick={togglePlay}
-          className="min-w-11 min-h-11 flex items-center justify-center text-[var(--color-text)] cursor-pointer touch-manipulation"
+          disabled={!track}
+          className={clsx(
+            "min-w-11 min-h-11 flex items-center justify-center touch-manipulation",
+            track
+              ? "text-[var(--color-text)] cursor-pointer"
+              : "text-[var(--color-text-tertiary)] opacity-50 cursor-default"
+          )}
           aria-label={isPlaying ? "Pause" : "Play"}
         >
           {isPlaying ? <Pause size={22} /> : <Play size={22} />}
         </button>
         <button
           onClick={skip}
-          className="min-w-11 min-h-11 flex items-center justify-center text-[var(--color-text-secondary)] cursor-pointer touch-manipulation"
+          disabled={!track}
+          className={clsx(
+            "min-w-11 min-h-11 flex items-center justify-center touch-manipulation",
+            track
+              ? "text-[var(--color-text-secondary)] cursor-pointer"
+              : "text-[var(--color-text-tertiary)] opacity-50 cursor-default"
+          )}
           aria-label="Skip"
         >
           <SkipForward size={20} />

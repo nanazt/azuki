@@ -13,7 +13,6 @@ import { UploadMetadataModal } from "./components/features/upload/UploadMetadata
 import { Login } from "./pages/Login";
 import { Home } from "./pages/Home";
 import { Playlists } from "./pages/Playlists";
-import { Favorites } from "./pages/Favorites";
 import { History } from "./pages/History";
 import { Stats } from "./pages/Stats";
 import { Settings } from "./pages/Settings";
@@ -84,7 +83,6 @@ export default function App() {
             <Route path="/" element={<Home />} />
             <Route path="/search" element={<SearchPage />} />
             <Route path="/playlists" element={<Playlists />} />
-            <Route path="/favorites" element={<Favorites />} />
             <Route path="/history" element={<History />} />
             <Route path="/uploads" element={<UploadsPage />} />
             <Route path="/stats" element={<Stats />} />

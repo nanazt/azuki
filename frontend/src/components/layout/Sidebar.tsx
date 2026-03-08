@@ -2,7 +2,6 @@ import { NavLink } from "react-router-dom";
 import {
   BarChart3,
   Clock,
-  Heart,
   Home,
   ListMusic,
   Search,
@@ -65,7 +64,6 @@ export function Sidebar() {
         {/* Library */}
         <div className="mt-4 space-y-0.5">
           <NavItem to="/playlists" icon={<ListMusic size={16} />} label="Playlists" />
-          <NavItem to="/favorites" icon={<Heart size={16} />} label="Favorites" />
           <NavItem to="/history" icon={<Clock size={16} />} label="History" />
           <NavItem to="/uploads" icon={<Upload size={16} />} label="Uploads" />
           <NavItem to="/stats" icon={<BarChart3 size={16} />} label="Stats" />

@@ -56,13 +56,6 @@ pub struct PlaylistTrack {
     pub added_at: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
-pub struct Favorite {
-    pub user_id: String,
-    pub track_id: String,
-    pub created_at: String,
-}
-
 #[non_exhaustive]
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct UserPreferences {

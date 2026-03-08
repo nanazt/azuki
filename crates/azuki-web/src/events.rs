@@ -51,7 +51,6 @@ pub enum WebEvent {
     StateSnapshot {
         state: PlayerSnapshot,
         active_downloads: Vec<DownloadStatus>,
-        favorited_track_ids: Vec<String>,
     },
 
     // New app events
@@ -81,11 +80,6 @@ pub enum WebEvent {
     DownloadFailed {
         download_id: String,
         error: String,
-    },
-    FavoriteChanged {
-        track_id: String,
-        user_id: String,
-        favorited: bool,
     },
     PlaylistUpdated {
         playlist_id: i64,
@@ -152,7 +146,6 @@ impl From<PlayerEvent> for WebEvent {
             PlayerEvent::StateSnapshot { state } => WebEvent::StateSnapshot {
                 state,
                 active_downloads: Vec::new(),
-                favorited_track_ids: Vec::new(),
             },
         }
     }

@@ -99,14 +99,6 @@ export const api = {
   removePlaylistTrack: (id: number, position: number) =>
     del<void>(`/api/playlists/${id}/tracks/${position}`),
 
-  // Favorites
-  getFavorites: (cursor?: string, limit = 50) => {
-    const params = new URLSearchParams({ limit: String(limit) });
-    if (cursor) params.set("cursor", cursor);
-    return get<CursorResponse<TrackInfo>>(`/api/favorites?${params}`);
-  },
-  toggleFavorite: (track_id: string) => post<{ favorited: boolean }>(`/api/favorites/${track_id}`),
-
   // Stats
   getMyStats: () => get<UserStats>("/api/stats/me"),
   getServerStats: () => get<ServerStats>("/api/stats/server"),

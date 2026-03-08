@@ -45,7 +45,6 @@ export interface PlayerSnapshot {
   listeners: UserInfo[];
   current_added_by?: UserInfo | null;
   active_downloads?: DownloadStatus[];
-  favorited_track_ids?: string[];
 }
 
 export type PlayStateInfo =
@@ -80,7 +79,6 @@ export type PlayerEvent =
   | { type: "download_progress"; download_id: string; percent: number; speed_bps: number | null }
   | { type: "download_complete"; download_id: string; track: TrackInfo }
   | { type: "download_failed"; download_id: string; error: string }
-  | { type: "favorite_changed"; track_id: string; user_id: string; favorited: boolean }
   | { type: "playlist_updated"; playlist_id: number }
   | { type: "history_added"; track: TrackInfo; user_id: string }
   | { type: "history_updated"; history: QueueEntry[] };

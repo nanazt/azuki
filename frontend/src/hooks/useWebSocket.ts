@@ -148,10 +148,6 @@ export function useWebSocket() {
       case "listeners_updated":
         state.setListeners(ev.users);
         break;
-      case "favorite_changed":
-        state.toggleFavoritedTrackId(ev.track_id, ev.favorited);
-        window.dispatchEvent(new CustomEvent("favorite-changed", { detail: { track_id: ev.track_id, user_id: ev.user_id, favorited: ev.favorited } }));
-        break;
       case "video_sync":
         // Video sync handled by VideoPlayer component via playerStore
         break;

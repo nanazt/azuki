@@ -157,7 +157,6 @@ pub async fn start_web(
         .merge(routes::player::player_routes())
         .merge(routes::content::content_routes())
         .merge(routes::playlists::playlist_routes())
-        .merge(routes::favorites::favorites_routes())
         .merge(routes::stats::stats_routes())
         .merge(routes::admin::admin_routes())
         .merge(routes::preferences::preferences_routes())
