@@ -76,28 +76,31 @@ export function SearchPage() {
     setLoading(true);
     debounceRef.current = setTimeout(() => {
       runSearch(query, source);
-    }, 500);
+    }, 225);
 
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
   }, [query, source, runSearch]);
 
-  const handleAdd = useCallback(async (track: TrackInfo) => {
-    setAddingIds((prev) => new Set(prev).add(track.id));
-    try {
-      await api.addToQueue(track.source_url);
-    } catch (err) {
-      console.error("Failed to add to queue", err);
-      showToast("Failed to add to queue", "error");
-    } finally {
-      setAddingIds((prev) => {
-        const next = new Set(prev);
-        next.delete(track.id);
-        return next;
-      });
-    }
-  }, [showToast]);
+  const handleAdd = useCallback(
+    async (track: TrackInfo) => {
+      setAddingIds((prev) => new Set(prev).add(track.id));
+      try {
+        await api.addToQueue(track.source_url);
+      } catch (err) {
+        console.error("Failed to add to queue", err);
+        showToast("Failed to add to queue", "error");
+      } finally {
+        setAddingIds((prev) => {
+          const next = new Set(prev);
+          next.delete(track.id);
+          return next;
+        });
+      }
+    },
+    [showToast],
+  );
 
   const hasQuery = query.trim().length > 0;
 
@@ -120,7 +123,7 @@ export function SearchPage() {
               "w-full pl-9 pr-4 py-2.5 md:py-2 rounded-lg text-base md:text-sm",
               "bg-[var(--color-bg-tertiary)] border border-[var(--color-border)]",
               "text-[var(--color-text)] placeholder:text-[var(--color-text-tertiary)]",
-              "outline-none focus:border-[var(--color-accent)] transition-colors duration-150"
+              "outline-none focus:border-[var(--color-accent)] transition-colors duration-150",
             )}
           />
           {loading && (
@@ -141,7 +144,7 @@ export function SearchPage() {
                 "px-3 py-1.5 md:py-1 rounded-full text-xs font-medium transition-colors duration-150 cursor-pointer touch-manipulation",
                 source === s.id
                   ? "bg-[var(--color-accent)] text-white"
-                  : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-bg-hover)]"
+                  : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-bg-hover)]",
               )}
             >
               {s.label}
@@ -169,7 +172,9 @@ export function SearchPage() {
         {!loading && !error && hasQuery && results.length === 0 && (
           <div className="flex flex-col items-center justify-center gap-2 py-10 text-center">
             <Search size={28} className="text-[var(--color-text-tertiary)]" />
-            <p className="text-sm text-[var(--color-text-secondary)]">No results found</p>
+            <p className="text-sm text-[var(--color-text-secondary)]">
+              No results found
+            </p>
             <p className="text-xs text-[var(--color-text-tertiary)]">
               Try a different search term or source
             </p>
