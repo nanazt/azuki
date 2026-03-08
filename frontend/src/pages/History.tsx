@@ -33,22 +33,21 @@ function formatDate(iso: string): string {
 
 export function History() {
   const [items, setItems] = useState<HistoryEntry[]>([]);
-  const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasNewTrack, setHasNewTrack] = useState(false);
+  const [isFirstPage, setIsFirstPage] = useState(true);
 
-  const PER_PAGE = 20;
-
-  const loadPage = async (p: number, append = false) => {
-    if (p === 1) setLoading(true);
+  const loadHistory = async (cursor?: string) => {
+    if (!cursor) setLoading(true);
     else setLoadingMore(true);
 
     try {
-      const res = await api.getHistory(p, PER_PAGE);
-      setTotal(res.total);
-      setItems((prev) => (append ? [...prev, ...res.items] : res.items));
+      const res = await api.getHistory(cursor);
+      setNextCursor(res.next_cursor);
+      setItems((prev) => (cursor ? [...prev, ...res.items] : res.items));
+      if (!cursor) setIsFirstPage(true);
     } catch {
       // ignore
     } finally {
@@ -58,23 +57,20 @@ export function History() {
   };
 
   useEffect(() => {
-    loadPage(1);
+    loadHistory();
   }, []);
 
   const handleLoadMore = () => {
-    const next = page + 1;
-    setPage(next);
-    loadPage(next, true);
+    if (nextCursor) loadHistory(nextCursor);
   };
 
   useEffect(() => {
     const handler = (e: Event) => {
       const detail = (e as CustomEvent).detail;
-      if (page === 1 && window.scrollY < 50) {
+      if (isFirstPage && window.scrollY < 50) {
         setItems((prev) => {
           const existing = prev.find((e) => e.track.id === detail.track.id);
           const filtered = prev.filter((e) => e.track.id !== detail.track.id);
-          if (!existing) setTotal((t) => t + 1);
           return [{
             track: detail.track,
             played_at: new Date().toISOString(),
@@ -88,7 +84,7 @@ export function History() {
     };
     window.addEventListener("history-added", handler);
     return () => window.removeEventListener("history-added", handler);
-  }, [page]);
+  }, [isFirstPage]);
 
   const [addingIds, setAddingIds] = useState<Set<string>>(new Set());
   const { showToast } = useToast();
@@ -109,17 +105,12 @@ export function History() {
     }
   };
 
-  const hasMore = items.length < total;
+  const hasMore = nextCursor !== null;
 
   return (
     <div className="p-6 max-w-3xl mx-auto flex flex-col gap-6">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold text-[var(--color-text)]">History</h1>
-        {total > 0 && (
-          <span className="text-sm text-[var(--color-text-tertiary)]">
-            {total} track{total !== 1 ? "s" : ""}
-          </span>
-        )}
       </div>
 
       {loading ? (
@@ -146,8 +137,8 @@ export function History() {
             <button
               onClick={() => {
                 setHasNewTrack(false);
-                setPage(1);
-                loadPage(1);
+                setIsFirstPage(true);
+                loadHistory();
               }}
               className="w-full py-2 text-sm text-[var(--color-accent)] bg-[var(--color-accent)]/10 rounded-lg hover:bg-[var(--color-accent)]/20 transition-colors"
             >

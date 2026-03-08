@@ -23,7 +23,7 @@ export function Home() {
 
   useEffect(() => {
     api
-      .getHistory(1, 10)
+      .getHistory(undefined, 10)
       .then((res) => setHistory(res.items))
       .catch(() => {})
       .finally(() => setLoading(false));

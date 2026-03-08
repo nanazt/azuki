@@ -130,11 +130,13 @@ export interface UploadResponse {
   duplicate: boolean;
 }
 
-export interface UploadsResponse {
-  items: TrackInfo[];
+export interface CursorResponse<T> {
+  items: T[];
+  next_cursor: string | null;
+}
+
+export interface UploadsResponse extends CursorResponse<TrackInfo> {
   total: number;
-  page: number;
-  per_page: number;
 }
 
 export interface OEmbedResponse {

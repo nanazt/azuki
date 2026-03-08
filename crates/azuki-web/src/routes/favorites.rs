@@ -2,23 +2,40 @@ use axum::extract::{Path, State};
 use axum::Json;
 use axum_extra::extract::CookieJar;
 use crate::auth::extract_user_id;
-use crate::routes::content::PaginationQuery;
+use crate::routes::content::{CursorQuery, decode_cursor, encode_cursor};
 use crate::{ApiError, WebState};
 
 pub async fn list_favorites(
     jar: CookieJar,
     State(state): State<WebState>,
-    axum::extract::Query(params): axum::extract::Query<PaginationQuery>,
+    axum::extract::Query(params): axum::extract::Query<CursorQuery>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let user_id = extract_user_id(&jar, &state).await?;
-    let page = params.page.unwrap_or(1).max(1);
-    let per_page = params.per_page.unwrap_or(20).min(100);
-    let offset = (page - 1) * per_page;
+    let limit = params.limit.unwrap_or(50).clamp(1, 100);
 
-    let favorites = azuki_db::queries::favorites::get_favorites(&state.db, &user_id, per_page, offset).await?;
+    let before_created_at: Option<String> = params
+        .cursor
+        .as_deref()
+        .map(decode_cursor)
+        .transpose()?;
+
+    let favorites = azuki_db::queries::favorites::get_favorites(
+        &state.db,
+        &user_id,
+        limit,
+        before_created_at.as_deref(),
+    )
+    .await?;
+
+    let next_cursor = if favorites.len() as i64 == limit {
+        favorites.last().map(|t| encode_cursor(&t.created_at))
+    } else {
+        None
+    };
+
     Ok(Json(serde_json::json!({
-        "tracks": favorites,
-        "page": page,
+        "items": favorites,
+        "next_cursor": next_cursor,
     })))
 }
 

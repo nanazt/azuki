@@ -11,15 +11,28 @@ import { formatTime } from "../lib/utils";
 export function Favorites() {
   const [tracks, setTracks] = useState<TrackInfo[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [togglingIds, setTogglingIds] = useState<Set<string>>(new Set());
   const [exitingIds, setExitingIds] = useState<Set<string>>(new Set());
 
+  const loadFavorites = async (cursor?: string) => {
+    if (!cursor) setLoading(true);
+    else setLoadingMore(true);
+    try {
+      const res = await api.getFavorites(cursor);
+      setTracks((prev) => (cursor ? [...prev, ...res.items] : res.items));
+      setNextCursor(res.next_cursor);
+    } catch {
+      // ignore
+    } finally {
+      setLoading(false);
+      setLoadingMore(false);
+    }
+  };
+
   useEffect(() => {
-    api
-      .getFavorites()
-      .then((res) => setTracks(res.tracks))
-      .catch(() => {})
-      .finally(() => setLoading(false));
+    loadFavorites();
   }, []);
 
   useEffect(() => {
@@ -29,7 +42,7 @@ export function Favorites() {
         setTracks((prev) => prev.filter((t) => t.id !== track_id));
       } else {
         // Re-fetch to get the full track info for the newly favorited track
-        api.getFavorites().then((res) => setTracks(res.tracks)).catch(() => {});
+        loadFavorites();
       }
     };
     window.addEventListener("favorite-changed", handler);
@@ -109,6 +122,7 @@ export function Favorites() {
           </p>
         </div>
       ) : (
+        <>
         <ul className="flex flex-col gap-1">
           {tracks.map((track) => (
             <li
@@ -155,6 +169,18 @@ export function Favorites() {
             </li>
           ))}
         </ul>
+        {nextCursor && (
+          <div className="flex justify-center pt-2">
+            <button
+              onClick={() => loadFavorites(nextCursor)}
+              disabled={loadingMore}
+              className="px-4 py-1.5 text-xs rounded-md bg-[var(--color-bg-secondary)] text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover)] transition-colors disabled:opacity-50"
+            >
+              {loadingMore ? "Loading..." : "Load more"}
+            </button>
+          </div>
+        )}
+        </>
       )}
     </div>
   );

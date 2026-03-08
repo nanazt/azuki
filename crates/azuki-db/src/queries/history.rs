@@ -91,9 +91,9 @@ pub async fn mark_completed(pool: &SqlitePool, id: i64) -> DbResult<()> {
 pub async fn get_history(
     pool: &SqlitePool,
     limit: i64,
-    offset: i64,
+    before_id: Option<i64>,
 ) -> DbResult<Vec<HistoryEntry>> {
-    sqlx::query_as::<_, HistoryEntry>(
+    let sql = if before_id.is_some() {
         "SELECT h.id, h.track_id,
                 t.title, t.artist, t.duration_ms,
                 t.thumbnail_url,
@@ -109,14 +109,33 @@ pub async fn get_history(
              SELECT MAX(h2.id) FROM play_history h2
              WHERE h2.track_id = h.track_id
          )
-         ORDER BY h.played_at DESC
-         LIMIT ?1 OFFSET ?2",
-    )
-    .bind(limit)
-    .bind(offset)
-    .fetch_all(pool)
-    .await
-    .map_err(DbError::from)
+         AND h.id < ?2
+         ORDER BY h.id DESC
+         LIMIT ?1"
+    } else {
+        "SELECT h.id, h.track_id,
+                t.title, t.artist, t.duration_ms,
+                t.thumbnail_url,
+                t.source_url,
+                h.user_id,
+                u.username, h.played_at, h.completed,
+                (SELECT COUNT(*) FROM play_history h3
+                 WHERE h3.track_id = h.track_id) AS play_count
+         FROM play_history h
+         JOIN tracks t ON t.id = h.track_id
+         JOIN users u ON u.id = h.user_id
+         WHERE h.id = (
+             SELECT MAX(h2.id) FROM play_history h2
+             WHERE h2.track_id = h.track_id
+         )
+         ORDER BY h.id DESC
+         LIMIT ?1"
+    };
+    let mut query = sqlx::query_as::<_, HistoryEntry>(sql).bind(limit);
+    if let Some(id) = before_id {
+        query = query.bind(id);
+    }
+    query.fetch_all(pool).await.map_err(DbError::from)
 }
 
 #[derive(Debug, FromRow)]

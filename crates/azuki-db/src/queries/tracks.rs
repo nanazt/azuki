@@ -99,20 +99,28 @@ pub async fn update_file_path(
 pub async fn list_uploads(
     pool: &SqlitePool,
     limit: i64,
-    offset: i64,
+    before_created_at: Option<&str>,
 ) -> DbResult<Vec<Track>> {
-    let sql = format!(
-        "SELECT {TRACK_COLUMNS} FROM tracks
-         WHERE source_type = 'upload'
-         ORDER BY created_at DESC
-         LIMIT ?1 OFFSET ?2"
-    );
-    sqlx::query_as::<_, Track>(&sql)
-        .bind(limit)
-        .bind(offset)
-        .fetch_all(pool)
-        .await
-        .map_err(DbError::from)
+    let sql = if before_created_at.is_some() {
+        format!(
+            "SELECT {TRACK_COLUMNS} FROM tracks
+             WHERE source_type = 'upload' AND created_at < ?2
+             ORDER BY created_at DESC
+             LIMIT ?1"
+        )
+    } else {
+        format!(
+            "SELECT {TRACK_COLUMNS} FROM tracks
+             WHERE source_type = 'upload'
+             ORDER BY created_at DESC
+             LIMIT ?1"
+        )
+    };
+    let mut query = sqlx::query_as::<_, Track>(&sql).bind(limit);
+    if let Some(ca) = before_created_at {
+        query = query.bind(ca);
+    }
+    query.fetch_all(pool).await.map_err(DbError::from)
 }
 
 pub async fn count_uploads(pool: &SqlitePool) -> DbResult<i64> {

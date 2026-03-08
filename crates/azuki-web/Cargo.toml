@@ -31,3 +31,4 @@ cookie.workspace = true
 sqlx.workspace = true
 anyhow.workspace = true
 dashmap.workspace = true
+base64.workspace = true

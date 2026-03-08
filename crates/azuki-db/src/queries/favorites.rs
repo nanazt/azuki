@@ -65,21 +65,30 @@ pub async fn get_favorites(
     pool: &SqlitePool,
     user_id: &str,
     limit: i64,
-    offset: i64,
+    before_created_at: Option<&str>,
 ) -> DbResult<Vec<Track>> {
-    sqlx::query_as::<_, Track>(
+    let sql = if before_created_at.is_some() {
+        "SELECT t.id, t.title, t.artist, t.duration_ms, t.thumbnail_url,
+                t.source_url, t.source_type, t.file_path, t.youtube_id, t.volume, t.created_at
+         FROM favorites f
+         JOIN tracks t ON t.id = f.track_id
+         WHERE f.user_id = ?1 AND f.created_at < ?3
+         ORDER BY f.created_at DESC
+         LIMIT ?2"
+    } else {
         "SELECT t.id, t.title, t.artist, t.duration_ms, t.thumbnail_url,
                 t.source_url, t.source_type, t.file_path, t.youtube_id, t.volume, t.created_at
          FROM favorites f
          JOIN tracks t ON t.id = f.track_id
          WHERE f.user_id = ?1
          ORDER BY f.created_at DESC
-         LIMIT ?2 OFFSET ?3",
-    )
-    .bind(user_id)
-    .bind(limit)
-    .bind(offset)
-    .fetch_all(pool)
-    .await
-    .map_err(DbError::from)
+         LIMIT ?2"
+    };
+    let mut query = sqlx::query_as::<_, Track>(sql)
+        .bind(user_id)
+        .bind(limit);
+    if let Some(ca) = before_created_at {
+        query = query.bind(ca);
+    }
+    query.fetch_all(pool).await.map_err(DbError::from)
 }

@@ -1,4 +1,5 @@
 import type {
+  CursorResponse,
   OEmbedResponse,
   Playlist,
   PlaylistTrack,
@@ -79,10 +80,13 @@ export const api = {
     get<{ results: TrackInfo[] }>(`/api/search?q=${encodeURIComponent(q)}&source=${source}`),
 
   // History
-  getHistory: (page = 1, per_page = 20) =>
-    get<{ items: { track: TrackInfo; played_at: string; user_id: string; play_count: number }[]; total: number }>(
-      `/api/history?page=${page}&per_page=${per_page}`,
-    ),
+  getHistory: (cursor?: string, limit = 20) => {
+    const params = new URLSearchParams({ limit: String(limit) });
+    if (cursor) params.set("cursor", cursor);
+    return get<CursorResponse<{ track: TrackInfo; played_at: string; user_id: string; play_count: number }>>(
+      `/api/history?${params}`,
+    );
+  },
 
   // Playlists
   getPlaylists: () => get<{ playlists: Playlist[] }>("/api/playlists"),
@@ -96,7 +100,11 @@ export const api = {
     del<void>(`/api/playlists/${id}/tracks/${position}`),
 
   // Favorites
-  getFavorites: () => get<{ tracks: TrackInfo[] }>("/api/favorites"),
+  getFavorites: (cursor?: string, limit = 50) => {
+    const params = new URLSearchParams({ limit: String(limit) });
+    if (cursor) params.set("cursor", cursor);
+    return get<CursorResponse<TrackInfo>>(`/api/favorites?${params}`);
+  },
   toggleFavorite: (track_id: string) => post<{ favorited: boolean }>(`/api/favorites/${track_id}`),
 
   // Stats
@@ -146,8 +154,11 @@ export const api = {
   },
   addTrackToQueue: (trackId: string) =>
     post<void>("/api/queue/add-track", { track_id: trackId }),
-  getUploads: (page = 1, perPage = 20) =>
-    get<UploadsResponse>(`/api/uploads?page=${page}&per_page=${perPage}`),
+  getUploads: (cursor?: string, limit = 20) => {
+    const params = new URLSearchParams({ limit: String(limit) });
+    if (cursor) params.set("cursor", cursor);
+    return get<UploadsResponse>(`/api/uploads?${params}`);
+  },
   updateTrack: (trackId: string, data: { title?: string; artist?: string }) =>
     put<TrackInfo>(`/api/tracks/${trackId}`, data),
   fetchOEmbed: (url: string) =>

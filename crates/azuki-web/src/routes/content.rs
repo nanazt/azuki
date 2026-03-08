@@ -4,7 +4,9 @@ use axum::extract::{DefaultBodyLimit, Path, Query, State};
 use axum::http::header;
 use axum::response::IntoResponse;
 use axum_extra::extract::CookieJar;
-use serde::Deserialize;
+use base64::Engine;
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use serde::{Deserialize, Serialize};
 use tokio_util::io::ReaderStream;
 
 use crate::auth::extract_user_id;
@@ -17,9 +19,24 @@ pub struct SearchQuery {
 }
 
 #[derive(Deserialize)]
-pub struct PaginationQuery {
-    pub page: Option<i64>,
-    pub per_page: Option<i64>,
+pub struct CursorQuery {
+    pub cursor: Option<String>,
+    pub limit: Option<i64>,
+}
+
+pub fn decode_cursor<T: serde::de::DeserializeOwned>(cursor: &str) -> Result<T, ApiError> {
+    if cursor.len() > 256 {
+        return Err(ApiError::BadRequest("cursor too large".into()));
+    }
+    let bytes = URL_SAFE_NO_PAD
+        .decode(cursor)
+        .map_err(|_| ApiError::BadRequest("invalid cursor".into()))?;
+    serde_json::from_slice(&bytes).map_err(|_| ApiError::BadRequest("invalid cursor".into()))
+}
+
+pub fn encode_cursor<T: Serialize>(value: &T) -> String {
+    let json = serde_json::to_vec(value).expect("cursor serialization");
+    URL_SAFE_NO_PAD.encode(&json)
 }
 
 pub async fn search(
@@ -63,35 +80,48 @@ pub async fn search(
 pub async fn history(
     jar: CookieJar,
     State(state): State<WebState>,
-    Query(params): Query<PaginationQuery>,
+    Query(params): Query<CursorQuery>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     extract_user_id(&jar, &state).await?;
-    let page = params.page.unwrap_or(1).max(1);
-    let per_page = params.per_page.unwrap_or(20).min(100);
-    let offset = (page - 1) * per_page;
+    let limit = params.limit.unwrap_or(20).clamp(1, 100);
 
-    let entries = azuki_db::queries::history::get_history(&state.db, per_page, offset).await?;
-    let items: Vec<serde_json::Value> = entries.iter().map(|e| {
-        serde_json::json!({
-            "track": {
-                "id": e.track_id,
-                "title": e.title,
-                "artist": e.artist,
-                "duration_ms": e.duration_ms,
-                "thumbnail_url": e.thumbnail_url,
-                "source_url": e.source_url,
-            },
-            "played_at": e.played_at,
-            "user_id": e.user_id,
-            "play_count": e.play_count,
+    let before_id: Option<i64> = params
+        .cursor
+        .as_deref()
+        .map(decode_cursor)
+        .transpose()?;
+
+    let entries =
+        azuki_db::queries::history::get_history(&state.db, limit, before_id).await?;
+
+    let next_cursor = if entries.len() as i64 == limit {
+        entries.last().map(|e| encode_cursor(&e.id))
+    } else {
+        None
+    };
+
+    let items: Vec<serde_json::Value> = entries
+        .iter()
+        .map(|e| {
+            serde_json::json!({
+                "track": {
+                    "id": e.track_id,
+                    "title": e.title,
+                    "artist": e.artist,
+                    "duration_ms": e.duration_ms,
+                    "thumbnail_url": e.thumbnail_url,
+                    "source_url": e.source_url,
+                },
+                "played_at": e.played_at,
+                "user_id": e.user_id,
+                "play_count": e.play_count,
+            })
         })
-    }).collect();
-    let total = items.len() as i64;
+        .collect();
+
     Ok(Json(serde_json::json!({
         "items": items,
-        "total": total,
-        "page": page,
-        "per_page": per_page,
+        "next_cursor": next_cursor,
     })))
 }
 
@@ -266,21 +296,35 @@ pub async fn download(
 pub async fn list_uploads(
     jar: CookieJar,
     State(state): State<WebState>,
-    Query(params): Query<PaginationQuery>,
+    Query(params): Query<CursorQuery>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     extract_user_id(&jar, &state).await?;
-    let page = params.page.unwrap_or(1).max(1);
-    let per_page = params.per_page.unwrap_or(20).min(100);
-    let offset = (page - 1) * per_page;
+    let limit = params.limit.unwrap_or(20).clamp(1, 100);
 
-    let items = azuki_db::queries::tracks::list_uploads(&state.db, per_page, offset).await?;
+    let before_created_at: Option<String> = params
+        .cursor
+        .as_deref()
+        .map(decode_cursor)
+        .transpose()?;
+
+    let items = azuki_db::queries::tracks::list_uploads(
+        &state.db,
+        limit,
+        before_created_at.as_deref(),
+    )
+    .await?;
     let total = azuki_db::queries::tracks::count_uploads(&state.db).await?;
+
+    let next_cursor = if items.len() as i64 == limit {
+        items.last().map(|t| encode_cursor(&t.created_at))
+    } else {
+        None
+    };
 
     Ok(Json(serde_json::json!({
         "items": items,
         "total": total,
-        "page": page,
-        "per_page": per_page,
+        "next_cursor": next_cursor,
     })))
 }
 

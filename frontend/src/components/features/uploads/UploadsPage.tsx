@@ -191,23 +191,26 @@ function UploadRow({
 export function UploadsPage() {
   const [tracks, setTracks] = useState<TrackInfo[]>([]);
   const [loading, setLoading] = useState(true);
-  const [page, setPage] = useState(1);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [total, setTotal] = useState(0);
-  const perPage = 20;
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
   const isAdmin = useAuthStore((s) => s.isAdmin);
 
-  const fetchUploads = useCallback(async () => {
-    setLoading(true);
+  const fetchUploads = useCallback(async (cursor?: string) => {
+    if (!cursor) setLoading(true);
+    else setLoadingMore(true);
     try {
-      const data = await api.getUploads(page, perPage);
-      setTracks(data.items);
+      const data = await api.getUploads(cursor);
+      setTracks((prev) => (cursor ? [...prev, ...data.items] : data.items));
       setTotal(data.total);
+      setNextCursor(data.next_cursor);
     } catch {
       // ignore
     } finally {
       setLoading(false);
+      setLoadingMore(false);
     }
-  }, [page]);
+  }, []);
 
   useEffect(() => {
     fetchUploads();
@@ -216,10 +219,7 @@ export function UploadsPage() {
   const handleDelete = useCallback((id: string) => {
     setTracks((prev) => prev.filter((t) => t.id !== id));
     setTotal((t) => t - 1);
-    if (tracks.length === 1 && page > 1) setPage((p) => p - 1);
-  }, [tracks.length, page]);
-
-  const totalPages = Math.ceil(total / perPage);
+  }, []);
 
   return (
     <div className="flex flex-col h-full bg-[var(--color-bg-secondary)] pb-32 md:pb-0">
@@ -261,25 +261,15 @@ export function UploadsPage() {
           />
         ))}
 
-        {/* Pagination */}
-        {totalPages > 1 && (
-          <div className="flex items-center justify-center gap-2 py-4">
+        {/* Load more */}
+        {nextCursor && (
+          <div className="flex items-center justify-center py-4">
             <button
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={page === 1}
-              className="px-3 py-1.5 text-xs rounded-md bg-[var(--color-bg-tertiary)] text-[var(--color-text-secondary)] disabled:opacity-50"
+              onClick={() => fetchUploads(nextCursor)}
+              disabled={loadingMore}
+              className="px-4 py-1.5 text-xs rounded-md bg-[var(--color-bg-tertiary)] text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover)] transition-colors disabled:opacity-50"
             >
-              Previous
-            </button>
-            <span className="text-xs text-[var(--color-text-tertiary)]">
-              {page} / {totalPages}
-            </span>
-            <button
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              disabled={page === totalPages}
-              className="px-3 py-1.5 text-xs rounded-md bg-[var(--color-bg-tertiary)] text-[var(--color-text-secondary)] disabled:opacity-50"
-            >
-              Next
+              {loadingMore ? "Loading..." : "Load more"}
             </button>
           </div>
         )}
