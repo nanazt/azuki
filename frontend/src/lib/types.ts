@@ -104,18 +104,22 @@ export interface PlaylistTrack {
   added_at: string;
 }
 
-export interface UserStats {
-  total_plays: number;
-  total_time_ms: number;
-  top_tracks: { track: TrackInfo; play_count: number }[];
-}
-
-export interface ServerStats {
+export interface Stats {
   total_plays: number;
   total_time_ms: number;
   unique_tracks: number;
-  top_tracks: { track: TrackInfo; play_count: number }[];
-  hourly_activity: number[];
+  streak: { current: number; max: number };
+  peak_day: { date: string; play_count: number } | null;
+  heatmap: { date: string; listened_ms: number }[];
+  trend: { date: string; play_count: number }[];
+  dow_activity: number[]; // [Mon..Sun] avg listened_ms
+}
+
+export interface ArtistStat {
+  artist: string;
+  play_count: number;
+  total_listened_ms: number;
+  track_count: number;
 }
 
 export interface UploadResponse {

@@ -101,6 +101,7 @@ export function useWebSocket() {
       case "track_ended":
         state.setPlayState({ status: "idle" });
         state.setCurrentAddedBy(null);
+        window.dispatchEvent(new CustomEvent("track-ended"));
         break;
       case "track_error":
         if (state.playState.status !== "idle") {

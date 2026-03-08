@@ -12,3 +12,6 @@ export { ToastContainer, ToastProvider, useToast } from "./Toast";
 export { Modal } from "./Modal";
 
 export { Tooltip } from "./Tooltip";
+
+export { Select } from "./Select";
+export type { SelectOption } from "./Select";

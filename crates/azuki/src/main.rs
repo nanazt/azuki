@@ -135,8 +135,10 @@ async fn run_normal(config: Config, pool: SqlitePool) -> anyhow::Result<()> {
     }
     let youtube = Arc::new(std::sync::RwLock::new(youtube_client));
 
-    // Shared voice channel list (bot populates, web reads)
+    // Shared channel lists (bot populates, web reads)
     let voice_channels: Arc<std::sync::RwLock<Vec<(u64, String)>>> =
+        Arc::new(std::sync::RwLock::new(Vec::new()));
+    let text_channels: Arc<std::sync::RwLock<Vec<(u64, String)>>> =
         Arc::new(std::sync::RwLock::new(Vec::new()));
 
     // Player — restore state from DB
@@ -259,6 +261,7 @@ async fn run_normal(config: Config, pool: SqlitePool) -> anyhow::Result<()> {
         static_dir: config.static_dir.clone(),
         youtube: Arc::clone(&youtube),
         voice_channels: Arc::clone(&voice_channels),
+        text_channels: Arc::clone(&text_channels),
         web_tx: web_tx.clone(),
         active_downloads: Arc::clone(&active_downloads),
         download_tx,
@@ -276,6 +279,7 @@ async fn run_normal(config: Config, pool: SqlitePool) -> anyhow::Result<()> {
         songbird: Mutex::new(None),
         youtube: Arc::clone(&youtube),
         voice_channels: Arc::clone(&voice_channels),
+        text_channels: Arc::clone(&text_channels),
         http_tx,
     });
 
@@ -336,6 +340,9 @@ async fn run_normal(config: Config, pool: SqlitePool) -> anyhow::Result<()> {
         async move {
             let mut player_rx = bridge_player.subscribe();
 
+            // Current play_history row ID (set on TrackStarted, cleared on TrackEnded)
+            let mut current_history_id: Option<i64> = None;
+
             // Embed state: (channel_id, message_id, history_record_id, track, display_name, volume)
             let mut current_history: Option<(
                 serenity::all::ChannelId,
@@ -374,6 +381,10 @@ async fn run_normal(config: Config, pool: SqlitePool) -> anyhow::Result<()> {
                                             user_id: user_info.id.clone(),
                                         },
                                     });
+
+                                    if let Ok(ref history_record) = history_result {
+                                        current_history_id = Some(history_record.id);
+                                    }
 
                                     // Send Discord embed to history channel
                                     if let Ok(ref history_record) = history_result
@@ -441,8 +452,13 @@ async fn run_normal(config: Config, pool: SqlitePool) -> anyhow::Result<()> {
                                     debounce_delay.as_mut().reset(tokio::time::Instant::now() + std::time::Duration::from_secs(2));
                                 }
 
-                                // TrackEnded: flush pending volume update + clear
-                                if let azuki_player::PlayerEvent::TrackEnded { .. } = player_seq_event.event {
+                                // TrackEnded: finish play + flush pending volume update + clear
+                                if let azuki_player::PlayerEvent::TrackEnded { listened_ms, completed, .. } = player_seq_event.event {
+                                    if let Some(history_id) = current_history_id.take() {
+                                        let _ = azuki_db::queries::history::finish_play(
+                                            &bridge_db, history_id, listened_ms as i64, completed,
+                                        ).await;
+                                    }
                                     if let Some((channel_id, message_id, history_id, ref track, ref display_name, volume)) = current_history {
                                         let http = bridge_http_rx.borrow().clone();
                                         if let Some(ref http) = http {

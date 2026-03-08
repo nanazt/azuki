@@ -352,6 +352,16 @@ impl PlayerActor {
         let _ = self.event_tx.send(seq_event);
     }
 
+    fn current_position_ms(&self) -> u64 {
+        match &self.state {
+            PlayState::Playing { started_at, position_ms, .. } => {
+                position_ms + started_at.elapsed().as_millis() as u64
+            }
+            PlayState::Paused { position_ms, .. } => *position_ms,
+            _ => 0,
+        }
+    }
+
     fn snapshot(&self) -> PlayerSnapshot {
         let state_info = match &self.state {
             PlayState::Idle => PlayStateInfo::Idle,
@@ -467,8 +477,11 @@ impl PlayerActor {
                 };
 
                 if let Some(ref entry) = current_entry {
+                    let listened_ms = self.current_position_ms();
                     self.broadcast(PlayerEvent::TrackEnded {
                         track_id: entry.track.id.clone(),
+                        listened_ms,
+                        completed: false,
                     });
                     self.queue.push_to_history(entry.clone());
                 }
@@ -508,8 +521,11 @@ impl PlayerActor {
                 | PlayState::Loading { track }
                 | PlayState::Error { track, .. } = &self.state
                 {
+                    let listened_ms = self.current_position_ms();
                     self.broadcast(PlayerEvent::TrackEnded {
                         track_id: track.id.clone(),
+                        listened_ms,
+                        completed: false,
                     });
                 }
                 self.state = PlayState::Idle;
@@ -658,9 +674,10 @@ impl PlayerActor {
                         };
                         let current_id = current_track.id.clone();
                         // Push current back to front of queue
+                        let listened_ms = self.current_position_ms();
                         self.queue
                             .push_front(QueueEntry { track: current_track, added_by: self.current_added_by.clone().unwrap_or_else(UserInfo::unknown) });
-                        self.broadcast(PlayerEvent::TrackEnded { track_id: current_id });
+                        self.broadcast(PlayerEvent::TrackEnded { track_id: current_id, listened_ms, completed: false });
                         self.current_added_by = Some(prev_entry.added_by.clone());
                         let added_by = prev_entry.added_by;
                         let track = prev_entry.track;
@@ -721,9 +738,10 @@ impl PlayerActor {
                     };
                     let current_id = current_track.id.clone();
                     // Push current track to front of queue
+                    let listened_ms = self.current_position_ms();
                     self.queue
                         .push_front(QueueEntry { track: current_track, added_by: self.current_added_by.clone().unwrap_or_else(UserInfo::unknown) });
-                    self.broadcast(PlayerEvent::TrackEnded { track_id: current_id });
+                    self.broadcast(PlayerEvent::TrackEnded { track_id: current_id, listened_ms, completed: false });
                     self.current_added_by = Some(prev_entry.added_by.clone());
                     let added_by = prev_entry.added_by;
                     let track = prev_entry.track;
@@ -792,8 +810,11 @@ impl PlayerActor {
                     };
 
                     if let Some(ref cur) = current_entry {
+                        let listened_ms = self.current_position_ms();
                         self.broadcast(PlayerEvent::TrackEnded {
                             track_id: cur.track.id.clone(),
+                            listened_ms,
+                            completed: false,
                         });
                         self.queue.push_to_history(cur.clone());
                     }
@@ -889,10 +910,15 @@ impl PlayerActor {
                     });
                 }
 
+                let completed = matches!(reason, TrackEndReason::Finished);
+                let listened_ms = current_track.as_ref().map_or(0, |t| {
+                    self.current_position_ms().min(t.duration_ms)
+                });
+
                 // Auto-advance
                 if let Some(next) = self.queue.advance() {
                     // Broadcast TrackEnded only when advancing to the next track
-                    self.broadcast(PlayerEvent::TrackEnded { track_id });
+                    self.broadcast(PlayerEvent::TrackEnded { track_id, listened_ms, completed });
                     self.current_added_by = Some(next.added_by.clone());
                     let added_by = next.added_by;
                     let track = next.track;
@@ -916,7 +942,7 @@ impl PlayerActor {
                     });
                 } else {
                     // No next track: go idle and notify frontend
-                    self.broadcast(PlayerEvent::TrackEnded { track_id });
+                    self.broadcast(PlayerEvent::TrackEnded { track_id, listened_ms, completed });
                     self.state = PlayState::Idle;
                     self.current_added_by = None;
                     self.broadcast(PlayerEvent::HistoryUpdated {

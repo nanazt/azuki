@@ -46,6 +46,7 @@ pub struct WebState {
     pub allowed_origins: Vec<String>,
     pub static_dir: Option<String>,
     pub voice_channels: Arc<RwLock<Vec<(u64, String)>>>,
+    pub text_channels: Arc<RwLock<Vec<(u64, String)>>>,
     pub web_tx: broadcast::Sender<WebSeqEvent>,
     pub active_downloads: Arc<DashMap<String, DownloadStatus>>,
     pub download_tx: mpsc::Sender<DownloadRequest>,

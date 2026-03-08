@@ -13,6 +13,8 @@ pub enum WebEvent {
     },
     TrackEnded {
         track_id: String,
+        listened_ms: u64,
+        completed: bool,
     },
     TrackLoading {
         track: TrackInfo,
@@ -119,7 +121,7 @@ impl From<PlayerEvent> for WebEvent {
             PlayerEvent::TrackStarted { track, position_ms, added_by } => {
                 WebEvent::TrackStarted { track, position_ms, added_by }
             }
-            PlayerEvent::TrackEnded { track_id } => WebEvent::TrackEnded { track_id },
+            PlayerEvent::TrackEnded { track_id, listened_ms, completed } => WebEvent::TrackEnded { track_id, listened_ms, completed },
             PlayerEvent::TrackLoading { track } => WebEvent::TrackLoading { track },
             PlayerEvent::TrackError { track_id, error } => {
                 WebEvent::TrackError { track_id, error }

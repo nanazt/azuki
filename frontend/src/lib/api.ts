@@ -1,14 +1,14 @@
 import type {
+  ArtistStat,
   CursorResponse,
   OEmbedResponse,
   Playlist,
   PlaylistTrack,
   QueueEntry,
-  ServerStats,
+  Stats,
   TrackInfo,
   UploadResponse,
   UploadsResponse,
-  UserStats,
 } from "./types";
 
 const headers = (): HeadersInit => ({
@@ -100,8 +100,15 @@ export const api = {
     del<void>(`/api/playlists/${id}/tracks/${position}`),
 
   // Stats
-  getMyStats: () => get<UserStats>("/api/stats/me"),
-  getServerStats: () => get<ServerStats>("/api/stats/server"),
+  getStats: () => get<Stats>("/api/stats"),
+  getTopTracks: (cursor?: string, limit = 20) =>
+    get<CursorResponse<{ track: TrackInfo; play_count: number }>>(
+      `/api/stats/top-tracks?limit=${limit}${cursor ? `&cursor=${cursor}` : ""}`,
+    ),
+  getTopArtists: (cursor?: string, limit = 20) =>
+    get<CursorResponse<ArtistStat>>(
+      `/api/stats/top-artists?limit=${limit}${cursor ? `&cursor=${cursor}` : ""}`,
+    ),
   getTrackStats: (id: string) =>
     get<{ play_count: number; last_played: string | null }>(`/api/stats/track/${id}`),
 
@@ -166,4 +173,12 @@ export const api = {
   // Admin - Voice Channel
   getVoiceChannel: () => get<{ default_channel_id: string | null; channels: { id: string; name: string }[] }>("/api/admin/voice-channel"),
   setVoiceChannel: (channel_id: string) => put<{ success: boolean }>("/api/admin/voice-channel", { channel_id }),
+
+  // Admin - History Channel
+  getHistoryChannel: () => get<{ history_channel_id: string | null; channels: { id: string; name: string }[] }>("/api/admin/history-channel"),
+  setHistoryChannel: (channel_id: string) => put<{ success: boolean }>("/api/admin/history-channel", { channel_id }),
+
+  // Admin - Timezone
+  getTimezone: () => get<{ timezone: string }>("/api/admin/timezone"),
+  setTimezone: (timezone: string) => put<{ success: boolean }>("/api/admin/timezone", { timezone }),
 };

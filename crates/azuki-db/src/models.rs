@@ -36,6 +36,7 @@ pub struct PlayHistory {
     pub completed: bool,
     pub message_id: Option<String>,
     pub volume: i64,
+    pub listened_ms: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
@@ -62,4 +63,52 @@ pub struct UserPreferences {
     pub user_id: String,
     pub theme: String,
     pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, FromRow)]
+pub struct DailyListened {
+    pub date: String,
+    pub listened_ms: i64,
+}
+
+#[derive(Debug, Clone, Serialize, FromRow)]
+pub struct DailyCount {
+    pub date: String,
+    pub play_count: i64,
+}
+
+#[derive(Debug, Clone, Serialize, FromRow)]
+pub struct DowEntry {
+    pub dow: i64,
+    pub avg_listened_ms: i64,
+}
+
+#[derive(Debug, Clone, Serialize, FromRow)]
+pub struct StreakInfo {
+    pub current: i64,
+    pub max: i64,
+}
+
+#[derive(Debug, Clone, Serialize, FromRow)]
+pub struct PeakDay {
+    pub date: String,
+    pub play_count: i64,
+}
+
+#[derive(Debug, Clone, Serialize, FromRow)]
+pub struct TopTrackRow {
+    pub track_id: String,
+    pub title: String,
+    pub artist: Option<String>,
+    pub duration_ms: i64,
+    pub thumbnail_url: Option<String>,
+    pub play_count: i64,
+}
+
+#[derive(Debug, Clone, Serialize, FromRow)]
+pub struct ArtistStat {
+    pub artist: String,
+    pub play_count: i64,
+    pub total_listened_ms: i64,
+    pub track_count: i64,
 }

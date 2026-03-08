@@ -83,6 +83,8 @@ pub enum PlayerEvent {
     },
     TrackEnded {
         track_id: String,
+        listened_ms: u64,
+        completed: bool,
     },
     TrackLoading {
         track: TrackInfo,

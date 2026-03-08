@@ -6,7 +6,7 @@ use serde::Deserialize;
 
 use azuki_player::LoopMode;
 
-use crate::auth::extract_user_id;
+use crate::auth::{extract_admin_id, extract_user_id};
 use crate::{ApiError, WebState};
 
 #[derive(Deserialize)]
@@ -302,7 +302,7 @@ pub async fn update_bot_settings(
     State(state): State<WebState>,
     Json(body): Json<UpdateBotSettings>,
 ) -> Result<Json<BotSettingsResponse>, ApiError> {
-    extract_user_id(&jar, &state).await?;
+    extract_admin_id(&jar, &state).await?;
     if let Some(vol) = body.default_volume {
         if !(0..=100).contains(&vol) {
             return Err(ApiError::BadRequest("default_volume must be 0-100".into()));

@@ -4,7 +4,7 @@ use axum::extract::State;
 use axum::Json;
 use axum_extra::extract::CookieJar;
 
-use crate::auth::extract_user_id;
+use crate::auth::extract_admin_id;
 use crate::{ApiError, WebState};
 
 static LAST_UPDATE: AtomicI64 = AtomicI64::new(0);
@@ -14,7 +14,7 @@ pub async fn ytdlp_info(
     jar: CookieJar,
     State(state): State<WebState>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    extract_user_id(&jar, &state).await?;
+    extract_admin_id(&jar, &state).await?;
 
     let current_version = state.ytdlp.version().await.ok();
     let managed = state.ytdlp.is_managed();
@@ -29,7 +29,7 @@ pub async fn ytdlp_check(
     jar: CookieJar,
     State(state): State<WebState>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    extract_user_id(&jar, &state).await?;
+    extract_admin_id(&jar, &state).await?;
 
     let release = azuki_media::ytdlp_updater::get_latest_release()
         .await
@@ -50,7 +50,7 @@ pub async fn ytdlp_update(
     jar: CookieJar,
     State(state): State<WebState>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    extract_user_id(&jar, &state).await?;
+    extract_admin_id(&jar, &state).await?;
 
     let now = chrono::Utc::now().timestamp();
     let last = LAST_UPDATE.load(Ordering::Relaxed);
@@ -85,7 +85,7 @@ pub async fn youtube_info(
     jar: CookieJar,
     State(state): State<WebState>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    extract_user_id(&jar, &state).await?;
+    extract_admin_id(&jar, &state).await?;
 
     let (has_key, key_masked) = match state.youtube.read().unwrap().as_ref() {
         Some(yt) => (true, Some(yt.api_key_masked())),
@@ -108,7 +108,7 @@ pub async fn youtube_set_key(
     State(state): State<WebState>,
     Json(body): Json<YouTubeKeyRequest>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    let user_id = extract_user_id(&jar, &state).await?;
+    let user_id = extract_admin_id(&jar, &state).await?;
 
     if body.api_key.is_empty() {
         return Err(ApiError::BadRequest("API key cannot be empty".to_string()));
@@ -134,7 +134,7 @@ pub async fn voice_channel_get(
     jar: CookieJar,
     State(state): State<WebState>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    extract_user_id(&jar, &state).await?;
+    extract_admin_id(&jar, &state).await?;
 
     let default_id = azuki_db::config::get_config(&state.db, "default_voice_channel_id")
         .await
@@ -164,7 +164,7 @@ pub async fn voice_channel_set(
     State(state): State<WebState>,
     Json(body): Json<VoiceChannelRequest>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    extract_user_id(&jar, &state).await?;
+    extract_admin_id(&jar, &state).await?;
 
     azuki_db::config::save_config(&state.db, &[("default_voice_channel_id", &body.channel_id)])
         .await
@@ -177,14 +177,23 @@ pub async fn history_channel_get(
     jar: CookieJar,
     State(state): State<WebState>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    extract_user_id(&jar, &state).await?;
+    extract_admin_id(&jar, &state).await?;
 
     let channel_id = azuki_db::config::get_config(&state.db, "history_channel_id")
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
+    let channels: Vec<serde_json::Value> = state
+        .text_channels
+        .read()
+        .unwrap()
+        .iter()
+        .map(|(id, name)| serde_json::json!({ "id": id.to_string(), "name": name }))
+        .collect();
+
     Ok(Json(serde_json::json!({
         "history_channel_id": channel_id,
+        "channels": channels,
     })))
 }
 
@@ -198,7 +207,7 @@ pub async fn history_channel_set(
     State(state): State<WebState>,
     Json(body): Json<HistoryChannelRequest>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    extract_user_id(&jar, &state).await?;
+    extract_admin_id(&jar, &state).await?;
 
     // Validate: must be empty (to clear) or a numeric snowflake
     if !body.channel_id.is_empty() && body.channel_id.parse::<u64>().is_err() {
@@ -218,7 +227,7 @@ pub async fn web_base_url_get(
     jar: CookieJar,
     State(state): State<WebState>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    extract_user_id(&jar, &state).await?;
+    extract_admin_id(&jar, &state).await?;
 
     let web_base_url = azuki_db::config::get_config(&state.db, "web_base_url")
         .await
@@ -239,7 +248,7 @@ pub async fn web_base_url_set(
     State(state): State<WebState>,
     Json(body): Json<WebBaseUrlRequest>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    extract_user_id(&jar, &state).await?;
+    extract_admin_id(&jar, &state).await?;
 
     if !body.url.is_empty() {
         let parsed = url::Url::parse(&body.url)
@@ -255,6 +264,44 @@ pub async fn web_base_url_set(
     }
 
     azuki_db::config::save_config(&state.db, &[("web_base_url", &body.url)])
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    Ok(Json(serde_json::json!({ "success": true })))
+}
+
+pub async fn timezone_get(
+    jar: CookieJar,
+    State(state): State<WebState>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    extract_admin_id(&jar, &state).await?;
+
+    let timezone = azuki_db::config::get_config(&state.db, "timezone")
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?
+        .unwrap_or_else(|| "UTC".to_string());
+
+    Ok(Json(serde_json::json!({ "timezone": timezone })))
+}
+
+#[derive(serde::Deserialize)]
+pub struct TimezoneRequest {
+    timezone: String,
+}
+
+pub async fn timezone_set(
+    jar: CookieJar,
+    State(state): State<WebState>,
+    Json(body): Json<TimezoneRequest>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    extract_admin_id(&jar, &state).await?;
+
+    // Validate IANA timezone name
+    body.timezone
+        .parse::<chrono_tz::Tz>()
+        .map_err(|_| ApiError::BadRequest(format!("invalid timezone: {}", body.timezone)))?;
+
+    azuki_db::config::save_config(&state.db, &[("timezone", &body.timezone)])
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
@@ -284,5 +331,9 @@ pub fn admin_routes() -> axum::Router<WebState> {
         .route(
             "/api/admin/web-base-url",
             axum::routing::get(web_base_url_get).put(web_base_url_set),
+        )
+        .route(
+            "/api/admin/timezone",
+            axum::routing::get(timezone_get).put(timezone_set),
         )
 }

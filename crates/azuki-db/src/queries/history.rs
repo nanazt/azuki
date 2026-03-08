@@ -1,7 +1,9 @@
 use serde::Serialize;
 use sqlx::{FromRow, SqlitePool};
 
-use crate::models::PlayHistory;
+use crate::models::{
+    ArtistStat, DailyCount, DailyListened, DowEntry, PeakDay, PlayHistory, StreakInfo, TopTrackRow,
+};
 use crate::{DbError, DbResult};
 
 #[derive(Debug, Serialize, FromRow)]
@@ -21,21 +23,6 @@ pub struct HistoryEntry {
 }
 
 #[derive(Debug, Serialize, FromRow)]
-pub struct TrackStat {
-    pub track_id: String,
-    pub title: String,
-    pub artist: Option<String>,
-    pub play_count: i64,
-}
-
-#[derive(Debug, Serialize, FromRow)]
-pub struct UserStat {
-    pub total_plays: i64,
-    pub total_time_ms: i64,
-    pub unique_tracks: i64,
-}
-
-#[derive(Debug, Serialize, FromRow)]
 pub struct ServerStat {
     pub total_plays: i64,
     pub total_time_ms: i64,
@@ -52,7 +39,7 @@ pub async fn record_play(
     sqlx::query_as::<_, PlayHistory>(
         "INSERT INTO play_history (track_id, user_id, volume)
          VALUES (?1, ?2, ?3)
-         RETURNING id, track_id, user_id, played_at, completed, message_id, volume",
+         RETURNING id, track_id, user_id, played_at, completed, message_id, volume, listened_ms",
     )
     .bind(track_id)
     .bind(user_id)
@@ -80,8 +67,15 @@ pub async fn update_history_volume(pool: &SqlitePool, id: i64, volume: i64) -> D
     Ok(())
 }
 
-pub async fn mark_completed(pool: &SqlitePool, id: i64) -> DbResult<()> {
-    sqlx::query("UPDATE play_history SET completed = 1 WHERE id = ?1")
+pub async fn finish_play(
+    pool: &SqlitePool,
+    id: i64,
+    listened_ms: i64,
+    completed: bool,
+) -> DbResult<()> {
+    sqlx::query("UPDATE play_history SET listened_ms = ?1, completed = ?2 WHERE id = ?3")
+        .bind(listened_ms)
+        .bind(completed)
         .bind(id)
         .execute(pool)
         .await?;
@@ -181,27 +175,11 @@ pub async fn get_history_for_restore(
     .map_err(DbError::from)
 }
 
-pub async fn get_user_stats(pool: &SqlitePool, user_id: &str) -> DbResult<UserStat> {
-    sqlx::query_as::<_, UserStat>(
-        "SELECT
-           COUNT(*) AS total_plays,
-           COALESCE(SUM(t.duration_ms), 0) AS total_time_ms,
-           COUNT(DISTINCT h.track_id) AS unique_tracks
-         FROM play_history h
-         JOIN tracks t ON t.id = h.track_id
-         WHERE h.user_id = ?1",
-    )
-    .bind(user_id)
-    .fetch_one(pool)
-    .await
-    .map_err(DbError::from)
-}
-
 pub async fn get_server_stats(pool: &SqlitePool) -> DbResult<ServerStat> {
     sqlx::query_as::<_, ServerStat>(
         "SELECT
            COUNT(*) AS total_plays,
-           COALESCE(SUM(t.duration_ms), 0) AS total_time_ms,
+           COALESCE(SUM(COALESCE(h.listened_ms, 0)), 0) AS total_time_ms,
            COUNT(DISTINCT h.user_id) AS unique_users,
            COUNT(DISTINCT h.track_id) AS unique_tracks
          FROM play_history h
@@ -212,62 +190,170 @@ pub async fn get_server_stats(pool: &SqlitePool) -> DbResult<ServerStat> {
     .map_err(DbError::from)
 }
 
-pub async fn get_top_tracks(
-    pool: &SqlitePool,
-    limit: i64,
-) -> DbResult<Vec<TrackStat>> {
-    sqlx::query_as::<_, TrackStat>(
-        "SELECT h.track_id, t.title, t.artist,
-                COUNT(*) AS play_count
-         FROM play_history h
-         JOIN tracks t ON t.id = h.track_id
-         GROUP BY h.track_id
-         ORDER BY 4 DESC
-         LIMIT ?1",
-    )
-    .bind(limit)
-    .fetch_all(pool)
-    .await
-    .map_err(DbError::from)
-}
-
-pub async fn get_user_top_tracks(
-    pool: &SqlitePool,
-    user_id: &str,
-    limit: i64,
-) -> DbResult<Vec<TrackStat>> {
-    sqlx::query_as::<_, TrackStat>(
-        "SELECT h.track_id, t.title, t.artist,
-                COUNT(*) AS play_count
-         FROM play_history h
-         JOIN tracks t ON t.id = h.track_id
-         WHERE h.user_id = ?1
-         GROUP BY h.track_id
-         ORDER BY 4 DESC
-         LIMIT ?2",
-    )
-    .bind(user_id)
-    .bind(limit)
-    .fetch_all(pool)
-    .await
-    .map_err(DbError::from)
-}
-
-#[derive(Debug, Serialize, FromRow)]
-pub struct HourlyCount {
-    pub hour: i64,
-    pub count: i64,
-}
-
-pub async fn get_hourly_activity(pool: &SqlitePool) -> DbResult<Vec<HourlyCount>> {
-    sqlx::query_as::<_, HourlyCount>(
-        "SELECT CAST(strftime('%H', played_at) AS INTEGER) AS hour,
-                COUNT(*) AS count
+pub async fn get_heatmap(pool: &SqlitePool, tz_offset: &str) -> DbResult<Vec<DailyListened>> {
+    sqlx::query_as::<_, DailyListened>(
+        "SELECT date(played_at, ?1) AS date,
+                SUM(COALESCE(listened_ms, 0)) AS listened_ms
          FROM play_history
-         GROUP BY hour
-         ORDER BY hour",
+         WHERE played_at >= date('now', ?1, '-365 days')
+         GROUP BY date(played_at, ?1)
+         ORDER BY date",
     )
+    .bind(tz_offset)
     .fetch_all(pool)
     .await
     .map_err(DbError::from)
+}
+
+pub async fn get_trend(pool: &SqlitePool, tz_offset: &str) -> DbResult<Vec<DailyCount>> {
+    sqlx::query_as::<_, DailyCount>(
+        "SELECT date(played_at, ?1) AS date,
+                COUNT(*) AS play_count
+         FROM play_history
+         WHERE played_at >= date('now', ?1, '-30 days')
+         GROUP BY date(played_at, ?1)
+         ORDER BY date",
+    )
+    .bind(tz_offset)
+    .fetch_all(pool)
+    .await
+    .map_err(DbError::from)
+}
+
+pub async fn get_dow_activity(pool: &SqlitePool, tz_offset: &str) -> DbResult<Vec<DowEntry>> {
+    sqlx::query_as::<_, DowEntry>(
+        "SELECT (CAST(strftime('%w', played_at, ?1) AS INTEGER) + 6) % 7 AS dow,
+                SUM(COALESCE(listened_ms, 0)) / MAX(COUNT(DISTINCT date(played_at, ?1)), 1) AS avg_listened_ms
+         FROM play_history
+         WHERE played_at >= date('now', ?1, '-365 days')
+         GROUP BY dow
+         ORDER BY dow",
+    )
+    .bind(tz_offset)
+    .fetch_all(pool)
+    .await
+    .map_err(DbError::from)
+}
+
+pub async fn get_streak(pool: &SqlitePool, tz_offset: &str) -> DbResult<StreakInfo> {
+    sqlx::query_as::<_, StreakInfo>(
+        "WITH daily AS (
+            SELECT DISTINCT date(played_at, ?1) AS d FROM play_history
+            WHERE played_at >= date('now', ?1, '-365 days')
+        ),
+        grouped AS (
+            SELECT d, julianday(d) - ROW_NUMBER() OVER (ORDER BY d) AS grp
+            FROM daily
+        ),
+        streaks AS (
+            SELECT COUNT(*) AS len, MIN(d) AS start_d, MAX(d) AS end_d
+            FROM grouped GROUP BY grp
+        )
+        SELECT
+            COALESCE((SELECT len FROM streaks
+                      WHERE end_d >= date('now', ?1, '-1 day')
+                      ORDER BY end_d DESC LIMIT 1), 0) AS current,
+            COALESCE((SELECT MAX(len) FROM streaks), 0) AS max",
+    )
+    .bind(tz_offset)
+    .fetch_one(pool)
+    .await
+    .map_err(DbError::from)
+}
+
+pub async fn get_peak_day(pool: &SqlitePool, tz_offset: &str) -> DbResult<Option<PeakDay>> {
+    sqlx::query_as::<_, PeakDay>(
+        "SELECT date(played_at, ?1) AS date,
+                COUNT(*) AS play_count
+         FROM play_history
+         GROUP BY date(played_at, ?1)
+         ORDER BY play_count DESC
+         LIMIT 1",
+    )
+    .bind(tz_offset)
+    .fetch_optional(pool)
+    .await
+    .map_err(DbError::from)
+}
+
+pub async fn get_top_tracks_paginated(
+    pool: &SqlitePool,
+    limit: i64,
+    cursor: Option<(i64, String)>,
+) -> DbResult<Vec<TopTrackRow>> {
+    if let Some((cursor_count, cursor_id)) = cursor {
+        sqlx::query_as::<_, TopTrackRow>(
+            "SELECT h.track_id, t.title, t.artist, t.duration_ms, t.thumbnail_url,
+                    COUNT(*) AS play_count
+             FROM play_history h
+             JOIN tracks t ON t.id = h.track_id
+             GROUP BY h.track_id
+             HAVING COUNT(*) < ?1 OR (COUNT(*) = ?1 AND h.track_id > ?2)
+             ORDER BY play_count DESC, h.track_id ASC
+             LIMIT ?3",
+        )
+        .bind(cursor_count)
+        .bind(cursor_id)
+        .bind(limit)
+        .fetch_all(pool)
+        .await
+        .map_err(DbError::from)
+    } else {
+        sqlx::query_as::<_, TopTrackRow>(
+            "SELECT h.track_id, t.title, t.artist, t.duration_ms, t.thumbnail_url,
+                    COUNT(*) AS play_count
+             FROM play_history h
+             JOIN tracks t ON t.id = h.track_id
+             GROUP BY h.track_id
+             ORDER BY play_count DESC, h.track_id ASC
+             LIMIT ?1",
+        )
+        .bind(limit)
+        .fetch_all(pool)
+        .await
+        .map_err(DbError::from)
+    }
+}
+
+pub async fn get_top_artists(
+    pool: &SqlitePool,
+    limit: i64,
+    cursor: Option<(i64, String)>,
+) -> DbResult<Vec<ArtistStat>> {
+    if let Some((cursor_count, cursor_artist)) = cursor {
+        sqlx::query_as::<_, ArtistStat>(
+            "SELECT COALESCE(t.artist, 'Unknown') AS artist,
+                    COUNT(*) AS play_count,
+                    SUM(COALESCE(h.listened_ms, 0)) AS total_listened_ms,
+                    COUNT(DISTINCT h.track_id) AS track_count
+             FROM play_history h
+             JOIN tracks t ON t.id = h.track_id
+             GROUP BY artist
+             HAVING COUNT(*) < ?1 OR (COUNT(*) = ?1 AND artist > ?2)
+             ORDER BY play_count DESC, artist ASC
+             LIMIT ?3",
+        )
+        .bind(cursor_count)
+        .bind(cursor_artist)
+        .bind(limit)
+        .fetch_all(pool)
+        .await
+        .map_err(DbError::from)
+    } else {
+        sqlx::query_as::<_, ArtistStat>(
+            "SELECT COALESCE(t.artist, 'Unknown') AS artist,
+                    COUNT(*) AS play_count,
+                    SUM(COALESCE(h.listened_ms, 0)) AS total_listened_ms,
+                    COUNT(DISTINCT h.track_id) AS track_count
+             FROM play_history h
+             JOIN tracks t ON t.id = h.track_id
+             GROUP BY artist
+             ORDER BY play_count DESC, artist ASC
+             LIMIT ?1",
+        )
+        .bind(limit)
+        .fetch_all(pool)
+        .await
+        .map_err(DbError::from)
+    }
 }

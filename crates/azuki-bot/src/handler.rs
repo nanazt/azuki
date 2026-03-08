@@ -49,8 +49,14 @@ impl EventHandler for Handler {
                     .filter(|c| c.kind == ChannelType::Voice)
                     .map(|c| (c.id.get(), c.name.clone()))
                     .collect();
-                info!("found {} voice channels", voice.len());
+                let text: Vec<(u64, String)> = channels
+                    .iter()
+                    .filter(|c| c.kind == ChannelType::Text)
+                    .map(|c| (c.id.get(), c.name.clone()))
+                    .collect();
+                info!("found {} voice channels, {} text channels", voice.len(), text.len());
                 *self.state.voice_channels.write().unwrap() = voice;
+                *self.state.text_channels.write().unwrap() = text;
             }
             Err(e) => warn!("failed to fetch voice channels: {e}"),
         }

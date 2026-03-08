@@ -8,7 +8,7 @@ use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, 
 use serde::{Deserialize, Serialize};
 use tracing::error;
 
-use crate::WebState;
+use crate::{ApiError, WebState};
 
 const JWT_EXPIRY_HOURS: i64 = 24;
 const OAUTH_STATE_COOKIE: &str = "oauth_state";
@@ -203,24 +203,41 @@ pub async fn callback(
     (jar, Redirect::temporary("/")).into_response()
 }
 
-pub async fn extract_user_id(jar: &CookieJar, state: &WebState) -> Result<String, StatusCode> {
+pub async fn extract_verified_user(
+    jar: &CookieJar,
+    state: &WebState,
+) -> Result<azuki_db::models::User, ApiError> {
     let token = jar
         .get(JWT_COOKIE)
         .map(|c| c.value().to_string())
-        .ok_or(StatusCode::UNAUTHORIZED)?;
+        .ok_or(ApiError::Unauthorized)?;
 
-    let claims = verify_jwt(&token, &state.jwt_secret).map_err(|_| StatusCode::UNAUTHORIZED)?;
+    let claims = verify_jwt(&token, &state.jwt_secret).map_err(|_| ApiError::Unauthorized)?;
 
-    // Validate token_version
     let user = azuki_db::queries::users::get_user(&state.db, &claims.sub)
         .await
-        .map_err(|_| StatusCode::UNAUTHORIZED)?;
+        .map_err(|_| ApiError::Unauthorized)?;
 
     if claims.tv != user.token_version {
-        return Err(StatusCode::UNAUTHORIZED);
+        return Err(ApiError::Unauthorized);
     }
 
-    Ok(claims.sub)
+    Ok(user)
+}
+
+pub async fn extract_user_id(jar: &CookieJar, state: &WebState) -> Result<String, StatusCode> {
+    extract_verified_user(jar, state)
+        .await
+        .map(|u| u.id)
+        .map_err(|_| StatusCode::UNAUTHORIZED)
+}
+
+pub async fn extract_admin_id(jar: &CookieJar, state: &WebState) -> Result<String, ApiError> {
+    let user = extract_verified_user(jar, state).await?;
+    if !user.is_admin {
+        return Err(ApiError::Forbidden);
+    }
+    Ok(user.id)
 }
 
 pub async fn logout(

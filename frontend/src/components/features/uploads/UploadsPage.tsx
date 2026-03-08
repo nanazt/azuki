@@ -222,7 +222,7 @@ export function UploadsPage() {
   }, []);
 
   return (
-    <div className="flex flex-col h-full bg-[var(--color-bg-secondary)] pb-32 md:pb-0">
+    <div className="flex flex-col h-full pb-32 md:pb-0">
       <div className="px-4 pt-4 pb-3 border-b border-[var(--color-border)]">
         <h1 className="text-lg font-semibold text-[var(--color-text)]">Uploads</h1>
         {total > 0 && (

@@ -3,6 +3,7 @@ import { api } from "../lib/api";
 import { useAuthStore } from "../stores/authStore";
 import { Skeleton } from "../components/ui/Skeleton";
 import { Slider } from "../components/ui/Slider";
+import { Select } from "../components/ui";
 import {
   Settings as SettingsIcon,
   Loader2,
@@ -11,7 +12,8 @@ import {
   LogOut,
   Volume2,
   Mic,
-  MicOff,
+  Hash,
+  Globe,
 } from "lucide-react";
 import clsx from "clsx";
 
@@ -60,6 +62,7 @@ function SegmentedControl({
 
 export function Settings() {
   const logout = useAuthStore((s) => s.logout);
+  const isAdmin = useAuthStore((s) => s.isAdmin);
 
   // Preferences state
   const [prefs, setPrefs] = useState<Preferences | null>(null);
@@ -104,6 +107,19 @@ export function Settings() {
   const [savingVoice, setSavingVoice] = useState(false);
   const [voiceSaved, setVoiceSaved] = useState(false);
 
+  // History channel state
+  const [textChannels, setTextChannels] = useState<
+    { id: string; name: string }[]
+  >([]);
+  const [historyChannelId, setHistoryChannelId] = useState<string | null>(null);
+  const [savingHistory, setSavingHistory] = useState(false);
+  const [historySaved, setHistorySaved] = useState(false);
+
+  // Timezone state
+  const [timezone, setTimezone] = useState("UTC");
+  const [savingTz, setSavingTz] = useState(false);
+  const [tzSaved, setTzSaved] = useState(false);
+
   const [me, setMe] = useState<{
     id: string;
     username: string;
@@ -140,6 +156,17 @@ export function Settings() {
     api
       .getBotSettings()
       .then((s) => setBotDefaultVolume(s.default_volume))
+      .catch(() => {});
+    api
+      .getHistoryChannel()
+      .then((data) => {
+        setTextChannels(data.channels);
+        setHistoryChannelId(data.history_channel_id);
+      })
+      .catch(() => {});
+    api
+      .getTimezone()
+      .then((data) => setTimezone(data.timezone))
       .catch(() => {});
   }, []);
 
@@ -277,7 +304,7 @@ export function Settings() {
       </section>
 
       {/* SERVER (admin) */}
-      <section className="flex flex-col gap-4">
+      {isAdmin && <section className="flex flex-col gap-4">
         <h2 className="text-sm font-semibold text-[var(--color-text-secondary)] uppercase tracking-wide">
           Server
         </h2>
@@ -396,105 +423,27 @@ export function Settings() {
           </p>
 
           {voiceChannels.length > 0 ? (
-            <div
-              className="flex flex-col rounded-lg overflow-hidden border border-[var(--color-border)]"
-              role="radiogroup"
-              aria-label="Default voice channel"
-            >
-              {/* None option */}
-              {[
-                { id: "", name: "None — manual join only" },
-                ...voiceChannels,
-              ].map((ch, idx, arr) => {
-                const isNone = ch.id === "";
-                const isSelected = isNone
-                  ? defaultVoiceChannel === null || defaultVoiceChannel === ""
-                  : defaultVoiceChannel === ch.id;
-                const isLast = idx === arr.length - 1;
-
-                return (
-                  <button
-                    key={ch.id || "__none__"}
-                    role="radio"
-                    aria-checked={isSelected}
-                    onClick={async () => {
-                      if (isSelected) return;
-                      const val = ch.id;
-                      setDefaultVoiceChannel(val || null);
-                      setSavingVoice(true);
-                      setVoiceSaved(false);
-                      try {
-                        await api.setVoiceChannel(val);
-                        setVoiceSaved(true);
-                        setTimeout(() => setVoiceSaved(false), 2000);
-                      } catch {
-                        // silently fail
-                      } finally {
-                        setSavingVoice(false);
-                      }
-                    }}
-                    className={clsx(
-                      "relative min-h-[44px] w-full flex items-center gap-3 px-3 py-2.5 text-sm text-left transition-colors",
-                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--color-accent)]",
-                      !isLast && "border-b border-[var(--color-border)]",
-                      isSelected
-                        ? "bg-[var(--color-bg-tertiary)]"
-                        : "bg-[var(--color-bg-secondary)] hover:bg-[var(--color-bg-hover)] cursor-pointer",
-                    )}
-                  >
-                    {/* Selection indicator bar */}
-                    <span
-                      className={clsx(
-                        "absolute left-0 top-0 bottom-0 w-0.5 rounded-r-full transition-opacity duration-150",
-                        isSelected
-                          ? "opacity-100 bg-[var(--color-accent)]"
-                          : "opacity-0",
-                      )}
-                    />
-
-                    {/* Icon */}
-                    <span
-                      className={clsx(
-                        "flex-shrink-0 transition-colors",
-                        isNone
-                          ? isSelected
-                            ? "text-[var(--color-text-tertiary)]"
-                            : "text-[var(--color-text-tertiary)]"
-                          : isSelected
-                            ? "text-[var(--color-accent)]"
-                            : "text-[var(--color-text-secondary)]",
-                      )}
-                    >
-                      {isNone ? <MicOff size={15} /> : <Volume2 size={15} />}
-                    </span>
-
-                    {/* Label */}
-                    <span
-                      className={clsx(
-                        "flex-1 truncate",
-                        isNone
-                          ? isSelected
-                            ? "text-[var(--color-text-tertiary)]"
-                            : "text-[var(--color-text-tertiary)]"
-                          : isSelected
-                            ? "text-[var(--color-text)] font-medium"
-                            : "text-[var(--color-text-secondary)]",
-                      )}
-                    >
-                      {ch.name}
-                    </span>
-
-                    {/* Checkmark for selected */}
-                    {isSelected && (
-                      <CheckCircle
-                        size={15}
-                        className="flex-shrink-0 text-[var(--color-accent)]"
-                      />
-                    )}
-                  </button>
-                );
-              })}
-            </div>
+            <Select
+              value={defaultVoiceChannel ?? ""}
+              onChange={async (val) => {
+                setDefaultVoiceChannel(val || null);
+                setSavingVoice(true);
+                setVoiceSaved(false);
+                try {
+                  await api.setVoiceChannel(val);
+                  setVoiceSaved(true);
+                  setTimeout(() => setVoiceSaved(false), 2000);
+                } catch {
+                } finally {
+                  setSavingVoice(false);
+                }
+              }}
+              options={[
+                { value: "", label: "None — manual join only" },
+                ...voiceChannels.map((ch) => ({ value: ch.id, label: ch.name })),
+              ]}
+              placeholder="None — manual join only"
+            />
           ) : (
             <div className="flex items-center gap-2 py-1">
               <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-text-tertiary)] inline-block flex-shrink-0" />
@@ -637,7 +586,156 @@ export function Settings() {
             </div>
           )}
         </div>
-      </section>
+
+        {/* History Channel */}
+        <div className="rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border)] p-4 flex flex-col gap-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-medium text-[var(--color-text)] flex items-center gap-2">
+              <Hash size={16} className="text-[var(--color-accent)]" />
+              History Channel
+              {textChannels.length > 0 && (
+                <span className="flex items-center gap-1 text-xs font-normal text-[var(--color-text-tertiary)]">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-success)] inline-block" />
+                  {textChannels.length} available
+                </span>
+              )}
+            </h3>
+            <span
+              className={clsx(
+                "flex items-center gap-1.5 text-xs transition-opacity duration-300",
+                savingHistory
+                  ? "opacity-100 text-[var(--color-text-tertiary)]"
+                  : historySaved
+                    ? "opacity-100 text-[var(--color-success)]"
+                    : "opacity-0 pointer-events-none",
+              )}
+              aria-live="polite"
+            >
+              {savingHistory ? (
+                <>
+                  <Loader2 size={12} className="animate-spin" />
+                  Saving
+                </>
+              ) : (
+                <>
+                  <CheckCircle size={12} />
+                  Saved
+                </>
+              )}
+            </span>
+          </div>
+
+          <p className="text-xs text-[var(--color-text-tertiary)] -mt-1">
+            Track history embeds will be posted to this channel.
+          </p>
+
+          {textChannels.length > 0 ? (
+            <Select
+              value={historyChannelId ?? ""}
+              onChange={async (val) => {
+                setHistoryChannelId(val || null);
+                setSavingHistory(true);
+                setHistorySaved(false);
+                try {
+                  await api.setHistoryChannel(val);
+                  setHistorySaved(true);
+                  setTimeout(() => setHistorySaved(false), 2000);
+                } catch {
+                } finally {
+                  setSavingHistory(false);
+                }
+              }}
+              options={[
+                { value: "", label: "None — disabled" },
+                ...textChannels.map((ch) => ({
+                  value: ch.id,
+                  label: ch.name,
+                  prefix: "#",
+                })),
+              ]}
+              placeholder="None — disabled"
+            />
+          ) : (
+            <div className="flex items-center gap-2 py-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-text-tertiary)] inline-block flex-shrink-0" />
+              <p className="text-xs text-[var(--color-text-tertiary)]">
+                No text channels available — bot may not be connected yet.
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Timezone */}
+        <div className="rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border)] p-4 flex flex-col gap-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-medium text-[var(--color-text)] flex items-center gap-2">
+              <Globe size={16} className="text-[var(--color-accent)]" />
+              Timezone
+            </h3>
+            <span
+              className={clsx(
+                "flex items-center gap-1.5 text-xs transition-opacity duration-300",
+                savingTz
+                  ? "opacity-100 text-[var(--color-text-tertiary)]"
+                  : tzSaved
+                    ? "opacity-100 text-[var(--color-success)]"
+                    : "opacity-0 pointer-events-none",
+              )}
+              aria-live="polite"
+            >
+              {savingTz ? (
+                <>
+                  <Loader2 size={12} className="animate-spin" />
+                  Saving
+                </>
+              ) : (
+                <>
+                  <CheckCircle size={12} />
+                  Saved
+                </>
+              )}
+            </span>
+          </div>
+
+          <p className="text-xs text-[var(--color-text-tertiary)] -mt-1">
+            Used for stats heatmap and trend date grouping.
+          </p>
+
+          <Select
+            value={timezone}
+            onChange={async (tz) => {
+              setTimezone(tz);
+              setSavingTz(true);
+              setTzSaved(false);
+              try {
+                await api.setTimezone(tz);
+                setTzSaved(true);
+                setTimeout(() => setTzSaved(false), 2000);
+              } catch {
+              } finally {
+                setSavingTz(false);
+              }
+            }}
+            options={[
+              "UTC",
+              "Asia/Seoul",
+              "Asia/Tokyo",
+              "Asia/Shanghai",
+              "Asia/Kolkata",
+              "Europe/London",
+              "Europe/Berlin",
+              "Europe/Paris",
+              "America/New_York",
+              "America/Chicago",
+              "America/Denver",
+              "America/Los_Angeles",
+              "America/Sao_Paulo",
+              "Australia/Sydney",
+              "Pacific/Auckland",
+            ].map((tz) => ({ value: tz, label: tz.replace(/_/g, " ") }))}
+          />
+        </div>
+      </section>}
     </div>
   );
 }
