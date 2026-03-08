@@ -915,26 +915,13 @@ impl PlayerActor {
                         history: self.queue.history().to_vec(),
                     });
                 } else {
-                    // No next track: keep showing the finished track in paused state
-                    // Do NOT broadcast TrackEnded — frontend keeps track info from Paused
-                    let finished_track = match &self.state {
-                        PlayState::Playing { track, .. }
-                        | PlayState::Error { track, .. } => Some(track.clone()),
-                        _ => None,
-                    };
-                    if let Some(track) = finished_track {
-                        let pos = track.duration_ms;
-                        self.state = PlayState::Paused {
-                            track,
-                            position_ms: pos,
-                        };
-                        self.broadcast(PlayerEvent::Paused { position_ms: pos });
-                        self.broadcast(PlayerEvent::HistoryUpdated {
-                            history: self.queue.history().to_vec(),
-                        });
-                    } else {
-                        self.state = PlayState::Idle;
-                    }
+                    // No next track: go idle and notify frontend
+                    self.broadcast(PlayerEvent::TrackEnded { track_id });
+                    self.state = PlayState::Idle;
+                    self.current_added_by = None;
+                    self.broadcast(PlayerEvent::HistoryUpdated {
+                        history: self.queue.history().to_vec(),
+                    });
                 }
             }
         }
