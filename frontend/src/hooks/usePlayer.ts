@@ -77,6 +77,22 @@ export function usePlayer() {
     api.moveInQueue(from, to);
   }, []);
 
+  const playAt = useCallback((position: number) => {
+    const s = usePlayerStore.getState();
+    const entry = s.queue[position];
+    if (entry) {
+      const newQueue = [...s.queue];
+      newQueue.splice(position, 1);
+      s.setQueue(newQueue);
+      s.setPlayState({
+        status: "playing",
+        track: entry.track,
+        position_ms: 0,
+      });
+    }
+    return api.playAt(position);
+  }, []);
+
   return {
     playState,
     volume,
@@ -92,5 +108,6 @@ export function usePlayer() {
     setLoop,
     cycleLoop,
     moveInQueue,
+    playAt,
   };
 }

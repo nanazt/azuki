@@ -252,6 +252,16 @@ pub async fn queue_remove(
     Ok(StatusCode::NO_CONTENT)
 }
 
+pub async fn queue_play_at(
+    jar: CookieJar,
+    State(state): State<WebState>,
+    axum::extract::Path(position): axum::extract::Path<usize>,
+) -> Result<StatusCode, ApiError> {
+    extract_user_id(&jar, &state).await?;
+    state.player.play_at(position).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
 pub async fn queue_move(
     jar: CookieJar,
     State(state): State<WebState>,
@@ -326,6 +336,7 @@ pub fn player_routes() -> axum::Router<WebState> {
         .route("/api/queue/add-track", axum::routing::post(queue_add_track))
         .route("/api/queue/move", axum::routing::put(queue_move))
         .route("/api/queue/{position}", axum::routing::delete(queue_remove))
+        .route("/api/queue/{position}/play", axum::routing::post(queue_play_at))
         .route(
             "/api/settings/bot",
             axum::routing::get(get_bot_settings).put(update_bot_settings),

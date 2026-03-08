@@ -71,6 +71,7 @@ export const api = {
   addToQueue: (query_or_url: string) =>
     post<{ download_id: string }>("/api/queue/add", { query_or_url }),
   removeFromQueue: (position: number) => del<void>(`/api/queue/${position}`),
+  playAt: (position: number) => post<void>(`/api/queue/${position}/play`),
   moveInQueue: (from: number, to: number) => put<void>("/api/queue/move", { from, to }),
 
   // Search

@@ -32,7 +32,7 @@ interface QueuePanelProps {
 
 export function QueuePanel({ onOpenSearch }: QueuePanelProps) {
   const { showToast } = useToast();
-  const { moveInQueue } = usePlayer();
+  const { moveInQueue, playAt } = usePlayer();
   const playState = usePlayerStore((s) => s.playState);
   const queue = usePlayerStore((s) => s.queue);
   const currentAddedBy = usePlayerStore((s) => s.currentAddedBy);
@@ -81,6 +81,18 @@ export function QueuePanel({ onOpenSearch }: QueuePanelProps) {
       }
     },
     [showToast],
+  );
+
+  const handlePlayAt = useCallback(
+    async (position: number) => {
+      try {
+        await playAt(position);
+      } catch (err) {
+        console.error("Failed to play from queue", err);
+        showToast("Failed to play track", "error");
+      }
+    },
+    [playAt, showToast],
   );
 
   return (
@@ -165,6 +177,7 @@ export function QueuePanel({ onOpenSearch }: QueuePanelProps) {
                       entry={entry}
                       index={index}
                       onRemove={handleRemove}
+                      onPlayAt={handlePlayAt}
                     />
                   ))}
                 </div>

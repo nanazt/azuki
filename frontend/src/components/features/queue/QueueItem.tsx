@@ -1,6 +1,6 @@
 import { forwardRef } from "react";
 import clsx from "clsx";
-import { GripVertical, X } from "lucide-react";
+import { GripVertical, Play, X } from "lucide-react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { QueueEntry } from "../../../lib/types";
@@ -11,9 +11,10 @@ interface QueueItemProps {
   entry: QueueEntry;
   index: number;
   onRemove: (index: number) => void;
+  onPlayAt: (index: number) => void;
 }
 
-export function QueueItem({ entry, index, onRemove }: QueueItemProps) {
+export function QueueItem({ entry, index, onRemove, onPlayAt }: QueueItemProps) {
   const {
     attributes,
     listeners,
@@ -34,6 +35,7 @@ export function QueueItem({ entry, index, onRemove }: QueueItemProps) {
       entry={entry}
       index={index}
       onRemove={onRemove}
+      onPlayAt={onPlayAt}
       isDragging={isDragging}
       style={style}
       dragHandleProps={{ ...attributes, ...listeners }}
@@ -45,6 +47,7 @@ interface QueueItemContentProps {
   entry: QueueEntry;
   index: number;
   onRemove: (index: number) => void;
+  onPlayAt?: (index: number) => void;
   isDragging?: boolean;
   isOverlay?: boolean;
   style?: React.CSSProperties;
@@ -53,7 +56,7 @@ interface QueueItemContentProps {
 
 export const QueueItemContent = forwardRef<HTMLDivElement, QueueItemContentProps>(
   function QueueItemContent(
-    { entry, index, onRemove, isDragging, isOverlay, style, dragHandleProps },
+    { entry, index, onRemove, onPlayAt, isDragging, isOverlay, style, dragHandleProps },
     ref,
   ) {
     const { track, added_by } = entry;
@@ -114,17 +117,33 @@ export const QueueItemContent = forwardRef<HTMLDivElement, QueueItemContentProps
           </div>
         </div>
         {!isOverlay && (
-          <button
-            onClick={() => onRemove(index)}
-            className={clsx(
-              "flex-shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center rounded text-[var(--color-text-tertiary)]",
-              "opacity-0 group-hover:opacity-100 hover:text-[var(--color-danger)] hover:bg-[var(--color-bg-tertiary)]",
-              "transition-all duration-100 cursor-pointer touch-manipulation",
+          <div className="flex items-center">
+            {onPlayAt && (
+              <button
+                onClick={() => onPlayAt(index)}
+                className={clsx(
+                  "flex-shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center rounded text-[var(--color-text-tertiary)]",
+                  "opacity-0 group-hover:opacity-100 [@media(hover:none)]:opacity-100",
+                  "hover:text-[var(--color-accent)] hover:bg-[var(--color-bg-tertiary)]",
+                  "transition-all duration-100 cursor-pointer touch-manipulation",
+                )}
+                aria-label={`Play ${track.title} now`}
+              >
+                <Play size={14} fill="currentColor" />
+              </button>
             )}
-            aria-label={`Remove ${track.title} from queue`}
-          >
-            <X size={14} />
-          </button>
+            <button
+              onClick={() => onRemove(index)}
+              className={clsx(
+                "flex-shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center rounded text-[var(--color-text-tertiary)]",
+                "opacity-0 group-hover:opacity-100 hover:text-[var(--color-danger)] hover:bg-[var(--color-bg-tertiary)]",
+                "transition-all duration-100 cursor-pointer touch-manipulation",
+              )}
+              aria-label={`Remove ${track.title} from queue`}
+            >
+              <X size={14} />
+            </button>
+          </div>
         )}
       </div>
     );

@@ -59,6 +59,10 @@ pub enum PlayerCommand {
         position: usize,
         reply: oneshot::Sender<Result<(), PlayerError>>,
     },
+    PlayAt {
+        position: usize,
+        reply: oneshot::Sender<Result<(), PlayerError>>,
+    },
     MoveInQueue {
         from: usize,
         to: usize,
@@ -277,6 +281,13 @@ impl PlayerController {
     pub async fn remove(&self, position: usize) -> Result<(), PlayerError> {
         let (tx, rx) = oneshot::channel();
         self.send_cmd(PlayerCommand::Remove { position, reply: tx })
+            .await;
+        rx.await.unwrap_or(Err(PlayerError::NoTrack))
+    }
+
+    pub async fn play_at(&self, position: usize) -> Result<(), PlayerError> {
+        let (tx, rx) = oneshot::channel();
+        self.send_cmd(PlayerCommand::PlayAt { position, reply: tx })
             .await;
         rx.await.unwrap_or(Err(PlayerError::NoTrack))
     }
@@ -764,6 +775,54 @@ impl PlayerActor {
                     }
                 }
                 let _ = reply.send(Ok(()));
+            }
+
+            PlayerCommand::PlayAt { position, reply } => {
+                if let Some(entry) = self.queue.remove(position) {
+                    // If a track is currently playing/loaded, end it and push to history
+                    let current_entry = match &self.state {
+                        PlayState::Playing { track, .. }
+                        | PlayState::Paused { track, .. }
+                        | PlayState::Loading { track }
+                        | PlayState::Error { track, .. } => Some(QueueEntry {
+                            track: track.clone(),
+                            added_by: self.current_added_by.clone().unwrap_or_else(UserInfo::unknown),
+                        }),
+                        PlayState::Idle => None,
+                    };
+
+                    if let Some(ref cur) = current_entry {
+                        self.broadcast(PlayerEvent::TrackEnded {
+                            track_id: cur.track.id.clone(),
+                        });
+                        self.queue.push_to_history(cur.clone());
+                    }
+
+                    self.current_added_by = Some(entry.added_by.clone());
+                    self.volume = entry.track.volume;
+                    let added_by = entry.added_by;
+                    let track = entry.track;
+                    self.state = PlayState::Playing {
+                        track: track.clone(),
+                        started_at: Instant::now(),
+                        position_ms: 0,
+                    };
+                    self.broadcast(PlayerEvent::TrackStarted {
+                        track,
+                        position_ms: 0,
+                        added_by,
+                    });
+                    self.broadcast(PlayerEvent::VolumeChanged { volume: self.volume });
+                    self.broadcast(PlayerEvent::QueueUpdated {
+                        queue: self.queue.items(),
+                    });
+                    self.broadcast(PlayerEvent::HistoryUpdated {
+                        history: self.queue.history().to_vec(),
+                    });
+                    let _ = reply.send(Ok(()));
+                } else {
+                    let _ = reply.send(Err(PlayerError::InvalidPosition));
+                }
             }
 
             PlayerCommand::Remove { position, reply } => {
