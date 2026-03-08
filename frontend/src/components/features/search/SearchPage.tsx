@@ -102,7 +102,7 @@ export function SearchPage() {
   const hasQuery = query.trim().length > 0;
 
   return (
-    <div className="flex flex-col h-full bg-[var(--color-bg-secondary)]">
+    <div className="flex flex-col h-full">
       {/* Search header */}
       <div className="px-4 pt-4 pb-3 border-b border-[var(--color-border)]">
         <div className="relative">
