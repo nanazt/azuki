@@ -269,7 +269,7 @@ pub async fn queue_move(
 ) -> Result<StatusCode, ApiError> {
     extract_user_id(&jar, &state).await?;
     state.player.move_in_queue(body.from, body.to).await?;
-    Ok(StatusCode::OK)
+    Ok(StatusCode::NO_CONTENT)
 }
 
 #[derive(serde::Serialize)]

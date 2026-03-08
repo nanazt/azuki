@@ -1,9 +1,11 @@
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { ListMusic, Search, Loader2 } from "lucide-react";
 import {
   DndContext,
   closestCenter,
   PointerSensor,
+  TouchSensor,
+  KeyboardSensor,
   useSensor,
   useSensors,
   type DragEndEvent,
@@ -13,7 +15,9 @@ import {
 import {
   SortableContext,
   verticalListSortingStrategy,
+  sortableKeyboardCoordinates,
 } from "@dnd-kit/sortable";
+import { restrictToVerticalAxis, restrictToParentElement } from "@dnd-kit/modifiers";
 import { usePlayerStore } from "../../../stores/playerStore";
 import {
   useDownloadStore,
@@ -48,14 +52,23 @@ export function QueuePanel({ onOpenSearch }: QueuePanelProps) {
     useSensor(PointerSensor, {
       activationConstraint: { distance: 5 },
     }),
+    useSensor(TouchSensor, {
+      activationConstraint: { delay: 150, tolerance: 5 },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
   );
 
-  const sortableIds = queue.map((_, i) => `queue-${i}`);
+  const sortableIds = useMemo(
+    () => queue.map((entry, i) => `${entry.track.id}::${i}`),
+    [queue],
+  );
+
+  const parseIndex = (id: string) => parseInt(id.split("::")[1], 10);
 
   const handleDragStart = useCallback((event: DragStartEvent) => {
-    const id = event.active.id as string;
-    const idx = parseInt(id.replace("queue-", ""), 10);
-    setActiveIndex(idx);
+    setActiveIndex(parseIndex(event.active.id as string));
   }, []);
 
   const handleDragEnd = useCallback(
@@ -63,9 +76,7 @@ export function QueuePanel({ onOpenSearch }: QueuePanelProps) {
       setActiveIndex(null);
       const { active, over } = event;
       if (!over || active.id === over.id) return;
-      const oldIndex = parseInt((active.id as string).replace("queue-", ""), 10);
-      const newIndex = parseInt((over.id as string).replace("queue-", ""), 10);
-      moveInQueue(oldIndex, newIndex);
+      moveInQueue(parseIndex(active.id as string), parseIndex(over.id as string));
     },
     [moveInQueue],
   );
@@ -163,6 +174,7 @@ export function QueuePanel({ onOpenSearch }: QueuePanelProps) {
             <DndContext
               sensors={sensors}
               collisionDetection={closestCenter}
+              modifiers={[restrictToVerticalAxis, restrictToParentElement]}
               onDragStart={handleDragStart}
               onDragEnd={handleDragEnd}
             >

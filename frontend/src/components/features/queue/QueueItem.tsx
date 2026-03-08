@@ -22,7 +22,7 @@ export function QueueItem({ entry, index, onRemove, onPlayAt }: QueueItemProps) 
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: `queue-${index}` });
+  } = useSortable({ id: `${entry.track.id}::${index}` });
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -66,31 +66,35 @@ export const QueueItemContent = forwardRef<HTMLDivElement, QueueItemContentProps
         ref={ref}
         style={style}
         className={clsx(
-          "flex items-center gap-2 px-3 py-2 rounded-lg",
+          "flex items-center py-2 rounded-lg",
           "hover:bg-[var(--color-bg-hover)] transition-colors duration-100 group",
           isDragging && "opacity-30",
           isOverlay &&
             "bg-[var(--color-bg-tertiary)] border border-[var(--color-border)] rounded-lg shadow-xl opacity-95",
         )}
       >
-        <button
-          type="button"
+        <div
           className={clsx(
-            "flex-shrink-0 flex items-center justify-center w-5 text-[var(--color-text-tertiary)]",
-            "opacity-40 group-hover:opacity-100 cursor-grab active:cursor-grabbing touch-none",
-            "[@media(hover:none)]:opacity-100",
+            "flex items-center gap-2 pl-3 min-w-0 flex-1 cursor-grab active:cursor-grabbing touch-none",
           )}
           {...dragHandleProps}
         >
-          <GripVertical size={14} />
-        </button>
-        <TrackThumbnail
-          track={track}
-          sizeClass="w-9 h-9"
-          iconSize={14}
-          className="rounded"
-        />
-        <div className="min-w-0 flex-1">
+          <div
+            className={clsx(
+              "flex-shrink-0 flex items-center justify-center w-5 text-[var(--color-text-tertiary)]",
+              "opacity-40 group-hover:opacity-100",
+              "[@media(hover:none)]:opacity-100",
+            )}
+          >
+            <GripVertical size={14} />
+          </div>
+          <TrackThumbnail
+            track={track}
+            sizeClass="w-9 h-9"
+            iconSize={14}
+            className="rounded"
+          />
+          <div className="min-w-0 flex-1">
           <div className="text-sm text-[var(--color-text)] truncate font-medium">
             {track.title}
           </div>
@@ -115,9 +119,10 @@ export const QueueItemContent = forwardRef<HTMLDivElement, QueueItemContentProps
               </>
             )}
           </div>
+          </div>
         </div>
         {!isOverlay && (
-          <div className="flex items-center">
+          <div className="flex items-center pr-1">
             {onPlayAt && (
               <button
                 onClick={() => onPlayAt(index)}
