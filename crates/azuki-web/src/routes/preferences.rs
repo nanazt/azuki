@@ -39,8 +39,10 @@ async fn update_preferences(
 
     let theme = body.theme.as_deref().unwrap_or(&current.theme);
 
-    if theme != "dark" {
-        return Err(ApiError::BadRequest("theme must be dark".into()));
+    if !matches!(theme, "dark" | "light" | "system") {
+        return Err(ApiError::BadRequest(
+            "theme must be dark, light, or system".into(),
+        ));
     }
 
     let prefs = azuki_db::queries::preferences::upsert_user_preferences(

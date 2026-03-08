@@ -40,7 +40,7 @@ export function SearchResult({ track, onAdd, adding = false }: SearchResultProps
           "transition-all duration-150 cursor-pointer",
           adding
             ? "bg-[var(--color-bg-tertiary)] text-[var(--color-text-tertiary)] cursor-not-allowed"
-            : "bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] text-white opacity-0 group-hover:opacity-100"
+            : "bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] text-[#1a1a1a] opacity-0 group-hover:opacity-100"
         )}
         aria-label={`Add ${track.title} to queue`}
       >

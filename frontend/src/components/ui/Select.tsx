@@ -118,7 +118,7 @@ export function Select({
           {selected ? (
             <>
               {selected.prefix && (
-                <span className="text-[var(--color-accent)]">{selected.prefix}</span>
+                <span className="text-[var(--color-text-secondary)]">{selected.prefix}</span>
               )}
               {selected.label}
             </>
@@ -192,7 +192,7 @@ export function Select({
                     <span
                       className={clsx(
                         isSelected
-                          ? "text-[var(--color-accent)]"
+                          ? "text-[var(--color-text)]"
                           : "text-[var(--color-text-tertiary)]",
                       )}
                     >
@@ -206,7 +206,7 @@ export function Select({
                 {isSelected && (
                   <Check
                     size={13}
-                    className="flex-shrink-0 text-[var(--color-accent)]"
+                    className="flex-shrink-0 text-[var(--color-text)]"
                   />
                 )}
               </button>

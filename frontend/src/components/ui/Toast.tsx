@@ -9,7 +9,7 @@ export { ToastProvider, useToast } from "../../hooks/useToast";
 const iconMap: Record<ToastType, React.ReactNode> = {
   success: <CheckCircle size={16} className="text-[var(--color-success)] flex-shrink-0" />,
   error: <XCircle size={16} className="text-[var(--color-danger)] flex-shrink-0" />,
-  info: <Info size={16} className="text-[var(--color-accent)] flex-shrink-0" />,
+  info: <Info size={16} className="text-[var(--color-text-secondary)] flex-shrink-0" />,
 };
 
 function RichPreviewSkeleton() {
@@ -89,7 +89,7 @@ function ToastItem({ toast, onRemove }: { toast: ToastData; onRemove: () => void
           <div className="flex items-center gap-2">
             <button
               onClick={toast.action.onClick}
-              className="px-3 py-1.5 text-xs font-medium rounded-md bg-[var(--color-accent)] text-white hover:opacity-90 transition-opacity touch-manipulation min-h-[44px] sm:min-h-0"
+              className="px-3 py-1.5 text-xs font-medium rounded-md bg-[var(--color-accent)] text-[#1a1a1a] hover:opacity-90 transition-opacity touch-manipulation min-h-[44px] sm:min-h-0"
             >
               {toast.action.label}
             </button>

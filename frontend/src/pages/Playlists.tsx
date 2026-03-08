@@ -169,7 +169,7 @@ export function Playlists() {
                     <button
                       onClick={() => handleAddTrack(entry)}
                       disabled={addingIds.has(entry.track.id)}
-                      className="p-1.5 rounded-lg text-[var(--color-text-tertiary)] hover:text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 transition-colors disabled:opacity-50"
+                      className="p-1.5 rounded-lg text-[var(--color-text-tertiary)] hover:text-[var(--color-text)] hover:bg-[var(--color-bg-hover)] transition-colors disabled:opacity-50"
                       aria-label="Add to queue"
                     >
                       {addingIds.has(entry.track.id) ? <Loader2 size={15} className="animate-spin" /> : <Plus size={15} />}
@@ -222,7 +222,7 @@ export function Playlists() {
                   className="flex items-center gap-3 flex-1 min-w-0 text-left"
                 >
                   <div className="w-10 h-10 rounded-lg bg-[var(--color-accent)]/20 flex items-center justify-center flex-shrink-0">
-                    <ListMusic size={18} className="text-[var(--color-accent)]" />
+                    <ListMusic size={18} className="text-[var(--color-text-secondary)]" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-[var(--color-text)] truncate">{pl.name}</p>

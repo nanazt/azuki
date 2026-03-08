@@ -120,7 +120,7 @@ export function QueuePanel({ onOpenSearch }: QueuePanelProps) {
         {currentTrack && (
           <div className="mb-3">
             <div className="px-4 py-1">
-              <span className="text-xs font-semibold uppercase tracking-wider text-[var(--color-accent)]">
+              <span className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">
                 Now Playing
               </span>
             </div>
@@ -218,7 +218,7 @@ export function QueuePanel({ onOpenSearch }: QueuePanelProps) {
             {onOpenSearch && (
               <button
                 onClick={onOpenSearch}
-                className="flex items-center gap-1.5 text-xs text-[var(--color-accent)] hover:text-[var(--color-accent-hover)] transition-colors cursor-pointer"
+                className="flex items-center gap-1.5 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors cursor-pointer"
               >
                 <Search size={12} />
                 Search for music

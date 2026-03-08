@@ -1,8 +1,36 @@
 # azuki Design System
 
-## Color Palette (Dark-only)
+## Theme System
 
-### Background Elevation (dark → light)
+azuki supports **Dark**, **Light**, and **System** (auto) themes.
+
+### Mechanism
+- CSS variables defined in `@theme` block (dark defaults) + `.light` class overrides in `index.css`
+- FOUC prevention: inline `<script>` in `index.html` reads `localStorage('azuki-theme')` before paint
+- `useTheme()` hook: manages state, OS media query listener, localStorage + server sync
+- All components use `bg-[var(--color-…)]` / `text-[var(--color-…)]` patterns — **never** hardcode Tailwind color classes for themed elements
+
+### Rule
+New colors must be defined in **both** themes. Use `var(--color-…)` CSS variables exclusively.
+
+---
+
+## Color Palette
+
+### Accent (both modes identical)
+
+| Token | Value | Usage |
+|-------|-------|-------|
+| --color-accent | #FFB7C9 | Sakura pink — buttons, sliders, borders |
+| --color-accent-hover | #FF9DB5 | Slightly deeper on hover |
+
+**Pink = surface only** — accent is used for backgrounds, borders, and decorative elements. Never use pink as a text color. Use `text-[var(--color-text)]` or `text-[var(--color-text-secondary)]` for text on any background.
+
+**Text on accent backgrounds**: Always use `text-[#1a1a1a]` (dark text) for readable contrast on pastel pink.
+
+### Dark Mode (default)
+
+#### Background Elevation (dark → light)
 | Token | Value | Usage |
 |-------|-------|-------|
 | --color-bg | #0f0f0f | Page background, AppShell base |
@@ -10,21 +38,45 @@
 | --color-bg-tertiary | #252525 | Icon backgrounds, button backgrounds |
 | --color-bg-hover | #2a2a2a | List row/button hover |
 
-### Text (light → dark)
+#### Text (light → dark)
 | Token | Value | Usage |
 |-------|-------|-------|
 | --color-text | #e5e5e5 | Titles, body text |
 | --color-text-secondary | #999 | Subtitles, artist names |
 | --color-text-tertiary | #666 | Hints, timestamps, meta info |
 
-### Accent & Semantic
+#### Semantic
 | Token | Value | Usage |
 |-------|-------|-------|
-| --color-accent | #7c5cff | Active tab, CTA, emphasis |
-| --color-accent-hover | #6a4de6 | Accent hover state |
 | --color-border | #333 | Dividers, card borders |
 | --color-danger | #e53e3e | Delete, error |
 | --color-success | #38a169 | Connection status, success |
+
+### Light Mode
+
+#### Background Elevation
+| Token | Value | Usage |
+|-------|-------|-------|
+| --color-bg | #fafafa | Page background |
+| --color-bg-secondary | #f2f2f2 | Sidebar, cards |
+| --color-bg-tertiary | #e8e8e8 | Icon backgrounds |
+| --color-bg-hover | #e0e0e0 | Hover state |
+
+#### Text
+| Token | Value | Usage |
+|-------|-------|-------|
+| --color-text | #111111 | Titles, body text |
+| --color-text-secondary | #555555 | Subtitles |
+| --color-text-tertiary | #888888 | Hints, meta info |
+
+#### Semantic
+| Token | Value | Usage |
+|-------|-------|-------|
+| --color-border | #d4d4d4 | Dividers, card borders |
+| --color-danger | #c53030 | Delete, error |
+| --color-success | #276749 | Success |
+
+---
 
 ## Typography
 
@@ -77,9 +129,16 @@ px-3 py-2 rounded-lg hover:bg-[var(--color-bg-hover)] transition-colors group
 - Mobile: `[@media(hover:none)]:opacity-100`
 
 ### Buttons
-- **Primary**: `bg-[var(--color-accent)] text-white hover:opacity-90`
+- **Primary**: `bg-[var(--color-accent)] text-[#1a1a1a] hover:opacity-90` (dark text on pastel accent)
 - **Ghost**: `text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover)]`
 - **Danger**: `text-[var(--color-danger)] hover:bg-[var(--color-danger)]/10`
+
+### Active state (toggle buttons, tabs)
+Use background tint instead of text color:
+```
+bg-[var(--color-accent)]/20 rounded-lg text-[var(--color-text)]
+```
+Never use `text-[var(--color-accent)]` for active states.
 
 ### Border radius
 | Size | Usage |
@@ -89,6 +148,19 @@ px-3 py-2 rounded-lg hover:bg-[var(--color-bg-hover)] transition-colors group
 | rounded-xl | Cards, section blocks |
 | rounded-2xl | Modals, login card |
 | rounded-full | Chips, avatars |
+
+## Heatmap Palette
+
+6-step gradient (both modes identical, `empty` = `--color-bg-tertiary`):
+
+| Level | Color | Meaning |
+|-------|-------|---------|
+| 0 | var(--color-bg-tertiary) | No activity |
+| 1 | #FFD4E0 | Low |
+| 2 | #FFB7C9 | Medium |
+| 3 | #FF9DB5 | High |
+| 4 | #FF82A0 | Very high |
+| 5 | #FF6B8A | Maximum |
 
 ## Touch & Accessibility
 
@@ -104,4 +176,4 @@ px-3 py-2 rounded-lg hover:bg-[var(--color-bg-hover)] transition-colors group
 
 ## Scrollbar
 
-Custom webkit: 6px width, `--color-border` thumb, transparent track
+Custom webkit: 6px width, `--color-border` thumb (dark), `#b0b0b0` thumb (light), transparent track

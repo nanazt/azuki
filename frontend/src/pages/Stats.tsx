@@ -35,8 +35,8 @@ function StatChip({
   icon?: React.ReactNode;
 }) {
   return (
-    <div className="flex items-center gap-1.5 px-3 py-2 rounded-full bg-[var(--color-bg-secondary)] border border-[#404040] whitespace-nowrap">
-      {icon && <span className="text-[var(--color-accent)]/70">{icon}</span>}
+    <div className="flex items-center gap-1.5 px-3 py-2 rounded-full bg-[var(--color-bg-secondary)] border border-[var(--color-border)] whitespace-nowrap">
+      {icon && <span className="text-[var(--color-text-secondary)]">{icon}</span>}
       <span className="text-sm font-semibold text-[var(--color-text)] tabular-nums leading-none">{value}</span>
       <span className="text-xs text-[var(--color-text-tertiary)] leading-none">{label}</span>
     </div>
@@ -45,8 +45,17 @@ function StatChip({
 
 // ─── Contribution Heatmap ───
 
-const HEATMAP_EMPTY = "#242424";
-const HEATMAP_COLORS = ["#1a1a24", "#2a1f5e", "#3d2a8a", "#5a3fc7", "#7c5cff"];
+const HEATMAP_COLORS = {
+  empty: "var(--color-bg-tertiary)",
+  colors: [
+    "var(--color-bg-tertiary)",
+    "#FFD4E0",
+    "#FFB7C9",
+    "#FF9DB5",
+    "#FF82A0",
+    "#FF6B8A",
+  ],
+};
 const DOW_LABELS = ["Mon", "", "Wed", "", "Fri", "", "Sun"];
 const MONTH_LABELS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
@@ -55,6 +64,7 @@ function ContributionHeatmap({
 }: {
   data: { date: string; listened_ms: number }[];
 }) {
+  const heatmap = HEATMAP_COLORS;
   const containerRef = useRef<HTMLDivElement>(null);
   const [tooltip, setTooltip] = useState<{ x: number; y: number; text: string } | null>(null);
   const [cellSize, setCellSize] = useState(11);
@@ -93,12 +103,13 @@ function ContributionHeatmap({
   // Color scale
   const maxMs = Math.max(...data.map((d) => d.listened_ms), 1);
   const getColor = (ms: number) => {
-    if (ms === 0) return HEATMAP_EMPTY;
+    if (ms === 0) return heatmap.empty;
     const ratio = ms / maxMs;
-    if (ratio < 0.25) return HEATMAP_COLORS[1];
-    if (ratio < 0.5) return HEATMAP_COLORS[2];
-    if (ratio < 0.75) return HEATMAP_COLORS[3];
-    return HEATMAP_COLORS[4];
+    if (ratio < 0.2) return heatmap.colors[1];
+    if (ratio < 0.4) return heatmap.colors[2];
+    if (ratio < 0.6) return heatmap.colors[3];
+    if (ratio < 0.8) return heatmap.colors[4];
+    return heatmap.colors[5];
   };
 
   // Month labels
@@ -200,7 +211,9 @@ function ContributionHeatmap({
                           width: cellSize,
                           height: cellSize,
                           backgroundColor: getColor(cell.ms),
-                          outline: cell.dateStr === todayStr ? "1px solid rgba(124, 92, 255, 0.5)" : "none",
+                          outline: cell.dateStr === todayStr
+                            ? "1px solid rgba(255, 183, 201, 0.5)"
+                            : "none",
                           outlineOffset: "1px",
                         }}
                         onMouseEnter={(e) => {
@@ -227,7 +240,7 @@ function ContributionHeatmap({
         {/* Legend */}
         <div className="flex items-center gap-1.5 justify-end mt-1">
           <span className="text-[10px] text-[var(--color-text-tertiary)]">Less</span>
-          {[HEATMAP_EMPTY, ...HEATMAP_COLORS.slice(1)].map((c, i) => (
+          {heatmap.colors.map((c, i) => (
             <div key={i} style={{ width: 8, height: 8, borderRadius: 2, backgroundColor: c }} />
           ))}
           <span className="text-[10px] text-[var(--color-text-tertiary)]">More</span>
@@ -255,6 +268,7 @@ function ContributionHeatmap({
 function TrendChart({ data }: { data: { date: string; play_count: number }[] }) {
   if (data.length === 0) return null;
 
+  const accent = "#FFB7C9";
   const maxCount = Math.max(...data.map((d) => d.play_count), 1);
   const w = 100;
   const h = 40;
@@ -282,15 +296,15 @@ function TrendChart({ data }: { data: { date: string; play_count: number }[] }) 
       <svg viewBox={`0 0 ${w} ${h + 12}`} className="w-full h-40">
         <defs>
           <linearGradient id="trendFill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#7c5cff" stopOpacity={0.3} />
-            <stop offset="100%" stopColor="#7c5cff" stopOpacity={0.02} />
+            <stop offset="0%" stopColor={accent} stopOpacity={0.25} />
+            <stop offset="100%" stopColor={accent} stopOpacity={0.02} />
           </linearGradient>
         </defs>
         <path d={areaPath} fill="url(#trendFill)" />
-        <path d={linePath} fill="none" stroke="#7c5cff" strokeWidth="0.5" />
+        <path d={linePath} fill="none" stroke={accent} strokeWidth="0.5" />
         {points.map((p, i) => (
           <g key={i}>
-            <circle cx={p.x} cy={p.y} r="0.8" fill="#7c5cff" opacity={0.6} />
+            <circle cx={p.x} cy={p.y} r="0.8" fill={accent} opacity={0.6} />
             <title>{`${p.date}: ${p.play_count} plays`}</title>
             <rect
               x={p.x - 1.5}
@@ -561,7 +575,7 @@ export function Stats() {
         </p>
         <button
           onClick={fetchStats}
-          className="px-4 py-2 rounded-lg bg-[var(--color-accent)] text-white text-sm hover:opacity-90 transition-opacity"
+          className="px-4 py-2 rounded-lg bg-[var(--color-accent)] text-[#1a1a1a] text-sm hover:opacity-90 transition-opacity"
         >
           Retry
         </button>
@@ -640,7 +654,7 @@ export function Stats() {
               onClick={() => setActiveTab("tracks")}
               className={`flex-1 py-3 text-sm font-medium text-center transition-colors ${
                 activeTab === "tracks"
-                  ? "text-[var(--color-accent)]"
+                  ? "text-[var(--color-text)]"
                   : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"
               }`}
             >
@@ -650,7 +664,7 @@ export function Stats() {
               onClick={() => setActiveTab("artists")}
               className={`flex-1 py-3 text-sm font-medium text-center transition-colors ${
                 activeTab === "artists"
-                  ? "text-[var(--color-accent)]"
+                  ? "text-[var(--color-text)]"
                   : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"
               }`}
             >

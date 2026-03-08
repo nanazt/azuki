@@ -163,7 +163,7 @@ function UploadRow({
               disabled={adding}
               className={clsx(
                 "p-2 rounded-md transition-colors touch-manipulation min-w-[44px] min-h-[44px] flex items-center justify-center",
-                "text-[var(--color-text-tertiary)] hover:text-[var(--color-accent)] hover:bg-[var(--color-bg-tertiary)]",
+                "text-[var(--color-text-tertiary)] hover:text-[var(--color-text)] hover:bg-[var(--color-bg-tertiary)]",
               )}
               aria-label="Add to queue"
             >

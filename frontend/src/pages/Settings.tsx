@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from "react";
 import { api } from "../lib/api";
 import { useAuthStore } from "../stores/authStore";
+import { useTheme } from "../hooks/useTheme";
 import { Skeleton } from "../components/ui/Skeleton";
 import { Slider } from "../components/ui/Slider";
 import { Select } from "../components/ui";
@@ -16,10 +17,6 @@ import {
   Globe,
 } from "lucide-react";
 import clsx from "clsx";
-
-interface Preferences {
-  theme: string;
-}
 
 function SegmentedControl({
   options,
@@ -46,7 +43,7 @@ function SegmentedControl({
           className={clsx(
             "flex-1 py-2.5 min-h-[44px] text-sm font-medium transition-colors",
             value === opt.value
-              ? "bg-[var(--color-accent)] text-white"
+              ? "bg-[var(--color-accent)] text-[#1a1a1a]"
               : opt.disabled
                 ? "bg-[var(--color-bg-secondary)] text-[var(--color-text-tertiary)] opacity-50 cursor-not-allowed"
                 : "bg-[var(--color-bg-secondary)] text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover)] cursor-pointer",
@@ -63,10 +60,10 @@ function SegmentedControl({
 export function Settings() {
   const logout = useAuthStore((s) => s.logout);
   const isAdmin = useAuthStore((s) => s.isAdmin);
+  const { theme, setTheme } = useTheme();
 
-  // Preferences state
-  const [prefs, setPrefs] = useState<Preferences | null>(null);
-  const [prefsLoading, setPrefsLoading] = useState(true);
+  // Preferences state (loading gate only)
+  const [prefsLoaded, setPrefsLoaded] = useState(false);
 
   // Admin state
   const [ytInfo, setYtInfo] = useState<{
@@ -130,13 +127,8 @@ export function Settings() {
     api
       .getMe()
       .then(setMe)
-      .catch(() => {});
-    api
-      .getPreferences()
-      .then(setPrefs)
       .catch(() => {})
-      .finally(() => setPrefsLoading(false));
-
+      .finally(() => setPrefsLoaded(true));
     api
       .getYtdlpInfo()
       .then(setInfo)
@@ -206,7 +198,7 @@ export function Settings() {
     await logout();
   };
 
-  if (prefsLoading && adminLoading) {
+  if (!prefsLoaded && adminLoading) {
     return (
       <div className="p-4 md:p-6 max-w-3xl mx-auto flex flex-col gap-8 pb-32 md:pb-6">
         <Skeleton className="h-8 w-40 rounded" />
@@ -219,7 +211,7 @@ export function Settings() {
   return (
     <div className="p-4 md:p-6 max-w-3xl mx-auto flex flex-col gap-10 pb-32 md:pb-6">
       <h1 className="text-lg font-semibold text-[var(--color-text)] flex items-center gap-2">
-        <SettingsIcon size={20} className="text-[var(--color-accent)]" />
+        <SettingsIcon size={20} className="text-[var(--color-text-secondary)]" />
         Settings
       </h1>
 
@@ -256,7 +248,7 @@ export function Settings() {
             <button
               onClick={handleLogout}
               disabled={loggingOut}
-              className="hidden md:flex min-h-[44px] px-4 py-2 rounded-lg text-sm font-medium text-red-400 border border-[var(--color-border)] hover:bg-[var(--color-bg-hover)] transition-colors items-center gap-2 cursor-pointer disabled:opacity-50"
+              className="hidden md:flex min-h-[44px] px-4 py-2 rounded-lg text-sm font-medium text-[var(--color-danger)] border border-[var(--color-border)] hover:bg-[var(--color-bg-hover)] transition-colors items-center gap-2 cursor-pointer disabled:opacity-50"
             >
               {loggingOut ? (
                 <Loader2 size={16} className="animate-spin" />
@@ -270,7 +262,7 @@ export function Settings() {
           <button
             onClick={handleLogout}
             disabled={loggingOut}
-            className="md:hidden min-h-[44px] w-full px-4 py-2 rounded-lg text-sm font-medium text-red-400 border border-[var(--color-border)] hover:bg-[var(--color-bg-hover)] transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+            className="md:hidden min-h-[44px] w-full px-4 py-2 rounded-lg text-sm font-medium text-[var(--color-danger)] border border-[var(--color-border)] hover:bg-[var(--color-bg-hover)] transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
           >
             {loggingOut ? (
               <Loader2 size={16} className="animate-spin" />
@@ -294,11 +286,11 @@ export function Settings() {
           <SegmentedControl
             options={[
               { value: "dark", label: "Dark" },
-              { value: "light", label: "Light (soon)", disabled: true },
-              { value: "system", label: "System (soon)", disabled: true },
+              { value: "light", label: "Light" },
+              { value: "system", label: "System" },
             ]}
-            value={prefs?.theme ?? "dark"}
-            onChange={() => {}}
+            value={theme}
+            onChange={setTheme}
           />
         </div>
       </section>
@@ -313,7 +305,7 @@ export function Settings() {
         <div className="rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border)] p-4 flex flex-col gap-4">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-medium text-[var(--color-text)] flex items-center gap-2">
-              <Volume2 size={16} className="text-[var(--color-accent)]" />
+              <Volume2 size={16} className="text-[var(--color-text-secondary)]" />
               Default Volume
             </h3>
             <span
@@ -383,7 +375,7 @@ export function Settings() {
           {/* Header row */}
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-medium text-[var(--color-text)] flex items-center gap-2">
-              <Mic size={16} className="text-[var(--color-accent)]" />
+              <Mic size={16} className="text-[var(--color-text-secondary)]" />
               Default Voice Channel
               {voiceChannels.length > 0 && (
                 <span className="flex items-center gap-1 text-xs font-normal text-[var(--color-text-tertiary)]">
@@ -489,7 +481,7 @@ export function Settings() {
               <span className="text-sm text-[var(--color-text-secondary)]">
                 Latest version
               </span>
-              <span className="font-mono text-sm text-[var(--color-accent)]">
+              <span className="font-mono text-sm text-[var(--color-text)]">
                 {latest.latest_version}
               </span>
             </div>
@@ -500,20 +492,20 @@ export function Settings() {
               <button
                 onClick={handleUpdate}
                 disabled={updating}
-                className="min-h-[44px] px-4 py-2 rounded-lg text-sm font-medium bg-[var(--color-accent)] text-white hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer"
+                className="min-h-[44px] px-4 py-2 rounded-lg text-sm font-medium bg-[var(--color-accent)] text-[#1a1a1a] hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer"
               >
                 {updating && <Loader2 size={16} className="animate-spin" />}
                 Update to {latest.latest_version}
               </button>
             ) : (
-              <div className="flex items-center gap-2 text-sm text-green-400">
+              <div className="flex items-center gap-2 text-sm text-[var(--color-success)]">
                 <CheckCircle size={16} />
                 Up to date
               </div>
             ))}
 
           {adminError && (
-            <div className="flex items-center gap-2 text-sm text-red-400">
+            <div className="flex items-center gap-2 text-sm text-[var(--color-danger)]">
               <AlertCircle size={16} className="flex-shrink-0" />
               {adminError}
             </div>
@@ -565,7 +557,7 @@ export function Settings() {
                 }
               }}
               disabled={savingKey || !newKey.trim()}
-              className="min-h-[44px] px-4 py-2 rounded-lg text-sm font-medium bg-[var(--color-accent)] text-white hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 cursor-pointer"
+              className="min-h-[44px] px-4 py-2 rounded-lg text-sm font-medium bg-[var(--color-accent)] text-[#1a1a1a] hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 cursor-pointer"
             >
               {savingKey && <Loader2 size={16} className="animate-spin" />}
               Save
@@ -573,14 +565,14 @@ export function Settings() {
           </div>
 
           {keySaved && (
-            <div className="flex items-center gap-2 text-sm text-green-400">
+            <div className="flex items-center gap-2 text-sm text-[var(--color-success)]">
               <CheckCircle size={16} className="flex-shrink-0" />
               API key saved successfully
             </div>
           )}
 
           {ytError && (
-            <div className="flex items-center gap-2 text-sm text-red-400">
+            <div className="flex items-center gap-2 text-sm text-[var(--color-danger)]">
               <AlertCircle size={16} className="flex-shrink-0" />
               {ytError}
             </div>
@@ -591,7 +583,7 @@ export function Settings() {
         <div className="rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border)] p-4 flex flex-col gap-4">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-medium text-[var(--color-text)] flex items-center gap-2">
-              <Hash size={16} className="text-[var(--color-accent)]" />
+              <Hash size={16} className="text-[var(--color-text-secondary)]" />
               History Channel
               {textChannels.length > 0 && (
                 <span className="flex items-center gap-1 text-xs font-normal text-[var(--color-text-tertiary)]">
@@ -669,7 +661,7 @@ export function Settings() {
         <div className="rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border)] p-4 flex flex-col gap-4">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-medium text-[var(--color-text)] flex items-center gap-2">
-              <Globe size={16} className="text-[var(--color-accent)]" />
+              <Globe size={16} className="text-[var(--color-text-secondary)]" />
               Timezone
             </h3>
             <span

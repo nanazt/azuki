@@ -128,7 +128,7 @@ export const QueueItemContent = forwardRef<HTMLDivElement, QueueItemContentProps
                 onClick={() => onPlayAt(index)}
                 className={clsx(
                   "flex-shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center rounded text-[var(--color-text-tertiary)]",
-                  "hover:text-[var(--color-accent)] hover:bg-[var(--color-bg-tertiary)]",
+                  "hover:text-[var(--color-text)] hover:bg-[var(--color-bg-tertiary)]",
                   "transition-all duration-100 cursor-pointer touch-manipulation",
                 )}
                 aria-label={`Play ${track.title} now`}

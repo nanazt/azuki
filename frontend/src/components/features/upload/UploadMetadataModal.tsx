@@ -237,7 +237,7 @@ export function UploadMetadataModal({ file, onClose }: Props) {
               </p>
               <button
                 onClick={handleRetryClick}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md bg-[var(--color-accent)] text-white hover:opacity-90 transition-colors touch-manipulation shrink-0"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md bg-[var(--color-accent)] text-[#1a1a1a] hover:opacity-90 transition-colors touch-manipulation shrink-0"
               >
                 <Upload size={12} />
                 Select File
@@ -266,7 +266,7 @@ export function UploadMetadataModal({ file, onClose }: Props) {
             disabled={submitting || uploading || uploadFailed || !title.trim()}
             className={clsx(
               "px-4 py-2 text-sm font-medium rounded-lg transition-colors touch-manipulation min-h-[44px] sm:min-h-0",
-              "bg-[var(--color-accent)] text-white",
+              "bg-[var(--color-accent)] text-[#1a1a1a]",
               (submitting || uploading || uploadFailed || !title.trim())
                 ? "opacity-50 cursor-not-allowed"
                 : "hover:opacity-90"

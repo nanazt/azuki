@@ -170,14 +170,14 @@ export function PlayerBar({ onToggleQueue, queueDrawerOpen }: PlayerBarProps) {
               onClick={togglePlay}
               disabled={!track}
               className={clsx(
-                "p-2.5 text-white rounded-full transition-colors",
+                "p-2.5 text-[#1a1a1a] rounded-full transition-colors",
                 track
                   ? "bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] cursor-pointer"
                   : "bg-[var(--color-accent)] opacity-40 cursor-default"
               )}
               aria-label={isPlaying ? "Pause" : "Play"}
             >
-              {isPlaying ? <Pause size={20} fill="white" /> : <Play size={20} fill="white" />}
+              {isPlaying ? <Pause size={20} fill="currentColor" /> : <Play size={20} fill="currentColor" />}
             </button>
             <button
               onClick={skip}
@@ -200,7 +200,7 @@ export function PlayerBar({ onToggleQueue, queueDrawerOpen }: PlayerBarProps) {
                 !track
                   ? "text-[var(--color-text-tertiary)] opacity-30 cursor-default"
                   : loopActive
-                    ? "text-[var(--color-accent)] hover:bg-[var(--color-bg-hover)] cursor-pointer"
+                    ? "bg-[var(--color-accent)]/20 text-[var(--color-text)] hover:bg-[var(--color-bg-hover)] cursor-pointer"
                     : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-bg-hover)] cursor-pointer"
               )}
               aria-label={`Loop: ${loopMode}`}
@@ -251,9 +251,9 @@ export function PlayerBar({ onToggleQueue, queueDrawerOpen }: PlayerBarProps) {
                 className={clsx(
                   "p-1 rounded transition-colors",
                   volume > 10
-                    ? "text-[var(--color-accent)] cursor-default"
+                    ? "bg-[var(--color-accent)]/20 text-[var(--color-text)] cursor-default"
                     : effectiveBoost
-                      ? "text-[var(--color-accent)] hover:bg-[var(--color-bg-hover)] cursor-pointer"
+                      ? "bg-[var(--color-accent)]/20 text-[var(--color-text)] hover:bg-[var(--color-bg-hover)] cursor-pointer"
                       : "text-[var(--color-text-tertiary)] hover:text-[var(--color-text)] hover:bg-[var(--color-bg-hover)] cursor-pointer"
                 )}
                 aria-label={effectiveBoost ? "Disable volume boost" : "Enable volume boost"}
@@ -268,7 +268,7 @@ export function PlayerBar({ onToggleQueue, queueDrawerOpen }: PlayerBarProps) {
                 className={clsx(
                   "hidden md:flex lg:hidden p-1.5 rounded-full transition-colors cursor-pointer",
                   queueDrawerOpen
-                    ? "text-[var(--color-accent)] hover:bg-[var(--color-bg-hover)]"
+                    ? "bg-[var(--color-accent)]/20 text-[var(--color-text)] hover:bg-[var(--color-bg-hover)]"
                     : "text-[var(--color-text-tertiary)] hover:text-[var(--color-text)] hover:bg-[var(--color-bg-hover)]"
                 )}
                 aria-label="Toggle queue"

@@ -143,7 +143,7 @@ export function SearchPage() {
               className={clsx(
                 "px-3 py-1.5 md:py-1 rounded-full text-xs font-medium transition-colors duration-150 cursor-pointer touch-manipulation",
                 source === s.id
-                  ? "bg-[var(--color-accent)] text-white"
+                  ? "bg-[var(--color-accent)] text-[#1a1a1a]"
                   : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-bg-hover)]",
               )}
             >

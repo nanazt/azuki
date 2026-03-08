@@ -141,7 +141,7 @@ export function History() {
                 setIsFirstPage(true);
                 loadHistory();
               }}
-              className="w-full py-2 text-sm text-[var(--color-accent)] bg-[var(--color-accent)]/10 rounded-lg hover:bg-[var(--color-accent)]/20 transition-colors"
+              className="w-full py-2 text-sm text-[var(--color-text)] bg-[var(--color-accent)]/10 rounded-lg hover:bg-[var(--color-accent)]/20 transition-colors"
             >
               New track played — click to refresh
             </button>
@@ -174,7 +174,7 @@ export function History() {
                       "transition-all duration-150 cursor-pointer",
                       addingIds.has(entry.track.id)
                         ? "bg-[var(--color-bg-tertiary)] text-[var(--color-text-tertiary)] cursor-not-allowed"
-                        : "bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] text-white opacity-0 group-hover:opacity-100 [@media(hover:none)]:opacity-100"
+                        : "bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] text-[#1a1a1a] opacity-0 group-hover:opacity-100 [@media(hover:none)]:opacity-100"
                     )}
                     aria-label={`Add ${entry.track.title} to queue`}
                   >

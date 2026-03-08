@@ -5,6 +5,17 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>frontend</title>
+    <script>
+      (function(){
+        var t = localStorage.getItem('azuki-theme') || 'system';
+        var d = t === 'system'
+          ? window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'
+          : t;
+        if (d === 'light') {
+          document.documentElement.classList.add('light');
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

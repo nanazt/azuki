@@ -40,7 +40,7 @@ export function Home() {
         <div className="flex items-center gap-4 p-4 rounded-xl bg-[var(--color-accent)]/10 border border-[var(--color-accent)]/30">
           <TrackThumbnail track={currentTrack} sizeClass="w-14 h-14" iconSize={24} className="rounded-lg" />
           <div className="flex-1 min-w-0">
-            <p className="text-xs text-[var(--color-accent)] font-semibold uppercase tracking-wide mb-0.5 flex items-center gap-1.5">
+            <p className="text-xs text-[var(--color-text-secondary)] font-semibold uppercase tracking-wide mb-0.5 flex items-center gap-1.5">
               <Radio size={12} />
               Now Playing
             </p>
@@ -56,7 +56,7 @@ export function Home() {
       ) : (
         <div className="flex flex-col items-center gap-3 p-8 rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border)] text-center">
           <div className="w-12 h-12 rounded-full bg-[var(--color-accent)]/20 flex items-center justify-center">
-            <Music size={24} className="text-[var(--color-accent)]" />
+            <Music size={24} className="text-[var(--color-text-secondary)]" />
           </div>
           <div>
             <p className="font-semibold text-[var(--color-text)]">Nothing playing right now</p>

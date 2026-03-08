@@ -9,8 +9,8 @@
   --color-text: #e5e5e5;
   --color-text-secondary: #999;
   --color-text-tertiary: #666;
-  --color-accent: #7c5cff;
-  --color-accent-hover: #6a4de6;
+  --color-accent: #FFB7C9;
+  --color-accent-hover: #FF9DB5;
   --color-danger: #e53e3e;
   --color-success: #38a169;
 }
@@ -51,4 +51,25 @@ body {
 ::-webkit-scrollbar-thumb {
   background: var(--color-border);
   border-radius: 3px;
+}
+
+/* Light mode overrides */
+html.light {
+  color-scheme: light;
+  --color-bg: #fafafa;
+  --color-bg-secondary: #f2f2f2;
+  --color-bg-tertiary: #e8e8e8;
+  --color-bg-hover: #e0e0e0;
+  --color-border: #d4d4d4;
+  --color-text: #111111;
+  --color-text-secondary: #555555;
+  --color-text-tertiary: #888888;
+  --color-accent: #FFB7C9;
+  --color-accent-hover: #FF9DB5;
+  --color-danger: #c53030;
+  --color-success: #276749;
+}
+
+html.light ::-webkit-scrollbar-thumb {
+  background: #b0b0b0;
 }
