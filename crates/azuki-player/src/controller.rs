@@ -247,6 +247,22 @@ impl PlayerController {
         rx.await.unwrap_or(Err(PlayerError::NoTrack))
     }
 
+    pub async fn play_or_enqueue(
+        &self,
+        track: TrackInfo,
+        user_info: UserInfo,
+    ) -> Result<(), PlayerError> {
+        let snapshot = self.get_state().await;
+        match snapshot.state {
+            PlayStateInfo::Idle => self.play(track, user_info).await,
+            PlayStateInfo::Paused {
+                position_ms,
+                track: ref current,
+            } if position_ms >= current.duration_ms => self.play(track, user_info).await,
+            _ => self.enqueue(track, user_info).await,
+        }
+    }
+
     pub async fn enqueue(&self, track: TrackInfo, user_info: UserInfo) -> Result<(), PlayerError> {
         let (tx, rx) = oneshot::channel();
         self.send_cmd(PlayerCommand::Enqueue {

@@ -1,9 +1,12 @@
 import type {
+  OEmbedResponse,
   Playlist,
   PlaylistTrack,
   QueueEntry,
   ServerStats,
   TrackInfo,
+  UploadResponse,
+  UploadsResponse,
   UserStats,
 } from "./types";
 
@@ -118,6 +121,35 @@ export const api = {
   getBotSettings: () => get<{ default_volume: number }>("/api/settings/bot"),
   updateBotSettings: (settings: { default_volume?: number }) =>
     put<{ default_volume: number }>("/api/settings/bot", settings),
+
+  // Uploads
+  uploadFile: async (file: File) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    const res = await fetch("/api/upload", {
+      method: "POST",
+      body: formData,
+      credentials: "include",
+      headers: { "X-Requested-With": "XMLHttpRequest" },
+    });
+    if (res.status === 401) {
+      window.location.href = "/auth/login";
+      throw new Error("unauthorized");
+    }
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({ error: res.statusText }));
+      throw new Error(body.error || res.statusText);
+    }
+    return res.json() as Promise<UploadResponse>;
+  },
+  addTrackToQueue: (trackId: string) =>
+    post<void>("/api/queue/add-track", { track_id: trackId }),
+  getUploads: (page = 1, perPage = 20) =>
+    get<UploadsResponse>(`/api/uploads?page=${page}&per_page=${perPage}`),
+  updateTrack: (trackId: string, data: { title?: string; artist?: string }) =>
+    put<TrackInfo>(`/api/tracks/${trackId}`, data),
+  fetchOEmbed: (url: string) =>
+    get<OEmbedResponse>(`/api/oembed?url=${encodeURIComponent(url)}`),
 
   // Auth
   logout: () => post<void>("/auth/logout"),

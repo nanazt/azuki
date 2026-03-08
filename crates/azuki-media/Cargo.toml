@@ -16,3 +16,4 @@ hex.workspace = true
 url.workspace = true
 infer.workspace = true
 sqlx.workspace = true
+lofty = "0.22"

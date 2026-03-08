@@ -112,6 +112,7 @@ export function SearchPage() {
           />
           <input
             type="text"
+            autoFocus
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search for music…"

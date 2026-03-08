@@ -1,3 +1,4 @@
+pub mod metadata;
 pub mod store;
 pub mod types;
 pub mod upload;
@@ -5,6 +6,7 @@ pub mod ytdlp;
 pub mod ytdlp_updater;
 pub mod youtube;
 
+pub use metadata::{parse_audio_metadata, AudioMetadata};
 pub use store::MediaStore;
 pub use types::TrackMeta;
 pub use ytdlp::YtDlp;

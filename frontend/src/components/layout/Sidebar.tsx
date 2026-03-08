@@ -7,6 +7,7 @@ import {
   ListMusic,
   Search,
   Settings,
+  Upload,
   Users,
 } from "lucide-react";
 import clsx from "clsx";
@@ -66,6 +67,7 @@ export function Sidebar() {
           <NavItem to="/playlists" icon={<ListMusic size={16} />} label="Playlists" />
           <NavItem to="/favorites" icon={<Heart size={16} />} label="Favorites" />
           <NavItem to="/history" icon={<Clock size={16} />} label="History" />
+          <NavItem to="/uploads" icon={<Upload size={16} />} label="Uploads" />
           <NavItem to="/stats" icon={<BarChart3 size={16} />} label="Stats" />
         </div>
       </nav>

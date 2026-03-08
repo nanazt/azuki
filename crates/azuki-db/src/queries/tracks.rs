@@ -3,6 +3,8 @@ use sqlx::SqlitePool;
 use crate::models::Track;
 use crate::{DbError, DbResult};
 
+const TRACK_COLUMNS: &str = "id, title, artist, duration_ms, thumbnail_url, source_url, source_type, file_path, youtube_id, volume, uploaded_by, created_at";
+
 #[allow(clippy::too_many_arguments)]
 pub async fn upsert_track(
     pool: &SqlitePool,
@@ -15,38 +17,39 @@ pub async fn upsert_track(
     source_type: &str,
     file_path: Option<&str>,
     youtube_id: Option<&str>,
+    uploaded_by: Option<&str>,
 ) -> DbResult<Track> {
-    sqlx::query_as::<_, Track>(
-        "INSERT INTO tracks (id, title, artist, duration_ms, thumbnail_url, source_url, source_type, file_path, youtube_id)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+    let sql = format!(
+        "INSERT INTO tracks (id, title, artist, duration_ms, thumbnail_url, source_url, source_type, file_path, youtube_id, uploaded_by)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
          ON CONFLICT(id) DO UPDATE SET
            title = ?2, artist = ?3, duration_ms = ?4, thumbnail_url = ?5,
            file_path = COALESCE(?8, tracks.file_path), youtube_id = COALESCE(?9, tracks.youtube_id)
-         RETURNING id, title, artist, duration_ms, thumbnail_url, source_url, source_type, file_path, youtube_id, volume, created_at",
-    )
-    .bind(id)
-    .bind(title)
-    .bind(artist)
-    .bind(duration_ms)
-    .bind(thumbnail_url)
-    .bind(source_url)
-    .bind(source_type)
-    .bind(file_path)
-    .bind(youtube_id)
-    .fetch_one(pool)
-    .await
-    .map_err(DbError::from)
+         RETURNING {TRACK_COLUMNS}"
+    );
+    sqlx::query_as::<_, Track>(&sql)
+        .bind(id)
+        .bind(title)
+        .bind(artist)
+        .bind(duration_ms)
+        .bind(thumbnail_url)
+        .bind(source_url)
+        .bind(source_type)
+        .bind(file_path)
+        .bind(youtube_id)
+        .bind(uploaded_by)
+        .fetch_one(pool)
+        .await
+        .map_err(DbError::from)
 }
 
 pub async fn get_track(pool: &SqlitePool, id: &str) -> DbResult<Track> {
-    sqlx::query_as::<_, Track>(
-        "SELECT id, title, artist, duration_ms, thumbnail_url, source_url, source_type, file_path, youtube_id, volume, created_at
-         FROM tracks WHERE id = ?1",
-    )
-    .bind(id)
-    .fetch_optional(pool)
-    .await?
-    .ok_or(DbError::NotFound)
+    let sql = format!("SELECT {TRACK_COLUMNS} FROM tracks WHERE id = ?1");
+    sqlx::query_as::<_, Track>(&sql)
+        .bind(id)
+        .fetch_optional(pool)
+        .await?
+        .ok_or(DbError::NotFound)
 }
 
 pub async fn search_tracks(
@@ -56,19 +59,19 @@ pub async fn search_tracks(
     offset: i64,
 ) -> DbResult<Vec<Track>> {
     let pattern = format!("%{query}%");
-    sqlx::query_as::<_, Track>(
-        "SELECT id, title, artist, duration_ms, thumbnail_url, source_url, source_type, file_path, youtube_id, volume, created_at
-         FROM tracks
+    let sql = format!(
+        "SELECT {TRACK_COLUMNS} FROM tracks
          WHERE title LIKE ?1 OR artist LIKE ?1
          ORDER BY created_at DESC
-         LIMIT ?2 OFFSET ?3",
-    )
-    .bind(&pattern)
-    .bind(limit)
-    .bind(offset)
-    .fetch_all(pool)
-    .await
-    .map_err(DbError::from)
+         LIMIT ?2 OFFSET ?3"
+    );
+    sqlx::query_as::<_, Track>(&sql)
+        .bind(&pattern)
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(pool)
+        .await
+        .map_err(DbError::from)
 }
 
 pub async fn update_track_volume(pool: &SqlitePool, track_id: &str, volume: i64) -> DbResult<()> {
@@ -91,4 +94,53 @@ pub async fn update_file_path(
         .execute(pool)
         .await?;
     Ok(())
+}
+
+pub async fn list_uploads(
+    pool: &SqlitePool,
+    limit: i64,
+    offset: i64,
+) -> DbResult<Vec<Track>> {
+    let sql = format!(
+        "SELECT {TRACK_COLUMNS} FROM tracks
+         WHERE source_type = 'upload'
+         ORDER BY created_at DESC
+         LIMIT ?1 OFFSET ?2"
+    );
+    sqlx::query_as::<_, Track>(&sql)
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(pool)
+        .await
+        .map_err(DbError::from)
+}
+
+pub async fn count_uploads(pool: &SqlitePool) -> DbResult<i64> {
+    let row: (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM tracks WHERE source_type = 'upload'")
+            .fetch_one(pool)
+            .await?;
+    Ok(row.0)
+}
+
+pub async fn update_track_metadata(
+    pool: &SqlitePool,
+    track_id: &str,
+    title: Option<&str>,
+    artist: Option<&str>,
+) -> DbResult<Track> {
+    let sql = format!(
+        "UPDATE tracks SET
+           title = COALESCE(?1, title),
+           artist = COALESCE(?2, artist)
+         WHERE id = ?3
+         RETURNING {TRACK_COLUMNS}"
+    );
+    sqlx::query_as::<_, Track>(&sql)
+        .bind(title)
+        .bind(artist)
+        .bind(track_id)
+        .fetch_optional(pool)
+        .await?
+        .ok_or(DbError::NotFound)
 }

@@ -128,6 +128,65 @@ pub async fn get_queue(
     })))
 }
 
+#[derive(Deserialize)]
+pub struct AddTrackRequest {
+    pub track_id: String,
+}
+
+pub async fn queue_add_track(
+    jar: CookieJar,
+    State(state): State<WebState>,
+    Json(body): Json<AddTrackRequest>,
+) -> Result<StatusCode, ApiError> {
+    let user_id = extract_user_id(&jar, &state).await?;
+
+    let track = azuki_db::queries::tracks::get_track(&state.db, &body.track_id)
+        .await
+        .map_err(|_| ApiError::NotFound("track not found".to_string()))?;
+
+    let file_path = track
+        .file_path
+        .ok_or_else(|| ApiError::BadRequest("track has no file".into()))?;
+
+    // Resolve through media store if relative, otherwise check directly
+    let exists = state
+        .media_store
+        .resolve_path(&file_path)
+        .map(|p| p.exists())
+        .unwrap_or_else(|_| std::path::Path::new(&file_path).exists());
+
+    if !exists {
+        return Err(ApiError::BadRequest("track file not found on disk".into()));
+    }
+
+    let user = azuki_db::queries::users::get_user(&state.db, &user_id)
+        .await
+        .map_err(ApiError::Db)?;
+
+    let track_info = azuki_player::TrackInfo {
+        id: track.id,
+        title: track.title,
+        artist: track.artist,
+        duration_ms: track.duration_ms as u64,
+        thumbnail_url: track.thumbnail_url,
+        source_url: track.source_url,
+        source_type: track.source_type,
+        file_path: Some(file_path),
+        youtube_id: track.youtube_id,
+        volume: track.volume as u8,
+    };
+
+    let user_info = azuki_player::UserInfo {
+        id: user.id,
+        username: user.username,
+        avatar_url: user.avatar_url,
+    };
+
+    state.player.play_or_enqueue(track_info, user_info).await?;
+
+    Ok(StatusCode::NO_CONTENT)
+}
+
 pub async fn queue_add(
     jar: CookieJar,
     State(state): State<WebState>,
@@ -264,6 +323,7 @@ pub fn player_routes() -> axum::Router<WebState> {
         .route("/api/player/loop", axum::routing::post(set_loop))
         .route("/api/queue", axum::routing::get(get_queue))
         .route("/api/queue/add", axum::routing::post(queue_add))
+        .route("/api/queue/add-track", axum::routing::post(queue_add_track))
         .route("/api/queue/move", axum::routing::put(queue_move))
         .route("/api/queue/{position}", axum::routing::delete(queue_remove))
         .route(

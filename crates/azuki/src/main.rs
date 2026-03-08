@@ -57,7 +57,7 @@ impl Config {
             max_upload_size_mb: env_var("MAX_UPLOAD_SIZE_MB")
                 .ok()
                 .and_then(|v| v.parse().ok())
-                .unwrap_or(500),
+                .unwrap_or(300),
             max_cache_size_gb: env_var("MAX_CACHE_SIZE_GB")
                 .ok()
                 .and_then(|v| v.parse().ok())
@@ -680,34 +680,20 @@ async fn download_worker(
                     volume: existing.volume as u8,
                 };
 
-                let snapshot = player.get_state().await;
-                match snapshot.state {
-                    azuki_player::PlayStateInfo::Idle => {
-                        let _ = player.play(track_info.clone(), req.user_info.clone()).await;
-                    }
-                    azuki_player::PlayStateInfo::Paused {
-                        position_ms,
-                        ref track,
-                    } if position_ms >= track.duration_ms => {
-                        let _ = player.play(track_info.clone(), req.user_info.clone()).await;
-                    }
-                    _ => {
-                        if let Err(e) = player
-                            .enqueue(track_info.clone(), req.user_info.clone())
-                            .await
-                        {
-                            active.remove(&download_id);
-                            broadcast_web_event(
-                                &web_tx,
-                                &seq,
-                                azuki_web::events::WebEvent::DownloadFailed {
-                                    download_id,
-                                    error: e.to_string(),
-                                },
-                            );
-                            return;
-                        }
-                    }
+                if let Err(e) = player
+                    .play_or_enqueue(track_info.clone(), req.user_info.clone())
+                    .await
+                {
+                    active.remove(&download_id);
+                    broadcast_web_event(
+                        &web_tx,
+                        &seq,
+                        azuki_web::events::WebEvent::DownloadFailed {
+                            download_id,
+                            error: e.to_string(),
+                        },
+                    );
+                    return;
                 }
 
                 active.remove(&download_id);
@@ -780,6 +766,7 @@ async fn download_worker(
                         "youtube",
                         Some(&file_path_str),
                         meta.youtube_id.as_deref(),
+                        None,
                     )
                     .await;
 
@@ -801,35 +788,20 @@ async fn download_worker(
                         volume: track_volume,
                     };
 
-                    // EnqueueOrPlay: check player state and enqueue or play
-                    let snapshot = player.get_state().await;
-                    match snapshot.state {
-                        azuki_player::PlayStateInfo::Idle => {
-                            let _ = player.play(track_info.clone(), req.user_info.clone()).await;
-                        }
-                        azuki_player::PlayStateInfo::Paused {
-                            position_ms,
-                            ref track,
-                        } if position_ms >= track.duration_ms => {
-                            let _ = player.play(track_info.clone(), req.user_info.clone()).await;
-                        }
-                        _ => {
-                            if let Err(e) = player
-                                .enqueue(track_info.clone(), req.user_info.clone())
-                                .await
-                            {
-                                active.remove(&download_id);
-                                broadcast_web_event(
-                                    &web_tx,
-                                    &seq,
-                                    azuki_web::events::WebEvent::DownloadFailed {
-                                        download_id,
-                                        error: e.to_string(),
-                                    },
-                                );
-                                return;
-                            }
-                        }
+                    if let Err(e) = player
+                        .play_or_enqueue(track_info.clone(), req.user_info.clone())
+                        .await
+                    {
+                        active.remove(&download_id);
+                        broadcast_web_event(
+                            &web_tx,
+                            &seq,
+                            azuki_web::events::WebEvent::DownloadFailed {
+                                download_id,
+                                error: e.to_string(),
+                            },
+                        );
+                        return;
                     }
 
                     active.remove(&download_id);

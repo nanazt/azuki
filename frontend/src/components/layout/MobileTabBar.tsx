@@ -1,5 +1,5 @@
 import { NavLink } from "react-router-dom";
-import { BarChart3, Home, Search, Settings, ListMusic } from "lucide-react";
+import { Home, Search, ListMusic, Upload, Settings } from "lucide-react";
 import clsx from "clsx";
 
 interface TabItem {
@@ -12,7 +12,7 @@ const TABS: TabItem[] = [
   { to: "/", icon: <Home size={20} />, label: "Home" },
   { to: "/search", icon: <Search size={20} />, label: "Search" },
   { to: "/queue", icon: <ListMusic size={20} />, label: "Queue" },
-  { to: "/stats", icon: <BarChart3 size={20} />, label: "Stats" },
+  { to: "/uploads", icon: <Upload size={20} />, label: "Uploads" },
   { to: "/settings", icon: <Settings size={20} />, label: "Settings" },
 ];
 

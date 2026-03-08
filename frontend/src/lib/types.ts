@@ -112,3 +112,27 @@ export interface ServerStats {
   top_tracks: { track: TrackInfo; play_count: number }[];
   hourly_activity: number[];
 }
+
+export interface UploadResponse {
+  track_id: string;
+  filename: string;
+  title: string;
+  artist: string | null;
+  duration_ms: number;
+  added_by: string;
+  duplicate: boolean;
+}
+
+export interface UploadsResponse {
+  items: TrackInfo[];
+  total: number;
+  page: number;
+  per_page: number;
+}
+
+export interface OEmbedResponse {
+  title?: string;
+  thumbnail_url?: string;
+  provider_name?: string;
+  [key: string]: unknown;
+}

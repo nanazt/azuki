@@ -22,6 +22,7 @@ pub struct Track {
     pub file_path: Option<String>,
     pub youtube_id: Option<String>,
     pub volume: i64,
+    pub uploaded_by: Option<String>,
     pub created_at: String,
 }
 

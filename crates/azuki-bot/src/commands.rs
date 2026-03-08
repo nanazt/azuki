@@ -245,6 +245,7 @@ async fn handle_play(
         "youtube",
         Some(&file_path_str),
         meta.youtube_id.as_deref(),
+        None,
     )
     .await
     .ok();
@@ -758,6 +759,7 @@ pub async fn handle_play_button(
                         &ti.source_type,
                         Some(&file_path_str),
                         ti.youtube_id.as_deref(),
+                        None,
                     )
                     .await;
 
@@ -876,6 +878,7 @@ pub async fn handle_legacy_play(
                     "youtube",
                     Some(&file_path_str),
                     meta.youtube_id.as_deref(),
+                    None,
                 )
                 .await;
 

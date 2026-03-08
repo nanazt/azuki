@@ -9,13 +9,22 @@ const ALLOWED_AUDIO_TYPES: &[&str] = &[
     "audio/mpeg",
     "audio/ogg",
     "audio/wav",
+    "audio/x-wav",
     "audio/flac",
+    "audio/x-flac",
     "audio/aac",
+    "audio/x-aac",
     "audio/opus",
     "audio/webm",
     "audio/mp4",
+    "audio/m4a",
+    "audio/x-m4a",
     "video/mp4",
     "video/webm",
+];
+
+const ALLOWED_EXTENSIONS: &[&str] = &[
+    "mp3", "ogg", "wav", "flac", "aac", "opus", "webm", "mp4", "m4a",
 ];
 
 pub async fn handle_upload(
@@ -23,14 +32,28 @@ pub async fn handle_upload(
     data: &[u8],
     original_filename: &str,
 ) -> Result<(String, PathBuf), MediaError> {
-    // Validate via magic bytes
-    let kind = infer::get(data).ok_or(MediaError::InvalidMime("unknown file type".to_string()))?;
+    // Validate via magic bytes, fall back to extension
+    let inferred = infer::get(data);
 
-    if !ALLOWED_AUDIO_TYPES.contains(&kind.mime_type()) {
-        return Err(MediaError::InvalidMime(format!(
-            "unsupported type: {}",
-            kind.mime_type()
-        )));
+    if let Some(ref kind) = inferred {
+        if !ALLOWED_AUDIO_TYPES.contains(&kind.mime_type()) {
+            return Err(MediaError::InvalidMime(format!(
+                "unsupported type: {}",
+                kind.mime_type()
+            )));
+        }
+    } else {
+        // magic bytes unknown — check file extension as fallback
+        let ext = std::path::Path::new(original_filename)
+            .extension()
+            .and_then(|e| e.to_str())
+            .map(|e| e.to_lowercase());
+        match ext {
+            Some(ref e) if ALLOWED_EXTENSIONS.contains(&e.as_str()) => {}
+            _ => {
+                return Err(MediaError::InvalidMime("unknown file type".to_string()));
+            }
+        }
     }
 
     // Generate track ID from content hash
@@ -43,7 +66,8 @@ pub async fn handle_upload(
     let ext = std::path::Path::new(original_filename)
         .extension()
         .and_then(|e| e.to_str())
-        .unwrap_or(kind.extension());
+        .or_else(|| inferred.as_ref().map(|k| k.extension()))
+        .unwrap_or("bin");
 
     let file_path = store.get_file_path(&track_id, ext);
 

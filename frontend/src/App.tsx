@@ -4,7 +4,11 @@ import { ToastProvider, ToastContainer } from "./components/ui/Toast";
 import { useAuthStore } from "./stores/authStore";
 import { useWebSocket } from "./hooks/useWebSocket";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
+import { usePasteDetection } from "./hooks/usePasteDetection";
+import { useFileDrop } from "./hooks/useFileDrop";
 import { AppShell } from "./components/layout/AppShell";
+import { DropOverlay } from "./components/ui/DropOverlay";
+import { UploadMetadataModal } from "./components/features/upload/UploadMetadataModal";
 import { Login } from "./pages/Login";
 import { Home } from "./pages/Home";
 import { Playlists } from "./pages/Playlists";
@@ -14,6 +18,7 @@ import { Stats } from "./pages/Stats";
 import { Settings } from "./pages/Settings";
 import { SearchPage } from "./components/features/search/SearchPage";
 import { QueuePanel } from "./components/features/queue";
+import { UploadsPage } from "./components/features/uploads/UploadsPage";
 
 function ProtectedRoute() {
   const { authenticated, checking, setAuthenticated, setChecking } = useAuthStore();
@@ -48,11 +53,19 @@ function ProtectedRoute() {
 function AuthenticatedLayout() {
   useWebSocket();
   useKeyboardShortcuts();
+  usePasteDetection();
+  const { isDragging, droppedFile, clearDroppedFile, triggerFileInput } = useFileDrop();
 
   return (
-    <AppShell>
-      <Outlet />
-    </AppShell>
+    <>
+      <AppShell>
+        <Outlet />
+      </AppShell>
+      {isDragging && <DropOverlay onSelectFile={triggerFileInput} />}
+      {droppedFile && (
+        <UploadMetadataModal file={droppedFile} onClose={clearDroppedFile} />
+      )}
+    </>
   );
 }
 
@@ -69,6 +82,7 @@ export default function App() {
             <Route path="/playlists" element={<Playlists />} />
             <Route path="/favorites" element={<Favorites />} />
             <Route path="/history" element={<History />} />
+            <Route path="/uploads" element={<UploadsPage />} />
             <Route path="/stats" element={<Stats />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/queue" element={<QueuePanel />} />

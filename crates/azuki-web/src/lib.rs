@@ -94,6 +94,10 @@ impl IntoResponse for ApiError {
             ApiError::Internal(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg.clone()),
         };
 
+        if status.is_server_error() {
+            tracing::error!(%status, %message, "API error");
+        }
+
         (status, axum::Json(serde_json::json!({ "error": message }))).into_response()
     }
 }
