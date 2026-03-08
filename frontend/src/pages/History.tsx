@@ -109,7 +109,7 @@ export function History() {
   const hasMore = nextCursor !== null;
 
   return (
-    <div className="p-6 max-w-3xl mx-auto flex flex-col gap-6">
+    <div className="p-4 md:p-6 max-w-3xl mx-auto flex flex-col gap-6">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold text-[var(--color-text)]">History</h1>
       </div>

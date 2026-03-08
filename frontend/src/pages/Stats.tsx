@@ -571,11 +571,15 @@ export function Stats() {
 
   if (stats.total_plays === 0) {
     return (
-      <div className="p-6 max-w-3xl mx-auto flex flex-col items-center gap-4 mt-20">
-        <Music size={48} className="text-[var(--color-text-tertiary)]" />
-        <p className="text-[var(--color-text-secondary)]">
-          No listening history yet
-        </p>
+      <div className="p-4 md:p-6 max-w-3xl mx-auto flex flex-col gap-6">
+        <div className="flex items-center justify-between">
+          <h1 className="text-xl font-bold text-[var(--color-text)]">Stats</h1>
+        </div>
+        <div className="flex flex-col items-center gap-3 py-16 text-center">
+          <Music size={40} className="text-[var(--color-text-tertiary)]" />
+          <p className="text-[var(--color-text-secondary)]">No listening history yet.</p>
+          <p className="text-sm text-[var(--color-text-tertiary)]">Start listening!</p>
+        </div>
       </div>
     );
   }
@@ -583,7 +587,9 @@ export function Stats() {
   return (
     <div className="p-4 md:p-6 max-w-3xl mx-auto flex flex-col gap-6 pb-32">
       {/* Title */}
-      <h1 className="text-2xl font-semibold text-[var(--color-text)]">Stats</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-xl font-bold text-[var(--color-text)]">Stats</h1>
+      </div>
 
       {/* Stat Chips */}
       <div className="flex flex-wrap justify-center gap-3">

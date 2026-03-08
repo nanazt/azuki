@@ -222,58 +222,56 @@ export function UploadsPage() {
   }, []);
 
   return (
-    <div className="flex flex-col h-full pb-32 md:pb-0">
-      <div className="px-4 pt-4 pb-3 border-b border-[var(--color-border)]">
-        <h1 className="text-lg font-semibold text-[var(--color-text)]">Uploads</h1>
+    <div className="p-4 md:p-6 max-w-3xl mx-auto flex flex-col gap-6">
+      <div className="flex items-center justify-between">
+        <h1 className="text-xl font-bold text-[var(--color-text)]">Uploads</h1>
         {total > 0 && (
-          <p className="text-xs text-[var(--color-text-tertiary)] mt-0.5">
+          <p className="text-xs text-[var(--color-text-tertiary)]">
             {total} uploaded tracks
           </p>
         )}
       </div>
 
-      <div className="flex-1 overflow-y-auto py-2 px-1">
-        {loading && tracks.length === 0 && (
-          <div className="flex items-center justify-center py-10">
-            <Loader2 size={24} className="text-[var(--color-text-tertiary)] animate-spin" />
-          </div>
-        )}
+      {loading && tracks.length === 0 && (
+        <div className="flex items-center justify-center py-10">
+          <Loader2 size={24} className="text-[var(--color-text-tertiary)] animate-spin" />
+        </div>
+      )}
 
-        {!loading && tracks.length === 0 && (
-          <div className="flex flex-col items-center justify-center gap-2 py-10 text-center">
-            <Upload size={28} className="text-[var(--color-text-tertiary)]" />
-            <p className="text-sm text-[var(--color-text-secondary)]">
-              No uploaded files yet
-            </p>
-            <p className="text-xs text-[var(--color-text-tertiary)]">
-              Drag and drop audio files to upload
-            </p>
-          </div>
-        )}
+      {!loading && tracks.length === 0 && (
+        <div className="flex flex-col items-center gap-3 py-16 text-center">
+          <Upload size={40} className="text-[var(--color-text-tertiary)]" />
+          <p className="text-[var(--color-text-secondary)]">
+            No uploaded files yet
+          </p>
+          <p className="text-sm text-[var(--color-text-tertiary)]">
+            Drag and drop audio files to upload
+          </p>
+        </div>
+      )}
 
-        {tracks.map((track) => (
-          <UploadRow
-            key={track.id}
-            track={track}
-            onUpdate={fetchUploads}
-            isAdmin={isAdmin}
-            onDelete={handleDelete}
-          />
-        ))}
+      {tracks.map((track) => (
+        <UploadRow
+          key={track.id}
+          track={track}
+          onUpdate={fetchUploads}
+          isAdmin={isAdmin}
+          onDelete={handleDelete}
+        />
+      ))}
 
-        {/* Load more */}
-        {nextCursor && (
-          <div className="flex items-center justify-center py-4">
-            <button
-              onClick={() => fetchUploads(nextCursor)}
-              disabled={loadingMore}
-              className="px-4 py-1.5 text-xs rounded-md bg-[var(--color-bg-tertiary)] text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover)] transition-colors disabled:opacity-50"
-            >
-              {loadingMore ? "Loading..." : "Load more"}
-            </button>
-          </div>
-        )}
-      </div>
+      {/* Load more */}
+      {nextCursor && (
+        <div className="flex items-center justify-center py-4">
+          <button
+            onClick={() => fetchUploads(nextCursor)}
+            disabled={loadingMore}
+            className="px-4 py-1.5 text-xs rounded-md bg-[var(--color-bg-tertiary)] text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover)] transition-colors disabled:opacity-50"
+          >
+            {loadingMore ? "Loading..." : "Load more"}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

@@ -207,9 +207,9 @@ export function QueuePanel({ onOpenSearch }: QueuePanelProps) {
             </DndContext>
           </div>
         ) : (
-          <div className="flex flex-col items-center justify-center gap-3 px-4 py-10 text-center">
+          <div className="flex flex-col items-center justify-center gap-2 px-4 py-10 text-center">
             <ListMusic
-              size={32}
+              size={28}
               className="text-[var(--color-text-tertiary)]"
             />
             <p className="text-sm text-[var(--color-text-secondary)]">
