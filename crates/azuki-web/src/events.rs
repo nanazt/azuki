@@ -134,9 +134,7 @@ impl From<PlayerEvent> for WebEvent {
                 completed,
             },
             PlayerEvent::TrackLoading { track } => WebEvent::TrackLoading { track },
-            PlayerEvent::TrackError { track_id, error } => {
-                WebEvent::TrackError { track_id, error }
-            }
+            PlayerEvent::TrackError { track_id, error } => WebEvent::TrackError { track_id, error },
             PlayerEvent::Paused { position_ms } => WebEvent::Paused { position_ms },
             PlayerEvent::Resumed { position_ms } => WebEvent::Resumed { position_ms },
             PlayerEvent::Seeked { position_ms, .. } => WebEvent::Seeked { position_ms },

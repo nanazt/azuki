@@ -3,8 +3,8 @@ use std::collections::HashMap;
 use serde::Deserialize;
 use url::Url;
 
-use crate::types::TrackMeta;
 use crate::MediaError;
+use crate::types::TrackMeta;
 
 pub struct YouTubeClient {
     client: reqwest::Client,
@@ -46,11 +46,9 @@ impl YouTubeClient {
         if let Some(token) = page_token {
             params.push(("pageToken", token));
         }
-        let search_url = Url::parse_with_params(
-            "https://www.googleapis.com/youtube/v3/search",
-            &params,
-        )
-        .map_err(|e| MediaError::YouTube(format!("failed to build search URL: {e}")))?;
+        let search_url =
+            Url::parse_with_params("https://www.googleapis.com/youtube/v3/search", &params)
+                .map_err(|e| MediaError::YouTube(format!("failed to build search URL: {e}")))?;
 
         let search_resp: SearchResponse = self
             .client
@@ -125,10 +123,7 @@ impl YouTubeClient {
                     artist: Some(item.snippet.channel_title),
                     duration_ms,
                     thumbnail_url,
-                    source_url: format!(
-                        "https://www.youtube.com/watch?v={}",
-                        item.id.video_id
-                    ),
+                    source_url: format!("https://www.youtube.com/watch?v={}", item.id.video_id),
                 }
             })
             .collect();
@@ -258,9 +253,7 @@ impl YouTubeClient {
                         ("key", &self.api_key),
                     ],
                 )
-                .map_err(|e| {
-                    MediaError::YouTube(format!("failed to build videos URL: {e}"))
-                })?;
+                .map_err(|e| MediaError::YouTube(format!("failed to build videos URL: {e}")))?;
 
                 let vresp: VideoStatusResponse = self
                     .client
@@ -386,12 +379,10 @@ pub struct PlaylistItemMeta {
 pub fn extract_video_id(url: &str) -> Option<String> {
     let parsed = Url::parse(url).ok()?;
     match parsed.host_str()? {
-        "www.youtube.com" | "youtube.com" | "m.youtube.com" | "music.youtube.com" => {
-            parsed
-                .query_pairs()
-                .find(|(k, _)| k == "v")
-                .map(|(_, v)| v.to_string())
-        }
+        "www.youtube.com" | "youtube.com" | "m.youtube.com" | "music.youtube.com" => parsed
+            .query_pairs()
+            .find(|(k, _)| k == "v")
+            .map(|(_, v)| v.to_string()),
         "youtu.be" => {
             let path = parsed.path().strip_prefix('/')?;
             if path.is_empty() {
@@ -412,7 +403,8 @@ fn sanitize_error(e: reqwest::Error) -> String {
     } else if e.is_status() {
         format!(
             "HTTP error {}",
-            e.status().map_or("unknown".to_string(), |s| s.as_str().to_string())
+            e.status()
+                .map_or("unknown".to_string(), |s| s.as_str().to_string())
         )
     } else if e.is_decode() {
         "failed to decode response".to_string()

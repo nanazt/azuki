@@ -14,7 +14,12 @@ interface QueueItemProps {
   onPlayAt: (index: number) => void;
 }
 
-export function QueueItem({ entry, index, onRemove, onPlayAt }: QueueItemProps) {
+export function QueueItem({
+  entry,
+  index,
+  onRemove,
+  onPlayAt,
+}: QueueItemProps) {
   const {
     attributes,
     listeners,
@@ -54,54 +59,63 @@ interface QueueItemContentProps {
   dragHandleProps?: Record<string, unknown>;
 }
 
-export const QueueItemContent = forwardRef<HTMLDivElement, QueueItemContentProps>(
-  function QueueItemContent(
-    { entry, index, onRemove, onPlayAt, isDragging, isOverlay, style, dragHandleProps },
-    ref,
-  ) {
-    const { track, added_by } = entry;
+export const QueueItemContent = forwardRef<
+  HTMLDivElement,
+  QueueItemContentProps
+>(function QueueItemContent(
+  {
+    entry,
+    index,
+    onRemove,
+    onPlayAt,
+    isDragging,
+    isOverlay,
+    style,
+    dragHandleProps,
+  },
+  ref,
+) {
+  const { track, added_by } = entry;
 
-    return (
+  return (
+    <div
+      ref={ref}
+      style={style}
+      className={clsx(
+        "flex items-center py-2 rounded-lg",
+        "hover:bg-[var(--color-bg-hover)] transition-colors duration-100 group",
+        isDragging && "opacity-30",
+        isOverlay &&
+          "bg-[var(--color-bg-tertiary)] border border-[var(--color-border)] rounded-lg shadow-xl opacity-95",
+      )}
+    >
       <div
-        ref={ref}
-        style={style}
         className={clsx(
-          "flex items-center py-2 rounded-lg",
-          "hover:bg-[var(--color-bg-hover)] transition-colors duration-100 group",
-          isDragging && "opacity-30",
-          isOverlay &&
-            "bg-[var(--color-bg-tertiary)] border border-[var(--color-border)] rounded-lg shadow-xl opacity-95",
+          "flex items-center gap-2 pl-3 min-w-0 flex-1 cursor-grab active:cursor-grabbing touch-none",
         )}
+        {...dragHandleProps}
       >
         <div
           className={clsx(
-            "flex items-center gap-2 pl-3 min-w-0 flex-1 cursor-grab active:cursor-grabbing touch-none",
+            "flex-shrink-0 flex items-center justify-center w-5 text-[var(--color-text-tertiary)]",
+            "opacity-40 group-hover:opacity-100",
+            "[@media(hover:none)]:opacity-100",
           )}
-          {...dragHandleProps}
         >
-          <div
-            className={clsx(
-              "flex-shrink-0 flex items-center justify-center w-5 text-[var(--color-text-tertiary)]",
-              "opacity-40 group-hover:opacity-100",
-              "[@media(hover:none)]:opacity-100",
-            )}
-          >
-            <GripVertical size={14} />
-          </div>
-          <TrackThumbnail
-            track={track}
-            sizeClass="w-9 h-9"
-            iconSize={14}
-            className="rounded"
-          />
-          <div className="min-w-0 flex-1">
+          <GripVertical size={14} />
+        </div>
+        <TrackThumbnail
+          track={track}
+          sizeClass="w-9 h-9"
+          iconSize={14}
+          className="rounded"
+        />
+        <div className="min-w-0 flex-1">
           <div className="text-sm text-[var(--color-text)] truncate font-medium">
             {track.title}
           </div>
           <div className="flex items-center gap-1 text-xs text-[var(--color-text-secondary)] min-w-0">
-            <span className="truncate">
-              {track.artist ?? "Unknown artist"}
-            </span>
+            <span className="truncate">{track.artist ?? "Unknown artist"}</span>
             {added_by?.username && (
               <>
                 <span className="text-[var(--color-text-tertiary)] flex-shrink-0">
@@ -119,37 +133,36 @@ export const QueueItemContent = forwardRef<HTMLDivElement, QueueItemContentProps
               </>
             )}
           </div>
-          </div>
         </div>
-        {!isOverlay && (
-          <div className="flex items-center pr-1">
-            {onPlayAt && (
-              <button
-                onClick={() => onPlayAt(index)}
-                className={clsx(
-                  "flex-shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center rounded text-[var(--color-text-tertiary)]",
-                  "hover:text-[var(--color-text)] hover:bg-[var(--color-bg-tertiary)]",
-                  "transition-all duration-100 cursor-pointer touch-manipulation",
-                )}
-                aria-label={`Play ${track.title} now`}
-              >
-                <Play size={14} fill="currentColor" />
-              </button>
-            )}
+      </div>
+      {!isOverlay && (
+        <div className="flex items-center pr-1">
+          {onPlayAt && (
             <button
-              onClick={() => onRemove(index)}
+              onClick={() => onPlayAt(index)}
               className={clsx(
                 "flex-shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center rounded text-[var(--color-text-tertiary)]",
-                "hover:text-[var(--color-danger)] hover:bg-[var(--color-bg-tertiary)]",
+                "hover:text-[var(--color-text)] hover:bg-[var(--color-bg-tertiary)]",
                 "transition-all duration-100 cursor-pointer touch-manipulation",
               )}
-              aria-label={`Remove ${track.title} from queue`}
+              aria-label={`Play ${track.title} now`}
             >
-              <X size={14} />
+              <Play size={14} fill="currentColor" />
             </button>
-          </div>
-        )}
-      </div>
-    );
-  },
-);
+          )}
+          <button
+            onClick={() => onRemove(index)}
+            className={clsx(
+              "flex-shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center rounded text-[var(--color-text-tertiary)]",
+              "hover:text-[var(--color-danger)] hover:bg-[var(--color-bg-tertiary)]",
+              "transition-all duration-100 cursor-pointer touch-manipulation",
+            )}
+            aria-label={`Remove ${track.title} from queue`}
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
+    </div>
+  );
+});

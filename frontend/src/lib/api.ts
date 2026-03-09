@@ -60,17 +60,20 @@ export const api = {
   resume: () => post<void>("/api/player/resume"),
   skip: () => post<void>("/api/player/skip"),
   previous: () => post<void>("/api/player/previous"),
-  seek: (position_ms: number) => post<void>("/api/player/seek", { position_ms }),
+  seek: (position_ms: number) =>
+    post<void>("/api/player/seek", { position_ms }),
   setVolume: (volume: number) => post<void>("/api/player/volume", { volume }),
   setLoop: (mode: string) => post<void>("/api/player/loop", { mode }),
 
   // Queue
-  getQueue: () => get<{ now_playing: TrackInfo | null; queue: QueueEntry[] }>("/api/queue"),
+  getQueue: () =>
+    get<{ now_playing: TrackInfo | null; queue: QueueEntry[] }>("/api/queue"),
   addToQueue: (query_or_url: string) =>
     post<{ download_id: string }>("/api/queue/add", { query_or_url }),
   removeFromQueue: (position: number) => del<void>(`/api/queue/${position}`),
   playAt: (position: number) => post<void>(`/api/queue/${position}/play`),
-  moveInQueue: (from: number, to: number) => put<void>("/api/queue/move", { from, to }),
+  moveInQueue: (from: number, to: number) =>
+    put<void>("/api/queue/move", { from, to }),
 
   // Search
   search: (q: string, source = "youtube", cursor?: string, limit?: number) => {
@@ -84,9 +87,14 @@ export const api = {
   getHistory: (cursor?: string, limit = 20) => {
     const params = new URLSearchParams({ limit: String(limit) });
     if (cursor) params.set("cursor", cursor);
-    return get<CursorResponse<{ track: TrackInfo; played_at: string; user_id: string; play_count: number }>>(
-      `/api/history?${params}`,
-    );
+    return get<
+      CursorResponse<{
+        track: TrackInfo;
+        played_at: string;
+        user_id: string;
+        play_count: number;
+      }>
+    >(`/api/history?${params}`);
   },
 
   // Stats
@@ -100,15 +108,32 @@ export const api = {
       `/api/stats/top-artists?limit=${limit}${cursor ? `&cursor=${cursor}` : ""}`,
     ),
   getTrackStats: (id: string) =>
-    get<{ play_count: number; last_played: string | null }>(`/api/stats/track/${id}`),
+    get<{ play_count: number; last_played: string | null }>(
+      `/api/stats/track/${id}`,
+    ),
 
   // Admin
-  getYtdlpInfo: () => get<{ current_version: string | null; managed: boolean }>("/api/admin/ytdlp"),
-  checkYtdlpUpdate: () => post<{ latest_version: string; update_available: boolean }>("/api/admin/ytdlp/check"),
-  updateYtdlp: () => post<{ version: string | null; success: boolean }>("/api/admin/ytdlp/update"),
+  getYtdlpInfo: () =>
+    get<{ current_version: string | null; managed: boolean }>(
+      "/api/admin/ytdlp",
+    ),
+  checkYtdlpUpdate: () =>
+    post<{ latest_version: string; update_available: boolean }>(
+      "/api/admin/ytdlp/check",
+    ),
+  updateYtdlp: () =>
+    post<{ version: string | null; success: boolean }>(
+      "/api/admin/ytdlp/update",
+    ),
 
   // Me
-  getMe: () => get<{ id: string; username: string; avatar_url: string | null; is_admin: boolean }>("/api/me"),
+  getMe: () =>
+    get<{
+      id: string;
+      username: string;
+      avatar_url: string | null;
+      is_admin: boolean;
+    }>("/api/me"),
   deleteTrack: (trackId: string) => del<void>(`/api/tracks/${trackId}`),
 
   // Preferences
@@ -157,18 +182,34 @@ export const api = {
   logout: () => post<void>("/auth/logout"),
 
   // Admin - YouTube
-  getYoutubeInfo: () => get<{ has_key: boolean; key_masked: string | null }>("/api/admin/youtube"),
-  setYoutubeKey: (api_key: string) => post<{ success: boolean; restart_required: boolean }>("/api/admin/youtube", { api_key }),
+  getYoutubeInfo: () =>
+    get<{ has_key: boolean; key_masked: string | null }>("/api/admin/youtube"),
+  setYoutubeKey: (api_key: string) =>
+    post<{ success: boolean; restart_required: boolean }>(
+      "/api/admin/youtube",
+      { api_key },
+    ),
 
   // Admin - Voice Channel
-  getVoiceChannel: () => get<{ default_channel_id: string | null; channels: { id: string; name: string }[] }>("/api/admin/voice-channel"),
-  setVoiceChannel: (channel_id: string) => put<{ success: boolean }>("/api/admin/voice-channel", { channel_id }),
+  getVoiceChannel: () =>
+    get<{
+      default_channel_id: string | null;
+      channels: { id: string; name: string }[];
+    }>("/api/admin/voice-channel"),
+  setVoiceChannel: (channel_id: string) =>
+    put<{ success: boolean }>("/api/admin/voice-channel", { channel_id }),
 
   // Admin - History Channel
-  getHistoryChannel: () => get<{ history_channel_id: string | null; channels: { id: string; name: string }[] }>("/api/admin/history-channel"),
-  setHistoryChannel: (channel_id: string) => put<{ success: boolean }>("/api/admin/history-channel", { channel_id }),
+  getHistoryChannel: () =>
+    get<{
+      history_channel_id: string | null;
+      channels: { id: string; name: string }[];
+    }>("/api/admin/history-channel"),
+  setHistoryChannel: (channel_id: string) =>
+    put<{ success: boolean }>("/api/admin/history-channel", { channel_id }),
 
   // Admin - Timezone
   getTimezone: () => get<{ timezone: string }>("/api/admin/timezone"),
-  setTimezone: (timezone: string) => put<{ success: boolean }>("/api/admin/timezone", { timezone }),
+  setTimezone: (timezone: string) =>
+    put<{ success: boolean }>("/api/admin/timezone", { timezone }),
 };

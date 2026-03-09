@@ -39,7 +39,7 @@ export function usePasteDetection() {
         } catch (err) {
           showToast(
             err instanceof Error ? err.message : "Failed to add to queue",
-            "error"
+            "error",
           );
         }
       };

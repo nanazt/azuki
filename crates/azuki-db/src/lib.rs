@@ -2,8 +2,8 @@ pub mod config;
 pub mod models;
 pub mod queries;
 
-use sqlx::sqlite::SqliteConnectOptions;
 use sqlx::SqlitePool;
+use sqlx::sqlite::SqliteConnectOptions;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -19,7 +19,8 @@ pub enum DbError {
 pub type DbResult<T> = Result<T, DbError>;
 
 pub async fn create_pool(database_url: &str) -> DbResult<SqlitePool> {
-    let options: SqliteConnectOptions = database_url.parse::<SqliteConnectOptions>()?
+    let options: SqliteConnectOptions = database_url
+        .parse::<SqliteConnectOptions>()?
         .create_if_missing(true);
     let pool = SqlitePool::connect_with(options).await?;
 

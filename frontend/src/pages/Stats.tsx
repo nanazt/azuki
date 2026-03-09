@@ -37,9 +37,15 @@ function StatChip({
 }) {
   return (
     <div className="flex items-center gap-1.5 px-3 py-2 rounded-full bg-[var(--color-bg-secondary)] border border-[var(--color-border)] whitespace-nowrap">
-      {icon && <span className="text-[var(--color-text-secondary)]">{icon}</span>}
-      <span className="text-sm font-semibold text-[var(--color-text)] tabular-nums leading-none">{value}</span>
-      <span className="text-xs text-[var(--color-text-tertiary)] leading-none">{label}</span>
+      {icon && (
+        <span className="text-[var(--color-text-secondary)]">{icon}</span>
+      )}
+      <span className="text-sm font-semibold text-[var(--color-text)] tabular-nums leading-none">
+        {value}
+      </span>
+      <span className="text-xs text-[var(--color-text-tertiary)] leading-none">
+        {label}
+      </span>
     </div>
   );
 }
@@ -58,7 +64,20 @@ const HEATMAP_COLORS = {
   ],
 };
 const DOW_LABELS = ["Mon", "", "Wed", "", "Fri", "", "Sun"];
-const MONTH_LABELS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const MONTH_LABELS = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+];
 
 function ContributionHeatmap({
   data,
@@ -67,7 +86,11 @@ function ContributionHeatmap({
 }) {
   const heatmap = HEATMAP_COLORS;
   const containerRef = useRef<HTMLDivElement>(null);
-  const [tooltip, setTooltip] = useState<{ x: number; y: number; text: string } | null>(null);
+  const [tooltip, setTooltip] = useState<{
+    x: number;
+    y: number;
+    text: string;
+  } | null>(null);
   const [cellSize, setCellSize] = useState(11);
 
   // Build 26-week × 7-day grid
@@ -133,7 +156,9 @@ function ContributionHeatmap({
     if (!el) return;
     const measure = () => {
       const available = el.clientWidth - labelWidth;
-      const size = Math.floor((available - gap * (weeks.length - 1)) / weeks.length);
+      const size = Math.floor(
+        (available - gap * (weeks.length - 1)) / weeks.length,
+      );
       setCellSize(Math.max(size, 8));
     };
     measure();
@@ -144,12 +169,11 @@ function ContributionHeatmap({
 
   return (
     <div className="p-5 rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border)] flex flex-col gap-4">
-      <h3 className="text-sm font-semibold text-[var(--color-text)]">Listening Activity</h3>
+      <h3 className="text-sm font-semibold text-[var(--color-text)]">
+        Listening Activity
+      </h3>
       <div className="relative">
-        <div
-          ref={containerRef}
-          className="overflow-hidden"
-        >
+        <div ref={containerRef} className="overflow-hidden">
           <div className="flex gap-0.5" style={{ paddingLeft: 24 }}>
             {/* Month labels */}
             <div
@@ -212,9 +236,10 @@ function ContributionHeatmap({
                           width: cellSize,
                           height: cellSize,
                           backgroundColor: getColor(cell.ms),
-                          outline: cell.dateStr === todayStr
-                            ? "1px solid rgba(255, 183, 201, 0.5)"
-                            : "none",
+                          outline:
+                            cell.dateStr === todayStr
+                              ? "1px solid rgba(255, 183, 201, 0.5)"
+                              : "none",
                           outlineOffset: "1px",
                         }}
                         onMouseEnter={(e) => {
@@ -225,7 +250,10 @@ function ContributionHeatmap({
                             setTooltip({
                               x: rect.left - parentRect.left + rect.width / 2,
                               y: rect.top - parentRect.top - 4,
-                              text: cell.ms > 0 ? `${cell.dateStr}: ${formatDuration(cell.ms)}` : cell.dateStr,
+                              text:
+                                cell.ms > 0
+                                  ? `${cell.dateStr}: ${formatDuration(cell.ms)}`
+                                  : cell.dateStr,
                             });
                           }
                         }}
@@ -240,11 +268,23 @@ function ContributionHeatmap({
         </div>
         {/* Legend */}
         <div className="flex items-center gap-1.5 justify-end mt-1">
-          <span className="text-[10px] text-[var(--color-text-tertiary)]">Less</span>
+          <span className="text-[10px] text-[var(--color-text-tertiary)]">
+            Less
+          </span>
           {heatmap.colors.map((c, i) => (
-            <div key={i} style={{ width: 8, height: 8, borderRadius: 2, backgroundColor: c }} />
+            <div
+              key={i}
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: 2,
+                backgroundColor: c,
+              }}
+            />
           ))}
-          <span className="text-[10px] text-[var(--color-text-tertiary)]">More</span>
+          <span className="text-[10px] text-[var(--color-text-tertiary)]">
+            More
+          </span>
         </div>
         {/* Tooltip */}
         {tooltip && (
@@ -266,7 +306,11 @@ function ContributionHeatmap({
 
 // ─── TrendChart (30-day line chart) ───
 
-function TrendChart({ data }: { data: { date: string; play_count: number }[] }) {
+function TrendChart({
+  data,
+}: {
+  data: { date: string; play_count: number }[];
+}) {
   if (data.length === 0) return null;
 
   const accent = "#FFB7C9";
@@ -278,16 +322,22 @@ function TrendChart({ data }: { data: { date: string; play_count: number }[] }) 
   const effectiveH = h - padding * 2;
 
   const points = data.map((d, i) => {
-    const x = padding + (data.length > 1 ? (i / (data.length - 1)) * effectiveW : effectiveW / 2);
+    const x =
+      padding +
+      (data.length > 1 ? (i / (data.length - 1)) * effectiveW : effectiveW / 2);
     const y = padding + effectiveH - (d.play_count / maxCount) * effectiveH;
     return { x, y, ...d };
   });
 
-  const linePath = points.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
+  const linePath = points
+    .map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`)
+    .join(" ");
   const areaPath = `${linePath} L ${points[points.length - 1].x} ${h} L ${points[0].x} ${h} Z`;
 
   // X-axis labels: show every 7 days
-  const xLabels = points.filter((_, i) => i % 7 === 0 || i === points.length - 1);
+  const xLabels = points.filter(
+    (_, i) => i % 7 === 0 || i === points.length - 1,
+  );
 
   return (
     <div className="flex-1 p-5 rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border)] flex flex-col gap-4">
@@ -414,13 +464,7 @@ function TrackRow({
 
 // ─── ArtistRow ───
 
-function ArtistRow({
-  artist,
-  rank,
-}: {
-  artist: ArtistStat;
-  rank: number;
-}) {
+function ArtistRow({ artist, rank }: { artist: ArtistStat; rank: number }) {
   return (
     <div className="flex items-center gap-3 py-2">
       <span className="text-xs text-[var(--color-text-secondary)] w-5 text-right flex-shrink-0">
@@ -434,7 +478,8 @@ function ArtistRow({
           {artist.artist}
         </p>
         <p className="text-xs text-[var(--color-text-secondary)]">
-          {artist.track_count} tracks · {formatDuration(artist.total_listened_ms)}
+          {artist.track_count} tracks ·{" "}
+          {formatDuration(artist.total_listened_ms)}
         </p>
       </div>
       <span className="text-xs text-[var(--color-text-secondary)] flex-shrink-0">
@@ -461,7 +506,9 @@ export function Stats() {
     [],
   );
 
-  const tracks = useInfiniteScroll<{ track: TrackInfo; play_count: number }>({ fetcher: fetchTracks });
+  const tracks = useInfiniteScroll<{ track: TrackInfo; play_count: number }>({
+    fetcher: fetchTracks,
+  });
   const artists = useInfiniteScroll<ArtistStat>({ fetcher: fetchArtists });
 
   const fetchStats = useCallback(() => {
@@ -530,8 +577,12 @@ export function Stats() {
         </div>
         <div className="flex flex-col items-center gap-3 py-16 text-center">
           <Music size={40} className="text-[var(--color-text-tertiary)]" />
-          <p className="text-[var(--color-text-secondary)]">No listening history yet.</p>
-          <p className="text-sm text-[var(--color-text-tertiary)]">Start listening!</p>
+          <p className="text-[var(--color-text-secondary)]">
+            No listening history yet.
+          </p>
+          <p className="text-sm text-[var(--color-text-tertiary)]">
+            Start listening!
+          </p>
         </div>
       </div>
     );
@@ -621,9 +672,7 @@ export function Stats() {
         </div>
 
         {/* Top Tracks List */}
-        <div
-          className={activeTab === "tracks" ? "block" : "hidden"}
-        >
+        <div className={activeTab === "tracks" ? "block" : "hidden"}>
           {tracks.loading ? (
             <div className="divide-y divide-[var(--color-border)]">
               {Array.from({ length: 5 }).map((_, i) => (
@@ -648,7 +697,10 @@ export function Stats() {
                 />
               ))}
               {tracks.hasMore && (
-                <div ref={tracks.sentinelRef} className="py-4 flex justify-center">
+                <div
+                  ref={tracks.sentinelRef}
+                  className="py-4 flex justify-center"
+                >
                   {tracks.loadingMore && (
                     <div className="w-5 h-5 border-2 border-[var(--color-accent)]/30 border-t-[var(--color-accent)] rounded-full animate-spin" />
                   )}
@@ -659,9 +711,7 @@ export function Stats() {
         </div>
 
         {/* Top Artists List */}
-        <div
-          className={activeTab === "artists" ? "block" : "hidden"}
-        >
+        <div className={activeTab === "artists" ? "block" : "hidden"}>
           {artists.loading ? (
             <div className="divide-y divide-[var(--color-border)]">
               {Array.from({ length: 5 }).map((_, i) => (
@@ -681,7 +731,10 @@ export function Stats() {
                 <ArtistRow key={item.artist} artist={item} rank={i + 1} />
               ))}
               {artists.hasMore && (
-                <div ref={artists.sentinelRef} className="py-4 flex justify-center">
+                <div
+                  ref={artists.sentinelRef}
+                  className="py-4 flex justify-center"
+                >
                   {artists.loadingMore && (
                     <div className="w-5 h-5 border-2 border-[var(--color-accent)]/30 border-t-[var(--color-accent)] rounded-full animate-spin" />
                   )}

@@ -28,7 +28,7 @@ export function Slider({
     (e: React.ChangeEvent<HTMLInputElement>) => {
       onChange(Number(e.target.value));
     },
-    [onChange]
+    [onChange],
   );
 
   const handleMouseUp = useCallback(
@@ -37,7 +37,7 @@ export function Slider({
         onChangeEnd(Number((e.target as HTMLInputElement).value));
       }
     },
-    [onChangeEnd]
+    [onChangeEnd],
   );
 
   const handleTouchEnd = useCallback(
@@ -46,7 +46,7 @@ export function Slider({
         onChangeEnd(Number((e.target as HTMLInputElement).value));
       }
     },
-    [onChangeEnd]
+    [onChangeEnd],
   );
 
   return (
@@ -74,7 +74,7 @@ export function Slider({
         aria-label={ariaLabel}
         className={clsx(
           "absolute inset-x-0 w-full h-full opacity-0 cursor-pointer",
-          "slider-input"
+          "slider-input",
         )}
         style={{ margin: 0 }}
       />

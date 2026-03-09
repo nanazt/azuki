@@ -4,19 +4,21 @@
 # components
 
 ## Purpose
+
 Reusable React components organized by feature domains, layout structure, and generic UI primitives.
 
 ## Subdirectories
 
-| Directory | Purpose |
-|-----------|---------|
-| `features/` | Feature-specific components: player, queue, search, lyrics, video |
-| `layout/` | App layout: AppShell (3-column responsive), Sidebar, NowPlayingPanel, MobileTabBar |
-| `ui/` | Generic UI primitives: Button, Slider, Avatar, Modal, Toast, Tooltip, Skeleton, ConnectionStatus |
+| Directory   | Purpose                                                                                          |
+| ----------- | ------------------------------------------------------------------------------------------------ |
+| `features/` | Feature-specific components: player, queue, search, lyrics, video                                |
+| `layout/`   | App layout: AppShell (3-column responsive), Sidebar, NowPlayingPanel, MobileTabBar               |
+| `ui/`       | Generic UI primitives: Button, Slider, Avatar, Modal, Toast, Tooltip, Skeleton, ConnectionStatus |
 
 ## For AI Agents
 
 ### Working In This Directory
+
 - Each subdirectory has an `index.ts` barrel export
 - Feature components go in `features/<feature-name>/`
 - Shared UI primitives go in `ui/`

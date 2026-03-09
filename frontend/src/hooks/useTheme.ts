@@ -79,10 +79,7 @@ window
   });
 
 export function useTheme() {
-  const { theme, resolvedTheme } = useSyncExternalStore(
-    subscribe,
-    getSnapshot,
-  );
+  const { theme, resolvedTheme } = useSyncExternalStore(subscribe, getSnapshot);
 
   // Apply on mount (in case SSR mismatch)
   useEffect(() => {

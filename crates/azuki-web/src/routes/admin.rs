@@ -1,7 +1,7 @@
 use std::sync::atomic::{AtomicI64, Ordering};
 
-use axum::extract::State;
 use axum::Json;
+use axum::extract::State;
 use axum_extra::extract::CookieJar;
 
 use crate::auth::extract_admin_id;
@@ -36,9 +36,7 @@ pub async fn ytdlp_check(
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
     let current = state.ytdlp.version().await.ok();
-    let update_available = current
-        .as_ref()
-        .is_none_or(|v| release.version != *v);
+    let update_available = current.as_ref().is_none_or(|v| release.version != *v);
 
     Ok(Json(serde_json::json!({
         "latest_version": release.version,
@@ -318,10 +316,7 @@ pub fn admin_routes() -> axum::Router<WebState> {
     axum::Router::new()
         .route("/api/admin/ytdlp", axum::routing::get(ytdlp_info))
         .route("/api/admin/ytdlp/check", axum::routing::post(ytdlp_check))
-        .route(
-            "/api/admin/ytdlp/update",
-            axum::routing::post(ytdlp_update),
-        )
+        .route("/api/admin/ytdlp/update", axum::routing::post(ytdlp_update))
         .route(
             "/api/admin/youtube",
             axum::routing::get(youtube_info).post(youtube_set_key),

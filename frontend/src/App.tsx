@@ -1,5 +1,11 @@
 import { useEffect, useState } from "react";
-import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router-dom";
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+  Navigate,
+  Outlet,
+} from "react-router-dom";
 import { ToastProvider, ToastContainer } from "./components/ui/Toast";
 import { useAuthStore } from "./stores/authStore";
 import { api } from "./lib/api";
@@ -22,7 +28,8 @@ import { UploadsPage } from "./components/features/uploads/UploadsPage";
 import { WelcomeModal } from "./components/features/onboarding/WelcomeModal";
 
 function ProtectedRoute() {
-  const { authenticated, checking, setAuthenticated, setChecking, setIsAdmin } = useAuthStore();
+  const { authenticated, checking, setAuthenticated, setChecking, setIsAdmin } =
+    useAuthStore();
 
   useEffect(() => {
     if (!checking) return;
@@ -58,7 +65,8 @@ function AuthenticatedLayout() {
   useWebSocket();
   useKeyboardShortcuts();
   usePasteDetection();
-  const { isDragging, droppedFile, clearDroppedFile, triggerFileInput } = useFileDrop();
+  const { isDragging, droppedFile, clearDroppedFile, triggerFileInput } =
+    useFileDrop();
   const [showWelcome, setShowWelcome] = useState(
     () => !localStorage.getItem("azuki-welcome-dismissed"),
   );
@@ -72,10 +80,7 @@ function AuthenticatedLayout() {
       {droppedFile && (
         <UploadMetadataModal file={droppedFile} onClose={clearDroppedFile} />
       )}
-      <WelcomeModal
-        open={showWelcome}
-        onClose={() => setShowWelcome(false)}
-      />
+      <WelcomeModal open={showWelcome} onClose={() => setShowWelcome(false)} />
     </>
   );
 }

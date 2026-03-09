@@ -1,5 +1,5 @@
-use axum::extract::State;
 use axum::Json;
+use axum::extract::State;
 use axum_extra::extract::CookieJar;
 use serde::{Deserialize, Serialize};
 
@@ -21,8 +21,7 @@ async fn get_preferences(
     jar: CookieJar,
 ) -> Result<Json<PreferencesResponse>, ApiError> {
     let user_id = extract_user_id(&jar, &state).await?;
-    let prefs =
-        azuki_db::queries::preferences::get_user_preferences(&state.db, &user_id).await?;
+    let prefs = azuki_db::queries::preferences::get_user_preferences(&state.db, &user_id).await?;
 
     Ok(Json(PreferencesResponse { theme: prefs.theme }))
 }
@@ -34,8 +33,7 @@ async fn update_preferences(
 ) -> Result<Json<PreferencesResponse>, ApiError> {
     let user_id = extract_user_id(&jar, &state).await?;
 
-    let current =
-        azuki_db::queries::preferences::get_user_preferences(&state.db, &user_id).await?;
+    let current = azuki_db::queries::preferences::get_user_preferences(&state.db, &user_id).await?;
 
     let theme = body.theme.as_deref().unwrap_or(&current.theme);
 
@@ -45,10 +43,8 @@ async fn update_preferences(
         ));
     }
 
-    let prefs = azuki_db::queries::preferences::upsert_user_preferences(
-        &state.db, &user_id, theme,
-    )
-    .await?;
+    let prefs =
+        azuki_db::queries::preferences::upsert_user_preferences(&state.db, &user_id, theme).await?;
 
     Ok(Json(PreferencesResponse { theme: prefs.theme }))
 }

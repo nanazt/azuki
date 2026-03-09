@@ -40,7 +40,9 @@ function UploadRow({
   const handleSave = async () => {
     if (!editing) return;
     try {
-      await api.updateTrack(track.id, { [editing]: editValue.trim() || undefined });
+      await api.updateTrack(track.id, {
+        [editing]: editValue.trim() || undefined,
+      });
       onUpdate();
     } catch (err) {
       showToast(err instanceof Error ? err.message : "Update failed", "error");
@@ -134,12 +136,15 @@ function UploadRow({
       </div>
 
       {/* Actions */}
-      <div className={clsx(
-        "flex items-center gap-1",
-        !confirmDelete && "opacity-0 group-hover:opacity-100 focus-within:opacity-100",
-        (adding || deleting) && "opacity-100",
-        confirmDelete && "opacity-100",
-      )}>
+      <div
+        className={clsx(
+          "flex items-center gap-1",
+          !confirmDelete &&
+            "opacity-0 group-hover:opacity-100 focus-within:opacity-100",
+          (adding || deleting) && "opacity-100",
+          confirmDelete && "opacity-100",
+        )}
+      >
         {confirmDelete ? (
           <>
             <button
@@ -154,7 +159,11 @@ function UploadRow({
               disabled={deleting}
               className="px-2 py-1.5 text-xs rounded-md transition-colors touch-manipulation min-h-[44px] text-[var(--color-danger)] hover:bg-[var(--color-danger)]/10 font-medium"
             >
-              {deleting ? <Loader2 size={16} className="animate-spin" /> : "Delete?"}
+              {deleting ? (
+                <Loader2 size={16} className="animate-spin" />
+              ) : (
+                "Delete?"
+              )}
             </button>
           </>
         ) : (
@@ -168,7 +177,11 @@ function UploadRow({
               )}
               aria-label="Add to queue"
             >
-              {adding ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
+              {adding ? (
+                <Loader2 size={16} className="animate-spin" />
+              ) : (
+                <Plus size={16} />
+              )}
             </button>
             {isAdmin && (
               <button
@@ -193,16 +206,27 @@ export function UploadsPage() {
   const [total, setTotal] = useState(0);
   const isAdmin = useAuthStore((s) => s.isAdmin);
 
-  const { items: tracks, setItems: setTracks, loading, loadingMore, hasMore, sentinelRef, reload, loadMore } =
-    useInfiniteScroll<TrackInfo, UploadsResponse>({
-      fetcher: (cursor) => api.getUploads(cursor),
-      onResponse: (res) => setTotal(res.total),
-    });
+  const {
+    items: tracks,
+    setItems: setTracks,
+    loading,
+    loadingMore,
+    hasMore,
+    sentinelRef,
+    reload,
+    loadMore,
+  } = useInfiniteScroll<TrackInfo, UploadsResponse>({
+    fetcher: (cursor) => api.getUploads(cursor),
+    onResponse: (res) => setTotal(res.total),
+  });
 
-  const handleDelete = useCallback((id: string) => {
-    setTracks((prev) => prev.filter((t) => t.id !== id));
-    setTotal((t) => t - 1);
-  }, [setTracks]);
+  const handleDelete = useCallback(
+    (id: string) => {
+      setTracks((prev) => prev.filter((t) => t.id !== id));
+      setTotal((t) => t - 1);
+    },
+    [setTracks],
+  );
 
   return (
     <div className="p-4 md:p-6 max-w-3xl mx-auto flex flex-col gap-6">
@@ -217,7 +241,10 @@ export function UploadsPage() {
 
       {loading && tracks.length === 0 && (
         <div className="flex items-center justify-center py-10">
-          <Loader2 size={24} className="text-[var(--color-text-tertiary)] animate-spin" />
+          <Loader2
+            size={24}
+            className="text-[var(--color-text-tertiary)] animate-spin"
+          />
         </div>
       )}
 
@@ -290,7 +317,9 @@ export function UploadsPage() {
       {/* Screen reader announcement */}
       <div aria-live="polite" aria-atomic="false" className="sr-only">
         {loadingMore ? "Loading more tracks" : ""}
-        {!hasMore && tracks.length > 0 ? `All ${tracks.length} tracks loaded` : ""}
+        {!hasMore && tracks.length > 0
+          ? `All ${tracks.length} tracks loaded`
+          : ""}
       </div>
     </div>
   );

@@ -148,10 +148,7 @@ pub struct RestoreEntry {
     pub avatar_url: Option<String>,
 }
 
-pub async fn get_history_for_restore(
-    pool: &SqlitePool,
-    limit: i64,
-) -> DbResult<Vec<RestoreEntry>> {
+pub async fn get_history_for_restore(pool: &SqlitePool, limit: i64) -> DbResult<Vec<RestoreEntry>> {
     sqlx::query_as::<_, RestoreEntry>(
         "SELECT h.track_id,
                 t.title, t.artist, t.duration_ms,

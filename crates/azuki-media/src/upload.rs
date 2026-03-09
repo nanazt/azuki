@@ -2,8 +2,8 @@ use std::path::PathBuf;
 
 use sha2::{Digest, Sha256};
 
-use crate::store::MediaStore;
 use crate::MediaError;
+use crate::store::MediaStore;
 
 const ALLOWED_AUDIO_TYPES: &[&str] = &[
     "audio/mpeg",

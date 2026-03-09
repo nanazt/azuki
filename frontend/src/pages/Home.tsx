@@ -38,15 +38,24 @@ export function Home() {
       {/* Now Playing banner */}
       {currentTrack ? (
         <div className="flex items-center gap-4 p-4 rounded-xl bg-[var(--color-accent)]/10 border border-[var(--color-accent)]/30">
-          <TrackThumbnail track={currentTrack} sizeClass="w-14 h-14" iconSize={24} className="rounded-lg" />
+          <TrackThumbnail
+            track={currentTrack}
+            sizeClass="w-14 h-14"
+            iconSize={24}
+            className="rounded-lg"
+          />
           <div className="flex-1 min-w-0">
             <p className="text-xs text-[var(--color-text-secondary)] font-semibold uppercase tracking-wide mb-0.5 flex items-center gap-1.5">
               <Radio size={12} />
               Now Playing
             </p>
-            <p className="text-[var(--color-text)] font-semibold truncate">{currentTrack.title}</p>
+            <p className="text-[var(--color-text)] font-semibold truncate">
+              {currentTrack.title}
+            </p>
             {currentTrack.artist && (
-              <p className="text-sm text-[var(--color-text-secondary)] truncate">{currentTrack.artist}</p>
+              <p className="text-sm text-[var(--color-text-secondary)] truncate">
+                {currentTrack.artist}
+              </p>
             )}
           </div>
           <span className="text-xs text-[var(--color-text-tertiary)] flex-shrink-0">
@@ -59,7 +68,9 @@ export function Home() {
             <Music size={24} className="text-[var(--color-text-secondary)]" />
           </div>
           <div>
-            <p className="font-semibold text-[var(--color-text)]">Nothing playing right now</p>
+            <p className="font-semibold text-[var(--color-text)]">
+              Nothing playing right now
+            </p>
             <p className="text-sm text-[var(--color-text-tertiary)] mt-1">
               Search for a track or pick from your history below.
             </p>
@@ -69,7 +80,9 @@ export function Home() {
 
       {/* Recently Played */}
       <section>
-        <h2 className="text-lg font-semibold text-[var(--color-text)] mb-4">Recently Played</h2>
+        <h2 className="text-lg font-semibold text-[var(--color-text)] mb-4">
+          Recently Played
+        </h2>
         {loading ? (
           <div className="flex flex-col gap-3">
             {Array.from({ length: 5 }).map((_, i) => (
@@ -83,7 +96,9 @@ export function Home() {
             ))}
           </div>
         ) : history.length === 0 ? (
-          <p className="text-sm text-[var(--color-text-tertiary)]">No history yet.</p>
+          <p className="text-sm text-[var(--color-text-tertiary)]">
+            No history yet.
+          </p>
         ) : (
           <ul className="flex flex-col gap-1">
             {history.map((entry, i) => (
@@ -92,7 +107,12 @@ export function Home() {
                   onClick={() => handlePlay(entry.track)}
                   className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-[var(--color-bg-secondary)] transition-colors text-left group"
                 >
-                  <TrackThumbnail track={entry.track} sizeClass="w-10 h-10" iconSize={16} className="rounded-md" />
+                  <TrackThumbnail
+                    track={entry.track}
+                    sizeClass="w-10 h-10"
+                    iconSize={16}
+                    className="rounded-md"
+                  />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-[var(--color-text)] truncate">
                       {entry.track.title}

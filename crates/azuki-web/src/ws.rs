@@ -7,9 +7,9 @@ use futures_util::{SinkExt, StreamExt};
 use tokio::sync::broadcast;
 use tracing::{debug, warn};
 
+use crate::WebState;
 use crate::auth::extract_user_id;
 use crate::events::WebEvent;
-use crate::WebState;
 
 pub async fn ws_upgrade(
     jar: CookieJar,
@@ -19,9 +19,10 @@ pub async fn ws_upgrade(
 ) -> impl IntoResponse {
     // Validate origin
     if let Some(origin) = headers.get("origin").and_then(|v| v.to_str().ok())
-        && !state.allowed_origins.iter().any(|o| o == origin) {
-            return (axum::http::StatusCode::FORBIDDEN, "invalid origin").into_response();
-        }
+        && !state.allowed_origins.iter().any(|o| o == origin)
+    {
+        return (axum::http::StatusCode::FORBIDDEN, "invalid origin").into_response();
+    }
 
     // Auth from cookie
     let user_id = match extract_user_id(&jar, &state).await {
@@ -129,10 +130,18 @@ async fn handle_ws_command(text: &str, state: &WebState, _user_id: &str) {
     };
 
     match cmd.action.as_str() {
-        "pause" => { state.player.pause().await.ok(); }
-        "resume" => { state.player.resume().await.ok(); }
-        "skip" => { state.player.skip().await.ok(); }
-        "stop" => { state.player.stop().await.ok(); }
+        "pause" => {
+            state.player.pause().await.ok();
+        }
+        "resume" => {
+            state.player.resume().await.ok();
+        }
+        "skip" => {
+            state.player.skip().await.ok();
+        }
+        "stop" => {
+            state.player.stop().await.ok();
+        }
         "seek" => {
             if let Some(pos) = cmd.position_ms {
                 state.player.seek(pos).await.ok();
@@ -140,13 +149,19 @@ async fn handle_ws_command(text: &str, state: &WebState, _user_id: &str) {
         }
         "volume" => {
             if let Some(vol) = cmd.volume {
-                if vol > 100 { return; }
+                if vol > 100 {
+                    return;
+                }
                 state.player.set_volume(vol).await.ok();
                 let snapshot = state.player.get_state().await;
                 if let azuki_player::PlayStateInfo::Playing { ref track, .. }
-                    | azuki_player::PlayStateInfo::Paused { ref track, .. } = snapshot.state
+                | azuki_player::PlayStateInfo::Paused { ref track, .. } = snapshot.state
                 {
-                    azuki_db::queries::tracks::update_track_volume(&state.db, &track.id, vol as i64).await.ok();
+                    azuki_db::queries::tracks::update_track_volume(
+                        &state.db, &track.id, vol as i64,
+                    )
+                    .await
+                    .ok();
                 }
             }
         }

@@ -21,7 +21,15 @@ const ALLOWED_TYPES = [
 ];
 
 const ALLOWED_EXTENSIONS = [
-  "mp3", "ogg", "wav", "flac", "aac", "opus", "webm", "mp4", "m4a",
+  "mp3",
+  "ogg",
+  "wav",
+  "flac",
+  "aac",
+  "opus",
+  "webm",
+  "mp4",
+  "m4a",
 ];
 
 const MAX_UPLOAD_SIZE_MB = 300;
@@ -81,7 +89,9 @@ function validateFile(
 export function useFileDrop() {
   const { showToast } = useToast();
   const [isDragging, setIsDragging] = useState(false);
-  const [droppedFile, setDroppedFile] = useState<DroppedFileUpload | null>(null);
+  const [droppedFile, setDroppedFile] = useState<DroppedFileUpload | null>(
+    null,
+  );
   const counterRef = useRef(0);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 

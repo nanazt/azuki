@@ -7,9 +7,21 @@ import type { Toast as ToastData, ToastType } from "../../hooks/useToast";
 export { ToastProvider, useToast } from "../../hooks/useToast";
 
 const iconMap: Record<ToastType, React.ReactNode> = {
-  success: <CheckCircle size={16} className="text-[var(--color-success)] flex-shrink-0" />,
-  error: <XCircle size={16} className="text-[var(--color-danger)] flex-shrink-0" />,
-  info: <Info size={16} className="text-[var(--color-text-secondary)] flex-shrink-0" />,
+  success: (
+    <CheckCircle
+      size={16}
+      className="text-[var(--color-success)] flex-shrink-0"
+    />
+  ),
+  error: (
+    <XCircle size={16} className="text-[var(--color-danger)] flex-shrink-0" />
+  ),
+  info: (
+    <Info
+      size={16}
+      className="text-[var(--color-text-secondary)] flex-shrink-0"
+    />
+  ),
 };
 
 function RichPreviewSkeleton() {
@@ -24,7 +36,13 @@ function RichPreviewSkeleton() {
   );
 }
 
-function ToastItem({ toast, onRemove }: { toast: ToastData; onRemove: () => void }) {
+function ToastItem({
+  toast,
+  onRemove,
+}: {
+  toast: ToastData;
+  onRemove: () => void;
+}) {
   const hasRichPreview = toast.richPreview;
   const isRich = hasRichPreview || toast.action;
 
@@ -34,13 +52,13 @@ function ToastItem({ toast, onRemove }: { toast: ToastData; onRemove: () => void
         "flex flex-col gap-2 px-4 py-3 rounded-lg shadow-lg",
         "bg-[var(--color-bg-secondary)] border border-[var(--color-border)]",
         "animate-[fadeInUp_0.2s_ease-out]",
-        isRich ? "w-80 border-l-2 border-l-[var(--color-accent)]" : "max-w-sm"
+        isRich ? "w-80 border-l-2 border-l-[var(--color-accent)]" : "max-w-sm",
       )}
       role="alert"
     >
       {/* Rich preview */}
-      {hasRichPreview && (
-        toast.richPreview!.loading ? (
+      {hasRichPreview &&
+        (toast.richPreview!.loading ? (
           <RichPreviewSkeleton />
         ) : (
           <div className="flex gap-3">
@@ -62,14 +80,15 @@ function ToastItem({ toast, onRemove }: { toast: ToastData; onRemove: () => void
               )}
             </div>
           </div>
-        )
-      )}
+        ))}
 
       {/* Standard message row */}
       {!hasRichPreview && (
         <div className="flex items-center gap-2.5">
           {iconMap[toast.type]}
-          <span className="text-sm text-[var(--color-text)] flex-1">{toast.message}</span>
+          <span className="text-sm text-[var(--color-text)] flex-1">
+            {toast.message}
+          </span>
           {!toast.action && (
             <button
               onClick={onRemove}

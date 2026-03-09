@@ -55,7 +55,12 @@ export type PlayStateInfo =
   | { status: "error"; track: TrackInfo; error: string };
 
 export type PlayerEvent =
-  | { type: "track_started"; track: TrackInfo; position_ms: number; added_by: UserInfo }
+  | {
+      type: "track_started";
+      track: TrackInfo;
+      position_ms: number;
+      added_by: UserInfo;
+    }
   | { type: "track_ended"; track_id: string }
   | { type: "track_loading"; track: TrackInfo }
   | { type: "track_error"; track_id: string; error: string }
@@ -74,9 +79,27 @@ export type PlayerEvent =
     }
   | { type: "listeners_updated"; users: UserInfo[] }
   | { type: "state_snapshot"; state: PlayerSnapshot }
-  | { type: "download_started"; download_id: string; query: string; user_info: UserInfo }
-  | { type: "download_metadata_resolved"; download_id: string; title: string; artist: string | null; thumbnail_url: string | null; duration_ms: number; source_url: string }
-  | { type: "download_progress"; download_id: string; percent: number; speed_bps: number | null }
+  | {
+      type: "download_started";
+      download_id: string;
+      query: string;
+      user_info: UserInfo;
+    }
+  | {
+      type: "download_metadata_resolved";
+      download_id: string;
+      title: string;
+      artist: string | null;
+      thumbnail_url: string | null;
+      duration_ms: number;
+      source_url: string;
+    }
+  | {
+      type: "download_progress";
+      download_id: string;
+      percent: number;
+      speed_bps: number | null;
+    }
   | { type: "download_complete"; download_id: string; track: TrackInfo }
   | { type: "download_failed"; download_id: string; error: string }
   | { type: "history_added"; track: TrackInfo; user_id: string }

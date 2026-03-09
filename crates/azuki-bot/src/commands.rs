@@ -3,9 +3,9 @@ use std::sync::atomic::Ordering;
 
 use serenity::all::{
     ChannelId, CommandInteraction, CommandOptionType, ComponentInteraction,
-    ComponentInteractionDataKind, Context, CreateCommand,
-    CreateCommandOption, CreateInteractionResponse, CreateInteractionResponseFollowup,
-    CreateInteractionResponseMessage, GuildId, UserId,
+    ComponentInteractionDataKind, Context, CreateCommand, CreateCommandOption,
+    CreateInteractionResponse, CreateInteractionResponseFollowup, CreateInteractionResponseMessage,
+    GuildId, UserId,
 };
 use tracing::info;
 
@@ -110,7 +110,11 @@ async fn respond(
         .map_err(|e| crate::BotError::Serenity(e.to_string()))
 }
 
-async fn defer(ctx: &Context, cmd: &CommandInteraction, ephemeral: bool) -> Result<(), crate::BotError> {
+async fn defer(
+    ctx: &Context,
+    cmd: &CommandInteraction,
+    ephemeral: bool,
+) -> Result<(), crate::BotError> {
     if ephemeral {
         cmd.defer_ephemeral(&ctx.http).await
     } else {
@@ -175,8 +179,7 @@ async fn handle_play(
         let _ = cmd
             .edit_response(
                 &ctx.http,
-                serenity::all::EditInteractionResponse::new()
-                    .content(format!("Error: {e}")),
+                serenity::all::EditInteractionResponse::new().content(format!("Error: {e}")),
             )
             .await;
     }
@@ -345,7 +348,15 @@ async fn handle_skip(
 ) -> Result<(), crate::BotError> {
     let next = state.player.skip().await.map_err(crate::BotError::Player)?;
     match next {
-        Some(track) => respond(ctx, cmd, &format!("⏭️ Skipped → **{}**", track.title), is_history).await,
+        Some(track) => {
+            respond(
+                ctx,
+                cmd,
+                &format!("⏭️ Skipped → **{}**", track.title),
+                is_history,
+            )
+            .await
+        }
         None => respond(ctx, cmd, "⏭️ Skipped — queue empty", is_history).await,
     }
 }
@@ -385,13 +396,25 @@ async fn handle_now(
                 "░".repeat(20)
             };
             let title = make_title_link(&track.title, &track.source_url);
-            respond(ctx, cmd, &format!("{title}\n{pos} {progress} {total}"), is_history).await
+            respond(
+                ctx,
+                cmd,
+                &format!("{title}\n{pos} {progress} {total}"),
+                is_history,
+            )
+            .await
         }
         azuki_player::PlayStateInfo::Paused { track, position_ms } => {
             let pos = format_duration(position_ms);
             let total = format_duration(track.duration_ms);
             let title = make_title_link(&track.title, &track.source_url);
-            respond(ctx, cmd, &format!("⏸️ {title} — paused at {pos}/{total}"), is_history).await
+            respond(
+                ctx,
+                cmd,
+                &format!("⏸️ {title} — paused at {pos}/{total}"),
+                is_history,
+            )
+            .await
         }
         _ => respond(ctx, cmd, "Nothing playing", is_history).await,
     }

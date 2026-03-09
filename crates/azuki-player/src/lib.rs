@@ -2,10 +2,7 @@ pub mod controller;
 pub mod events;
 pub mod queue;
 
-pub use controller::{
-    PlayAction, PlayerCommand, PlayerController, PlayerError, TrackEndReason,
-};
+pub use controller::{PlayAction, PlayerCommand, PlayerController, PlayerError, TrackEndReason};
 pub use events::{
-    LoopMode, PlayStateInfo, PlayerEvent, PlayerSnapshot, QueueEntry, SeqEvent, TrackInfo,
-    UserInfo,
+    LoopMode, PlayStateInfo, PlayerEvent, PlayerSnapshot, QueueEntry, SeqEvent, TrackInfo, UserInfo,
 };

@@ -3,17 +3,17 @@ pub mod store;
 pub mod types;
 pub mod upload;
 pub mod url_detect;
+pub mod youtube;
 pub mod ytdlp;
 pub mod ytdlp_updater;
-pub mod youtube;
 
-pub use metadata::{parse_audio_metadata, AudioMetadata};
+pub use metadata::{AudioMetadata, parse_audio_metadata};
 pub use store::MediaStore;
 pub use types::TrackMeta;
-pub use url_detect::{detect_url, DetectedUrl};
-pub use ytdlp::{FlatPlaylistEntry, YtDlp, REFILL_SEMAPHORE};
+pub use url_detect::{DetectedUrl, detect_url};
+pub use youtube::{PlaylistItemMeta, PlaylistMeta, YouTubeClient, extract_video_id};
+pub use ytdlp::{FlatPlaylistEntry, REFILL_SEMAPHORE, YtDlp};
 pub use ytdlp_updater::ReleaseInfo;
-pub use youtube::{extract_video_id, PlaylistItemMeta, PlaylistMeta, YouTubeClient};
 
 #[derive(Debug, thiserror::Error)]
 pub enum MediaError {

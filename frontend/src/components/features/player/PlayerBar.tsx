@@ -25,8 +25,17 @@ interface PlayerBarProps {
 }
 
 export function PlayerBar({ onToggleQueue, queueDrawerOpen }: PlayerBarProps) {
-  const { playState, volume, loopMode, togglePlay, skip, previous, seek, setVolume, cycleLoop } =
-    usePlayer();
+  const {
+    playState,
+    volume,
+    loopMode,
+    togglePlay,
+    skip,
+    previous,
+    seek,
+    setVolume,
+    cycleLoop,
+  } = usePlayer();
   const boostMode = usePlayerStore((s) => s.boostMode);
   const setBoostMode = usePlayerStore((s) => s.setBoostMode);
   const [elapsed, setElapsed] = useState(0);
@@ -38,8 +47,7 @@ export function PlayerBar({ onToggleQueue, queueDrawerOpen }: PlayerBarProps) {
   const rafRef = useRef<number | null>(null);
   const lastUpdateRef = useRef<number>(Date.now());
 
-  const track =
-    playState.status !== "idle" ? playState.track : null;
+  const track = playState.status !== "idle" ? playState.track : null;
   const connected = usePlayerStore((s) => s.connected);
   const isPlaying = playState.status === "playing";
   const positionMs =
@@ -91,7 +99,7 @@ export function PlayerBar({ onToggleQueue, queueDrawerOpen }: PlayerBarProps) {
       setIsSeeking(false);
       seek(value);
     },
-    [seek]
+    [seek],
   );
 
   const handleVolumeChange = useCallback(
@@ -102,7 +110,7 @@ export function PlayerBar({ onToggleQueue, queueDrawerOpen }: PlayerBarProps) {
       if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
       savedTimerRef.current = setTimeout(() => setVolumeSaved(false), 1500);
     },
-    [setVolume]
+    [setVolume],
   );
 
   const loopIcon = () => {
@@ -128,7 +136,12 @@ export function PlayerBar({ onToggleQueue, queueDrawerOpen }: PlayerBarProps) {
           <div className="flex items-center gap-3 min-w-0 w-[30%]">
             {track ? (
               <>
-                <TrackThumbnail track={track} sizeClass="w-12 h-12" iconSize={20} className="rounded" />
+                <TrackThumbnail
+                  track={track}
+                  sizeClass="w-12 h-12"
+                  iconSize={20}
+                  className="rounded"
+                />
                 <div className="min-w-0">
                   <div className="text-sm font-medium text-[var(--color-text)] truncate">
                     {track.title}
@@ -145,7 +158,10 @@ export function PlayerBar({ onToggleQueue, queueDrawerOpen }: PlayerBarProps) {
                 <Skeleton variant="rect" className="w-12 h-12 rounded" />
                 <div className="flex flex-col gap-1.5">
                   <Skeleton variant="text" className="h-3 w-32 rounded-full" />
-                  <Skeleton variant="text" className="h-2.5 w-20 rounded-full" />
+                  <Skeleton
+                    variant="text"
+                    className="h-2.5 w-20 rounded-full"
+                  />
                 </div>
               </>
             )}
@@ -160,7 +176,7 @@ export function PlayerBar({ onToggleQueue, queueDrawerOpen }: PlayerBarProps) {
                 "p-2 transition-colors rounded-full",
                 track
                   ? "text-[var(--color-text-secondary)] hover:text-[var(--color-text)] cursor-pointer hover:bg-[var(--color-bg-hover)]"
-                  : "text-[var(--color-text-tertiary)] opacity-30 cursor-default"
+                  : "text-[var(--color-text-tertiary)] opacity-30 cursor-default",
               )}
               aria-label="Previous"
             >
@@ -173,11 +189,15 @@ export function PlayerBar({ onToggleQueue, queueDrawerOpen }: PlayerBarProps) {
                 "p-2.5 text-[#1a1a1a] rounded-full transition-colors",
                 track
                   ? "bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] cursor-pointer"
-                  : "bg-[var(--color-accent)] opacity-40 cursor-default"
+                  : "bg-[var(--color-accent)] opacity-40 cursor-default",
               )}
               aria-label={isPlaying ? "Pause" : "Play"}
             >
-              {isPlaying ? <Pause size={20} fill="currentColor" /> : <Play size={20} fill="currentColor" />}
+              {isPlaying ? (
+                <Pause size={20} fill="currentColor" />
+              ) : (
+                <Play size={20} fill="currentColor" />
+              )}
             </button>
             <button
               onClick={skip}
@@ -186,7 +206,7 @@ export function PlayerBar({ onToggleQueue, queueDrawerOpen }: PlayerBarProps) {
                 "p-2 transition-colors rounded-full",
                 track
                   ? "text-[var(--color-text-secondary)] hover:text-[var(--color-text)] cursor-pointer hover:bg-[var(--color-bg-hover)]"
-                  : "text-[var(--color-text-tertiary)] opacity-30 cursor-default"
+                  : "text-[var(--color-text-tertiary)] opacity-30 cursor-default",
               )}
               aria-label="Skip"
             >
@@ -201,7 +221,7 @@ export function PlayerBar({ onToggleQueue, queueDrawerOpen }: PlayerBarProps) {
                   ? "text-[var(--color-text-tertiary)] opacity-30 cursor-default"
                   : loopActive
                     ? "bg-[var(--color-accent)]/20 text-[var(--color-text)] hover:bg-[var(--color-bg-hover)] cursor-pointer"
-                    : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-bg-hover)] cursor-pointer"
+                    : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-bg-hover)] cursor-pointer",
               )}
               aria-label={`Loop: ${loopMode}`}
             >
@@ -211,10 +231,12 @@ export function PlayerBar({ onToggleQueue, queueDrawerOpen }: PlayerBarProps) {
 
           {/* Right: volume + toggles */}
           <div className="flex items-center gap-3 justify-end w-[30%]">
-            <div className={clsx(
-              "flex items-center gap-2",
-              !track && "opacity-40 pointer-events-none"
-            )}>
+            <div
+              className={clsx(
+                "flex items-center gap-2",
+                !track && "opacity-40 pointer-events-none",
+              )}
+            >
               <button
                 onClick={() => {
                   if (volume > 0) {
@@ -237,10 +259,14 @@ export function PlayerBar({ onToggleQueue, queueDrawerOpen }: PlayerBarProps) {
                 className="w-24"
                 aria-label="Volume"
               />
-              <span className={clsx(
-                "text-xs tabular-nums w-7 text-right select-none transition-colors duration-300",
-                volumeSaved ? "text-[var(--color-success)]" : "text-[var(--color-text-tertiary)]"
-              )}>
+              <span
+                className={clsx(
+                  "text-xs tabular-nums w-7 text-right select-none transition-colors duration-300",
+                  volumeSaved
+                    ? "text-[var(--color-success)]"
+                    : "text-[var(--color-text-tertiary)]",
+                )}
+              >
                 {track ? `${volume}%` : "--"}
               </span>
               <button
@@ -254,10 +280,18 @@ export function PlayerBar({ onToggleQueue, queueDrawerOpen }: PlayerBarProps) {
                     ? "bg-[var(--color-accent)]/20 text-[var(--color-text)] cursor-default"
                     : effectiveBoost
                       ? "bg-[var(--color-accent)]/20 text-[var(--color-text)] hover:bg-[var(--color-bg-hover)] cursor-pointer"
-                      : "text-[var(--color-text-tertiary)] hover:text-[var(--color-text)] hover:bg-[var(--color-bg-hover)] cursor-pointer"
+                      : "text-[var(--color-text-tertiary)] hover:text-[var(--color-text)] hover:bg-[var(--color-bg-hover)] cursor-pointer",
                 )}
-                aria-label={effectiveBoost ? "Disable volume boost" : "Enable volume boost"}
-                title={effectiveBoost ? "Volume boost on (0-100%)" : "Volume boost off (0-10%)"}
+                aria-label={
+                  effectiveBoost
+                    ? "Disable volume boost"
+                    : "Enable volume boost"
+                }
+                title={
+                  effectiveBoost
+                    ? "Volume boost on (0-100%)"
+                    : "Volume boost off (0-10%)"
+                }
               >
                 <ChevronUp size={14} />
               </button>
@@ -269,7 +303,7 @@ export function PlayerBar({ onToggleQueue, queueDrawerOpen }: PlayerBarProps) {
                   "hidden md:flex lg:hidden p-1.5 rounded-full transition-colors cursor-pointer",
                   queueDrawerOpen
                     ? "bg-[var(--color-accent)]/20 text-[var(--color-text)] hover:bg-[var(--color-bg-hover)]"
-                    : "text-[var(--color-text-tertiary)] hover:text-[var(--color-text)] hover:bg-[var(--color-bg-hover)]"
+                    : "text-[var(--color-text-tertiary)] hover:text-[var(--color-text)] hover:bg-[var(--color-bg-hover)]",
                 )}
                 aria-label="Toggle queue"
               >
@@ -280,10 +314,12 @@ export function PlayerBar({ onToggleQueue, queueDrawerOpen }: PlayerBarProps) {
         </div>
 
         {/* Row 2: seek bar */}
-        <div className={clsx(
-          "flex items-center gap-3",
-          !track && "opacity-30 pointer-events-none"
-        )}>
+        <div
+          className={clsx(
+            "flex items-center gap-3",
+            !track && "opacity-30 pointer-events-none",
+          )}
+        >
           <span className="text-xs text-[var(--color-text-tertiary)] w-10 text-right tabular-nums">
             {track ? formatTime(displayElapsed) : "--:--"}
           </span>
@@ -309,7 +345,12 @@ export function PlayerBar({ onToggleQueue, queueDrawerOpen }: PlayerBarProps) {
       <div className="flex md:hidden items-center gap-3 h-[60px] bg-[var(--color-bg-secondary)] border-t border-[var(--color-border)] px-3">
         {track ? (
           <>
-            <TrackThumbnail track={track} sizeClass="w-10 h-10" iconSize={16} className="rounded" />
+            <TrackThumbnail
+              track={track}
+              sizeClass="w-10 h-10"
+              iconSize={16}
+              className="rounded"
+            />
             <div className="min-w-0 flex-1">
               <div className="text-sm font-medium text-[var(--color-text)] truncate">
                 {track.title}
@@ -337,7 +378,7 @@ export function PlayerBar({ onToggleQueue, queueDrawerOpen }: PlayerBarProps) {
             "min-w-11 min-h-11 flex items-center justify-center touch-manipulation",
             track
               ? "text-[var(--color-text)] cursor-pointer"
-              : "text-[var(--color-text-tertiary)] opacity-50 cursor-default"
+              : "text-[var(--color-text-tertiary)] opacity-50 cursor-default",
           )}
           aria-label={isPlaying ? "Pause" : "Play"}
         >
@@ -350,7 +391,7 @@ export function PlayerBar({ onToggleQueue, queueDrawerOpen }: PlayerBarProps) {
             "min-w-11 min-h-11 flex items-center justify-center touch-manipulation",
             track
               ? "text-[var(--color-text-secondary)] cursor-pointer"
-              : "text-[var(--color-text-tertiary)] opacity-50 cursor-default"
+              : "text-[var(--color-text-tertiary)] opacity-50 cursor-default",
           )}
           aria-label="Skip"
         >

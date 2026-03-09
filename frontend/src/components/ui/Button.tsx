@@ -17,8 +17,7 @@ const variantClasses: Record<Variant, string> = {
     "bg-[var(--color-bg-secondary)] hover:bg-[var(--color-bg-hover)] text-[var(--color-text)] border border-[var(--color-border)]",
   ghost:
     "bg-transparent hover:bg-[var(--color-bg-hover)] text-[var(--color-text-secondary)] hover:text-[var(--color-text)]",
-  danger:
-    "bg-[var(--color-danger)] hover:opacity-90 text-white",
+  danger: "bg-[var(--color-danger)] hover:opacity-90 text-white",
 };
 
 const sizeClasses: Record<Size, string> = {
@@ -52,7 +51,7 @@ export function Button({
         variantClasses[variant],
         iconOnly ? iconSizeClasses[size] : sizeClasses[size],
         disabled && "opacity-40 cursor-not-allowed pointer-events-none",
-        className
+        className,
       )}
     >
       {children}

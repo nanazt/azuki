@@ -11,7 +11,7 @@ use songbird::Songbird;
 use sqlx::SqlitePool;
 use tokio::sync::Mutex;
 
-use azuki_media::{YtDlp, YouTubeClient};
+use azuki_media::{YouTubeClient, YtDlp};
 use azuki_player::PlayerController;
 
 pub struct BotState {

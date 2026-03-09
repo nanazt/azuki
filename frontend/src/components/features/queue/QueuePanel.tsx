@@ -18,7 +18,10 @@ import {
   verticalListSortingStrategy,
   sortableKeyboardCoordinates,
 } from "@dnd-kit/sortable";
-import { restrictToVerticalAxis, restrictToParentElement } from "@dnd-kit/modifiers";
+import {
+  restrictToVerticalAxis,
+  restrictToParentElement,
+} from "@dnd-kit/modifiers";
 import { usePlayerStore } from "../../../stores/playerStore";
 import {
   useDownloadStore,
@@ -78,7 +81,10 @@ export function QueuePanel({ onOpenSearch }: QueuePanelProps) {
       setActiveIndex(null);
       const { active, over } = event;
       if (!over || active.id === over.id) return;
-      moveInQueue(parseIndex(active.id as string), parseIndex(over.id as string));
+      moveInQueue(
+        parseIndex(active.id as string),
+        parseIndex(over.id as string),
+      );
     },
     [moveInQueue],
   );
@@ -136,7 +142,12 @@ export function QueuePanel({ onOpenSearch }: QueuePanelProps) {
               </span>
             </div>
             <div className="flex items-center gap-3 px-3 py-2 mx-1 rounded-lg bg-[var(--color-bg-tertiary)] group">
-              <TrackThumbnail track={currentTrack} sizeClass="w-9 h-9" iconSize={14} className="rounded" />
+              <TrackThumbnail
+                track={currentTrack}
+                sizeClass="w-9 h-9"
+                iconSize={14}
+                className="rounded"
+              />
               <div className="min-w-0 flex-1">
                 <div className="text-sm font-medium text-[var(--color-text)] truncate">
                   {currentTrack.title}
@@ -147,9 +158,20 @@ export function QueuePanel({ onOpenSearch }: QueuePanelProps) {
                   )}
                   {currentAddedBy?.username && (
                     <>
-                      {currentTrack.artist && <span className="text-[var(--color-text-tertiary)] flex-shrink-0">·</span>}
-                      <Avatar src={currentAddedBy.avatar_url} username={currentAddedBy.username} size="xs" className="flex-shrink-0" />
-                      <span className="text-[var(--color-text-secondary)] truncate">{currentAddedBy.username}</span>
+                      {currentTrack.artist && (
+                        <span className="text-[var(--color-text-tertiary)] flex-shrink-0">
+                          ·
+                        </span>
+                      )}
+                      <Avatar
+                        src={currentAddedBy.avatar_url}
+                        username={currentAddedBy.username}
+                        size="xs"
+                        className="flex-shrink-0"
+                      />
+                      <span className="text-[var(--color-text-secondary)] truncate">
+                        {currentAddedBy.username}
+                      </span>
                     </>
                   )}
                 </div>
@@ -276,7 +298,10 @@ function DownloadItem({ download }: { download: DownloadEntry }) {
               <div className="w-full h-full bg-[var(--color-bg-tertiary)]" />
             )}
             <div className="absolute inset-0 flex items-center justify-center">
-              <Loader2 size={14} className="text-[var(--color-accent)] animate-spin" />
+              <Loader2
+                size={14}
+                className="text-[var(--color-accent)] animate-spin"
+              />
             </div>
           </div>
         ) : (
@@ -296,9 +321,20 @@ function DownloadItem({ download }: { download: DownloadEntry }) {
                 )}
                 {download.user_info?.username && (
                   <>
-                    {download.artist && <span className="text-[var(--color-text-tertiary)] flex-shrink-0">·</span>}
-                    <Avatar src={download.user_info.avatar_url ?? null} username={download.user_info.username} size="xs" className="flex-shrink-0" />
-                    <span className="truncate">{download.user_info.username}</span>
+                    {download.artist && (
+                      <span className="text-[var(--color-text-tertiary)] flex-shrink-0">
+                        ·
+                      </span>
+                    )}
+                    <Avatar
+                      src={download.user_info.avatar_url ?? null}
+                      username={download.user_info.username}
+                      size="xs"
+                      className="flex-shrink-0"
+                    />
+                    <span className="truncate">
+                      {download.user_info.username}
+                    </span>
                   </>
                 )}
               </div>
@@ -310,9 +346,18 @@ function DownloadItem({ download }: { download: DownloadEntry }) {
                 <div className="h-3 w-[40%] rounded bg-[var(--color-bg-tertiary)] animate-pulse" />
                 {download.user_info?.username && (
                   <>
-                    <span className="text-[var(--color-text-tertiary)] flex-shrink-0">·</span>
-                    <Avatar src={download.user_info.avatar_url ?? null} username={download.user_info.username} size="xs" className="flex-shrink-0" />
-                    <span className="text-xs text-[var(--color-text-secondary)] truncate">{download.user_info.username}</span>
+                    <span className="text-[var(--color-text-tertiary)] flex-shrink-0">
+                      ·
+                    </span>
+                    <Avatar
+                      src={download.user_info.avatar_url ?? null}
+                      username={download.user_info.username}
+                      size="xs"
+                      className="flex-shrink-0"
+                    />
+                    <span className="text-xs text-[var(--color-text-secondary)] truncate">
+                      {download.user_info.username}
+                    </span>
                   </>
                 )}
               </div>
@@ -332,7 +377,7 @@ function DownloadItem({ download }: { download: DownloadEntry }) {
       <div className="h-0.5 bg-[var(--color-bg-tertiary)]">
         <div
           className="h-full bg-[var(--color-accent)] transition-all duration-300"
-          style={{ width: percent > 0 ? `${percent}%` : '0%' }}
+          style={{ width: percent > 0 ? `${percent}%` : "0%" }}
         />
       </div>
     </div>

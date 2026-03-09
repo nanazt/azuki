@@ -17,7 +17,9 @@ interface HistoryEntry {
 }
 
 function formatDate(iso: string): string {
-  const date = new Date(iso.endsWith("Z") || iso.includes("+") ? iso : iso + "Z");
+  const date = new Date(
+    iso.endsWith("Z") || iso.includes("+") ? iso : iso + "Z",
+  );
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
   const diffMins = Math.floor(diffMs / 60000);
@@ -35,10 +37,18 @@ export function History() {
   const [hasNewTrack, setHasNewTrack] = useState(false);
   const [isFirstPage, setIsFirstPage] = useState(true);
 
-  const { items, setItems, loading, loadingMore, hasMore, sentinelRef, reload, loadMore } =
-    useInfiniteScroll<HistoryEntry>({
-      fetcher: (cursor) => api.getHistory(cursor),
-    });
+  const {
+    items,
+    setItems,
+    loading,
+    loadingMore,
+    hasMore,
+    sentinelRef,
+    reload,
+    loadMore,
+  } = useInfiniteScroll<HistoryEntry>({
+    fetcher: (cursor) => api.getHistory(cursor),
+  });
 
   // Track when user scrolls past first page
   const handleReload = useCallback(() => {
@@ -55,17 +65,25 @@ export function History() {
   useEffect(() => {
     const handler = (e: Event) => {
       const detail = (e as CustomEvent).detail;
-      const scrollTop = document.querySelector("[data-main-scroll]")?.scrollTop ?? 0;
+      const scrollTop =
+        document.querySelector("[data-main-scroll]")?.scrollTop ?? 0;
       if (isFirstPage && scrollTop < 50) {
         setItems((prev) => {
-          const existing = prev.find((entry) => entry.track.id === detail.track.id);
-          const filtered = prev.filter((entry) => entry.track.id !== detail.track.id);
-          return [{
-            track: detail.track,
-            played_at: new Date().toISOString(),
-            user_id: detail.user_id,
-            play_count: (existing?.play_count ?? 0) + 1,
-          }, ...filtered];
+          const existing = prev.find(
+            (entry) => entry.track.id === detail.track.id,
+          );
+          const filtered = prev.filter(
+            (entry) => entry.track.id !== detail.track.id,
+          );
+          return [
+            {
+              track: detail.track,
+              played_at: new Date().toISOString(),
+              user_id: detail.user_id,
+              play_count: (existing?.play_count ?? 0) + 1,
+            },
+            ...filtered,
+          ];
         });
       } else {
         setHasNewTrack(true);
@@ -80,13 +98,13 @@ export function History() {
 
   const handleAdd = async (track: TrackInfo) => {
     if (addingIds.has(track.id)) return;
-    setAddingIds(prev => new Set(prev).add(track.id));
+    setAddingIds((prev) => new Set(prev).add(track.id));
     try {
       await api.addToQueue(track.source_url);
     } catch {
       showToast("Failed to add to queue", "error");
     } finally {
-      setAddingIds(prev => {
+      setAddingIds((prev) => {
         const next = new Set(prev);
         next.delete(track.id);
         return next;
@@ -115,8 +133,12 @@ export function History() {
       ) : items.length === 0 ? (
         <div className="flex flex-col items-center gap-3 py-16 text-center">
           <Clock size={40} className="text-[var(--color-text-tertiary)]" />
-          <p className="text-[var(--color-text-secondary)]">No play history yet.</p>
-          <p className="text-sm text-[var(--color-text-tertiary)]">Start listening!</p>
+          <p className="text-[var(--color-text-secondary)]">
+            No play history yet.
+          </p>
+          <p className="text-sm text-[var(--color-text-tertiary)]">
+            Start listening!
+          </p>
         </div>
       ) : (
         <>
@@ -130,41 +152,51 @@ export function History() {
           )}
           <ul className="flex flex-col">
             {items.map((entry) => (
-              <li key={`${entry.track.id}-${entry.played_at}`} className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-[var(--color-bg-hover)] transition-colors duration-100 group">
-                  <TrackThumbnail track={entry.track} sizeClass="w-12 h-12" iconSize={18} className="rounded" />
-                  <div className="min-w-0 flex-1">
-                    <div className="text-sm font-medium text-[var(--color-text)] truncate">
-                      {entry.track.title}
-                    </div>
-                    <div className="text-xs text-[var(--color-text-secondary)] truncate">
-                      {entry.track.artist ?? "Unknown artist"}
-                      <span className="text-[var(--color-text-tertiary)] ml-2">
-                        {formatDate(entry.played_at)}
-                      </span>
-                      {entry.track.duration_ms > 0 && (
-                        <span className="text-[var(--color-text-tertiary)] ml-1">
-                          · {formatTime(entry.track.duration_ms)}
-                        </span>
-                      )}
-                    </div>
+              <li
+                key={`${entry.track.id}-${entry.played_at}`}
+                className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-[var(--color-bg-hover)] transition-colors duration-100 group"
+              >
+                <TrackThumbnail
+                  track={entry.track}
+                  sizeClass="w-12 h-12"
+                  iconSize={18}
+                  className="rounded"
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-medium text-[var(--color-text)] truncate">
+                    {entry.track.title}
                   </div>
-                  <button
-                    onClick={() => handleAdd(entry.track)}
-                    disabled={addingIds.has(entry.track.id)}
-                    className={clsx(
-                      "flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium",
-                      "transition-all duration-150 cursor-pointer",
-                      addingIds.has(entry.track.id)
-                        ? "bg-[var(--color-bg-tertiary)] text-[var(--color-text-tertiary)] cursor-not-allowed"
-                        : "bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] text-[#1a1a1a] opacity-0 group-hover:opacity-100 [@media(hover:none)]:opacity-100"
+                  <div className="text-xs text-[var(--color-text-secondary)] truncate">
+                    {entry.track.artist ?? "Unknown artist"}
+                    <span className="text-[var(--color-text-tertiary)] ml-2">
+                      {formatDate(entry.played_at)}
+                    </span>
+                    {entry.track.duration_ms > 0 && (
+                      <span className="text-[var(--color-text-tertiary)] ml-1">
+                        · {formatTime(entry.track.duration_ms)}
+                      </span>
                     )}
-                    aria-label={`Add ${entry.track.title} to queue`}
-                  >
-                    {addingIds.has(entry.track.id)
-                      ? <Loader2 size={12} className="animate-spin" />
-                      : <Plus size={12} />}
-                    {addingIds.has(entry.track.id) ? "Adding…" : "Add"}
-                  </button>
+                  </div>
+                </div>
+                <button
+                  onClick={() => handleAdd(entry.track)}
+                  disabled={addingIds.has(entry.track.id)}
+                  className={clsx(
+                    "flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium",
+                    "transition-all duration-150 cursor-pointer",
+                    addingIds.has(entry.track.id)
+                      ? "bg-[var(--color-bg-tertiary)] text-[var(--color-text-tertiary)] cursor-not-allowed"
+                      : "bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] text-[#1a1a1a] opacity-0 group-hover:opacity-100 [@media(hover:none)]:opacity-100",
+                  )}
+                  aria-label={`Add ${entry.track.title} to queue`}
+                >
+                  {addingIds.has(entry.track.id) ? (
+                    <Loader2 size={12} className="animate-spin" />
+                  ) : (
+                    <Plus size={12} />
+                  )}
+                  {addingIds.has(entry.track.id) ? "Adding…" : "Add"}
+                </button>
               </li>
             ))}
           </ul>
@@ -212,7 +244,9 @@ export function History() {
           {/* Screen reader announcement */}
           <div aria-live="polite" aria-atomic="false" className="sr-only">
             {loadingMore ? "Loading more tracks" : ""}
-            {!hasMore && items.length > 0 ? `All ${items.length} tracks loaded` : ""}
+            {!hasMore && items.length > 0
+              ? `All ${items.length} tracks loaded`
+              : ""}
           </div>
         </>
       )}

@@ -25,8 +25,7 @@ fn platform_asset_name() -> Result<&'static str, MediaError> {
 }
 
 fn validate_url(url_str: &str) -> Result<(), MediaError> {
-    let url =
-        Url::parse(url_str).map_err(|e| MediaError::YtDlp(format!("invalid URL: {e}")))?;
+    let url = Url::parse(url_str).map_err(|e| MediaError::YtDlp(format!("invalid URL: {e}")))?;
     if url.scheme() != "https" {
         return Err(MediaError::YtDlp("URL must use HTTPS".to_string()));
     }
@@ -119,9 +118,7 @@ pub async fn download_binary(release: &ReleaseInfo, dest_path: &Path) -> Result<
                 None
             }
         })
-        .ok_or_else(|| {
-            MediaError::YtDlp(format!("no checksum found for {asset_name}"))
-        })?;
+        .ok_or_else(|| MediaError::YtDlp(format!("no checksum found for {asset_name}")))?;
 
     // Ensure parent directory exists
     if let Some(parent) = dest_path.parent() {
@@ -175,6 +172,10 @@ pub async fn download_binary(release: &ReleaseInfo, dest_path: &Path) -> Result<
         return Err(MediaError::YtDlp(format!("rename failed: {e}")));
     }
 
-    info!("yt-dlp {} installed to {}", release.version, dest_path.display());
+    info!(
+        "yt-dlp {} installed to {}",
+        release.version,
+        dest_path.display()
+    );
     Ok(())
 }

@@ -60,8 +60,9 @@ pub async fn search(
             let limit = params.limit.unwrap_or(25).clamp(1, 50) as u32;
             let page_token = params.cursor.as_deref();
 
-            let youtube = state.youtube.read().unwrap().clone()
-                .ok_or_else(|| ApiError::BadRequest("YouTube API key not configured".to_string()))?;
+            let youtube = state.youtube.read().unwrap().clone().ok_or_else(|| {
+                ApiError::BadRequest("YouTube API key not configured".to_string())
+            })?;
             let (results, next_page_token) = youtube.search(&params.q, limit, page_token).await?;
 
             let items: Vec<serde_json::Value> = results
@@ -86,16 +87,17 @@ pub async fn search(
         }
         "history" => {
             let limit = params.limit.unwrap_or(20).clamp(1, 100);
-            let cursor: Option<(String, String)> = params
-                .cursor
-                .as_deref()
-                .map(decode_cursor)
-                .transpose()?;
+            let cursor: Option<(String, String)> =
+                params.cursor.as_deref().map(decode_cursor).transpose()?;
 
             let cursor_refs = cursor.as_ref().map(|(a, b)| (a.as_str(), b.as_str()));
             let mut tracks = azuki_db::queries::tracks::search_tracks_cursor(
-                &state.db, &params.q, limit, cursor_refs,
-            ).await?;
+                &state.db,
+                &params.q,
+                limit,
+                cursor_refs,
+            )
+            .await?;
 
             let next_cursor = if tracks.len() as i64 > limit {
                 tracks.pop();
@@ -110,7 +112,9 @@ pub async fn search(
                 "next_cursor": next_cursor,
             })))
         }
-        _ => Ok(Json(serde_json::json!({ "items": [], "next_cursor": null }))),
+        _ => Ok(Json(
+            serde_json::json!({ "items": [], "next_cursor": null }),
+        )),
     }
 }
 
@@ -122,14 +126,9 @@ pub async fn history(
     extract_user_id(&jar, &state).await?;
     let limit = params.limit.unwrap_or(20).clamp(1, 100);
 
-    let before_id: Option<i64> = params
-        .cursor
-        .as_deref()
-        .map(decode_cursor)
-        .transpose()?;
+    let before_id: Option<i64> = params.cursor.as_deref().map(decode_cursor).transpose()?;
 
-    let entries =
-        azuki_db::queries::history::get_history(&state.db, limit, before_id).await?;
+    let entries = azuki_db::queries::history::get_history(&state.db, limit, before_id).await?;
 
     let next_cursor = if entries.len() as i64 == limit {
         entries.last().map(|e| encode_cursor(&e.id))
@@ -194,7 +193,10 @@ pub async fn upload(
                 file_data = Some((filename, data));
             }
             Some("title") => {
-                let val = field.text().await.map_err(|e| ApiError::BadRequest(e.to_string()))?;
+                let val = field
+                    .text()
+                    .await
+                    .map_err(|e| ApiError::BadRequest(e.to_string()))?;
                 let val = val.trim().to_string();
                 if val.len() > 500 {
                     return Err(ApiError::BadRequest("title too long (max 500)".into()));
@@ -204,7 +206,10 @@ pub async fn upload(
                 }
             }
             Some("artist") => {
-                let val = field.text().await.map_err(|e| ApiError::BadRequest(e.to_string()))?;
+                let val = field
+                    .text()
+                    .await
+                    .map_err(|e| ApiError::BadRequest(e.to_string()))?;
                 let val = val.trim().to_string();
                 if val.len() > 200 {
                     return Err(ApiError::BadRequest("artist too long (max 200)".into()));
@@ -217,7 +222,8 @@ pub async fn upload(
         }
     }
 
-    let (filename, data) = file_data.ok_or_else(|| ApiError::BadRequest("no file provided".into()))?;
+    let (filename, data) =
+        file_data.ok_or_else(|| ApiError::BadRequest("no file provided".into()))?;
 
     // Validate and hash (generates track_id without writing file yet)
     let (track_id, file_path) =
@@ -338,18 +344,12 @@ pub async fn list_uploads(
     extract_user_id(&jar, &state).await?;
     let limit = params.limit.unwrap_or(20).clamp(1, 100);
 
-    let before_created_at: Option<String> = params
-        .cursor
-        .as_deref()
-        .map(decode_cursor)
-        .transpose()?;
+    let before_created_at: Option<String> =
+        params.cursor.as_deref().map(decode_cursor).transpose()?;
 
-    let items = azuki_db::queries::tracks::list_uploads(
-        &state.db,
-        limit,
-        before_created_at.as_deref(),
-    )
-    .await?;
+    let items =
+        azuki_db::queries::tracks::list_uploads(&state.db, limit, before_created_at.as_deref())
+            .await?;
     let total = azuki_db::queries::tracks::count_uploads(&state.db).await?;
 
     let next_cursor = if items.len() as i64 == limit {
@@ -432,7 +432,9 @@ pub async fn delete_track(
 
     let track = azuki_db::queries::tracks::get_track(&state.db, &track_id).await?;
     if track.source_type != "upload" {
-        return Err(ApiError::BadRequest("only upload tracks can be deleted".into()));
+        return Err(ApiError::BadRequest(
+            "only upload tracks can be deleted".into(),
+        ));
     }
 
     // If currently playing this track, skip to next
@@ -447,8 +449,7 @@ pub async fn delete_track(
         let _ = state.player.skip().await;
     }
 
-    let file_path =
-        azuki_db::queries::tracks::delete_track_cascade(&state.db, &track_id).await?;
+    let file_path = azuki_db::queries::tracks::delete_track_cascade(&state.db, &track_id).await?;
 
     if let Some(ref fp) = file_path
         && let Ok(resolved) = state.media_store.resolve_path(fp)
@@ -481,12 +482,14 @@ pub async fn oembed_proxy(
 ) -> Result<Json<serde_json::Value>, ApiError> {
     extract_user_id(&jar, &state).await?;
 
-    let parsed_url = url::Url::parse(&params.url)
-        .map_err(|_| ApiError::BadRequest("invalid URL".into()))?;
+    let parsed_url =
+        url::Url::parse(&params.url).map_err(|_| ApiError::BadRequest("invalid URL".into()))?;
 
     let host = parsed_url.host_str().unwrap_or("");
     if !OEMBED_ALLOWED_HOSTS.contains(&host) {
-        return Err(ApiError::BadRequest("URL domain not supported for oEmbed".into()));
+        return Err(ApiError::BadRequest(
+            "URL domain not supported for oEmbed".into(),
+        ));
     }
 
     // Determine provider endpoint
@@ -530,7 +533,8 @@ pub async fn oembed_proxy(
 
     // Validate thumbnail URL scheme
     if let Some(thumb) = data.get("thumbnail_url").and_then(|v| v.as_str())
-        && !thumb.starts_with("http://") && !thumb.starts_with("https://")
+        && !thumb.starts_with("http://")
+        && !thumb.starts_with("https://")
         && let Some(obj) = data.as_object_mut()
     {
         obj.remove("thumbnail_url");
@@ -545,8 +549,7 @@ pub fn content_routes() -> axum::Router<WebState> {
         .route("/api/history", axum::routing::get(history))
         .route(
             "/api/upload",
-            axum::routing::post(upload)
-                .layer(DefaultBodyLimit::max(300 * 1024 * 1024)),
+            axum::routing::post(upload).layer(DefaultBodyLimit::max(300 * 1024 * 1024)),
         )
         .route("/api/download/{track_id}", axum::routing::get(download))
         .route("/api/uploads", axum::routing::get(list_uploads))

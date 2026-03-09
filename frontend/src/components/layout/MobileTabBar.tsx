@@ -29,7 +29,7 @@ export function MobileTabBar() {
               "flex-1 flex flex-col items-center justify-center gap-0.5 h-full transition-colors duration-100",
               isActive
                 ? "text-[var(--color-text)]"
-                : "text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)]"
+                : "text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)]",
             )
           }
         >

@@ -1,4 +1,10 @@
-import React, { createContext, useCallback, useContext, useRef, useState } from "react";
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useRef,
+  useState,
+} from "react";
 
 export type ToastType = "success" | "error" | "info";
 
@@ -31,7 +37,11 @@ interface ShowToastOptions {
 
 interface ToastContextValue {
   toasts: Toast[];
-  showToast: (message: string, type?: ToastType, options?: ShowToastOptions) => string;
+  showToast: (
+    message: string,
+    type?: ToastType,
+    options?: ShowToastOptions,
+  ) => string;
   updateToast: (id: string, updates: Partial<Toast>) => void;
   removeToast: (id: string) => void;
 }
@@ -40,7 +50,9 @@ const ToastContext = createContext<ToastContextValue | null>(null);
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
-  const timersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const timersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(
+    new Map(),
+  );
 
   const removeToast = useCallback((id: string) => {
     const timer = timersRef.current.get(id);
@@ -52,13 +64,24 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const showToast = useCallback(
-    (message: string, type: ToastType = "info", options?: ShowToastOptions): string => {
+    (
+      message: string,
+      type: ToastType = "info",
+      options?: ShowToastOptions,
+    ): string => {
       const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
       const duration = options?.duration ?? (options?.action ? 0 : 3000);
 
       setToasts((prev) => [
         ...prev,
-        { id, type, message, action: options?.action, duration, richPreview: options?.richPreview },
+        {
+          id,
+          type,
+          message,
+          action: options?.action,
+          duration,
+          richPreview: options?.richPreview,
+        },
       ]);
 
       if (duration > 0) {
@@ -71,17 +94,19 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 
       return id;
     },
-    [removeToast]
+    [removeToast],
   );
 
   const updateToast = useCallback((id: string, updates: Partial<Toast>) => {
     setToasts((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, ...updates } : t))
+      prev.map((t) => (t.id === id ? { ...t, ...updates } : t)),
     );
   }, []);
 
   return (
-    <ToastContext.Provider value={{ toasts, showToast, updateToast, removeToast }}>
+    <ToastContext.Provider
+      value={{ toasts, showToast, updateToast, removeToast }}
+    >
       {children}
     </ToastContext.Provider>
   );

@@ -1,11 +1,11 @@
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
+use axum::Json;
 use axum::extract::State;
 use axum::http::{HeaderValue, StatusCode};
 use axum::response::{Html, IntoResponse, Response};
 use axum::routing::get;
-use axum::Json;
 use rand::RngExt;
 use serde::Deserialize;
 use sqlx::SqlitePool;
@@ -81,7 +81,9 @@ async fn add_security_headers(response: Response) -> Response {
     let headers = response.headers_mut();
     headers.insert(
         "content-security-policy",
-        HeaderValue::from_static("default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'"),
+        HeaderValue::from_static(
+            "default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'",
+        ),
     );
     headers.insert(
         "x-content-type-options",
@@ -103,11 +105,19 @@ async fn post_setup(
     Json(form): Json<SetupForm>,
 ) -> Result<Json<serde_json::Value>, Response> {
     if state.submitted.load(Ordering::SeqCst) {
-        return Err((StatusCode::CONFLICT, Json(serde_json::json!({"error": "setup already submitted"}))).into_response());
+        return Err((
+            StatusCode::CONFLICT,
+            Json(serde_json::json!({"error": "setup already submitted"})),
+        )
+            .into_response());
     }
 
     if !constant_time_eq(form.setup_token.as_bytes(), state.setup_token.as_bytes()) {
-        return Err((StatusCode::UNAUTHORIZED, Json(serde_json::json!({"error": "invalid setup token"}))).into_response());
+        return Err((
+            StatusCode::UNAUTHORIZED,
+            Json(serde_json::json!({"error": "invalid setup token"})),
+        )
+            .into_response());
     }
 
     let fields = [
@@ -124,13 +134,15 @@ async fn post_setup(
             return Err((
                 StatusCode::BAD_REQUEST,
                 Json(serde_json::json!({"error": format!("{key} is required")})),
-            ).into_response());
+            )
+                .into_response());
         }
         if value.chars().any(|c| c.is_control() && c != '\n') {
             return Err((
                 StatusCode::BAD_REQUEST,
                 Json(serde_json::json!({"error": format!("{key} contains invalid characters")})),
-            ).into_response());
+            )
+                .into_response());
         }
     }
 
@@ -138,7 +150,8 @@ async fn post_setup(
         return Err((
             StatusCode::BAD_REQUEST,
             Json(serde_json::json!({"error": "guild_id must be a numeric Discord server ID"})),
-        ).into_response());
+        )
+            .into_response());
     }
 
     let entries: Vec<(&str, &str)> = fields.iter().map(|(k, v)| (*k, v.as_str())).collect();
@@ -146,7 +159,11 @@ async fn post_setup(
         .await
         .map_err(|e| {
             tracing::error!("failed to save config: {e}");
-            (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "failed to save configuration"}))).into_response()
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "failed to save configuration"})),
+            )
+                .into_response()
         })?;
 
     if let Some(ref yt_key) = form.youtube_api_key
@@ -156,13 +173,21 @@ async fn post_setup(
             .await
             .map_err(|e| {
                 tracing::error!("failed to save youtube api key: {e}");
-                (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "failed to save configuration"}))).into_response()
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({"error": "failed to save configuration"})),
+                )
+                    .into_response()
             })?;
     }
 
     let config = Config::load(&state.pool).await.map_err(|e| {
         tracing::error!("failed to reload config: {e}");
-        (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "failed to verify configuration"}))).into_response()
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": "failed to verify configuration"})),
+        )
+            .into_response()
     })?;
 
     state.submitted.store(true, Ordering::SeqCst);

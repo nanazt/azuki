@@ -63,7 +63,8 @@ export function usePlayer() {
   }, []);
 
   const cycleLoop = useCallback(() => {
-    const next = loopMode === "off" ? "all" : loopMode === "all" ? "one" : "off";
+    const next =
+      loopMode === "off" ? "all" : loopMode === "all" ? "one" : "off";
     setLoop(next);
   }, [loopMode, setLoop]);
 

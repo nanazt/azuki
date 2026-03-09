@@ -58,7 +58,9 @@ impl MediaStore {
             let metadata = entry.metadata().map_err(MediaError::Io)?;
             if metadata.is_file() {
                 let size = metadata.len();
-                let modified = metadata.modified().unwrap_or(std::time::SystemTime::UNIX_EPOCH);
+                let modified = metadata
+                    .modified()
+                    .unwrap_or(std::time::SystemTime::UNIX_EPOCH);
                 total_size += size;
                 entries.push((entry.path(), size, modified));
             }

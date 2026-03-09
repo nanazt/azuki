@@ -1,10 +1,10 @@
 use axum::extract::{Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Redirect, Response};
-use axum_extra::extract::cookie::{Cookie, SameSite};
 use axum_extra::extract::CookieJar;
+use axum_extra::extract::cookie::{Cookie, SameSite};
 use chrono::Utc;
-use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
+use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation, decode, encode};
 use serde::{Deserialize, Serialize};
 use tracing::error;
 
@@ -54,13 +54,21 @@ pub fn create_jwt(
         tv: token_version,
     };
     let header = Header::new(Algorithm::HS256);
-    encode(&header, &claims, &EncodingKey::from_secret(secret.as_bytes()))
+    encode(
+        &header,
+        &claims,
+        &EncodingKey::from_secret(secret.as_bytes()),
+    )
 }
 
 pub fn verify_jwt(token: &str, secret: &str) -> Result<Claims, jsonwebtoken::errors::Error> {
     let mut validation = Validation::new(Algorithm::HS256);
     validation.set_required_spec_claims(&["sub", "exp"]);
-    let data = decode::<Claims>(token, &DecodingKey::from_secret(secret.as_bytes()), &validation)?;
+    let data = decode::<Claims>(
+        token,
+        &DecodingKey::from_secret(secret.as_bytes()),
+        &validation,
+    )?;
     Ok(data.claims)
 }
 
@@ -155,9 +163,10 @@ pub async fn callback(
     };
 
     // Upsert user in DB
-    let avatar_url = user.avatar.as_ref().map(|hash| {
-        format!("https://cdn.discordapp.com/avatars/{}/{hash}.png", user.id)
-    });
+    let avatar_url = user
+        .avatar
+        .as_ref()
+        .map(|hash| format!("https://cdn.discordapp.com/avatars/{}/{hash}.png", user.id));
 
     let db_user = match azuki_db::queries::users::upsert_user(
         &state.db,
@@ -240,11 +249,7 @@ pub async fn extract_admin_id(jar: &CookieJar, state: &WebState) -> Result<Strin
     Ok(user.id)
 }
 
-pub async fn logout(
-    State(state): State<WebState>,
-    headers: HeaderMap,
-    jar: CookieJar,
-) -> Response {
+pub async fn logout(State(state): State<WebState>, headers: HeaderMap, jar: CookieJar) -> Response {
     // Verify X-Requested-With header manually (auth_routes bypass CSRF middleware)
     let has_csrf = headers
         .get("x-requested-with")

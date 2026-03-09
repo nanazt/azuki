@@ -27,7 +27,7 @@ export function Skeleton({
         variant === "text" && "rounded h-4",
         variant === "circle" && "rounded-full",
         variant === "rect" && "rounded-md",
-        className
+        className,
       )}
       style={style}
     />

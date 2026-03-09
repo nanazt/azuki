@@ -21,6 +21,5 @@ pub async fn get_queue_state(
 }
 
 pub fn queue_routes() -> axum::Router<WebState> {
-    axum::Router::new()
-        .route("/api/queues", axum::routing::get(get_queue_state))
+    axum::Router::new().route("/api/queues", axum::routing::get(get_queue_state))
 }

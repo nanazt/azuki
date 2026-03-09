@@ -56,7 +56,8 @@ export function UploadMetadataModal({ file, onClose }: Props) {
         showToast("File already uploaded", "info");
         api.addTrackToQueue(result.track_id).then(
           () => showToast("Added to queue", "success"),
-          (err) => showToast(err instanceof Error ? err.message : "Failed", "error"),
+          (err) =>
+            showToast(err instanceof Error ? err.message : "Failed", "error"),
         );
         onClose();
       }
@@ -84,7 +85,9 @@ export function UploadMetadataModal({ file, onClose }: Props) {
       },
     );
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [file, handleUploadSuccess]);
 
   // Focus title input
@@ -142,7 +145,8 @@ export function UploadMetadataModal({ file, onClose }: Props) {
       // Update metadata if changed
       const updates: { title?: string; artist?: string } = {};
       if (title.trim() && title !== result.title) updates.title = title.trim();
-      if (artist.trim() !== (result.artist || "")) updates.artist = artist.trim() || undefined;
+      if (artist.trim() !== (result.artist || ""))
+        updates.artist = artist.trim() || undefined;
 
       if (Object.keys(updates).length > 0) {
         await api.updateTrack(result.track_id, updates);
@@ -154,7 +158,7 @@ export function UploadMetadataModal({ file, onClose }: Props) {
     } catch (err) {
       showToast(
         err instanceof Error ? err.message : "Failed to add to queue",
-        "error"
+        "error",
       );
     } finally {
       setSubmitting(false);
@@ -201,7 +205,7 @@ export function UploadMetadataModal({ file, onClose }: Props) {
                 "w-full px-3 py-2.5 md:py-2 rounded-lg text-base md:text-sm",
                 "bg-[var(--color-bg-tertiary)] border border-[var(--color-border)]",
                 "text-[var(--color-text)] placeholder:text-[var(--color-text-tertiary)]",
-                "outline-none focus:border-[var(--color-accent)] transition-colors"
+                "outline-none focus:border-[var(--color-accent)] transition-colors",
               )}
               placeholder="Track title"
             />
@@ -219,7 +223,7 @@ export function UploadMetadataModal({ file, onClose }: Props) {
                 "w-full px-3 py-2.5 md:py-2 rounded-lg text-base md:text-sm",
                 "bg-[var(--color-bg-tertiary)] border border-[var(--color-border)]",
                 "text-[var(--color-text)] placeholder:text-[var(--color-text-tertiary)]",
-                "outline-none focus:border-[var(--color-accent)] transition-colors"
+                "outline-none focus:border-[var(--color-accent)] transition-colors",
               )}
               placeholder="Artist name"
             />
@@ -267,9 +271,9 @@ export function UploadMetadataModal({ file, onClose }: Props) {
             className={clsx(
               "px-4 py-2 text-sm font-medium rounded-lg transition-colors touch-manipulation min-h-[44px] sm:min-h-0",
               "bg-[var(--color-accent)] text-[#1a1a1a]",
-              (submitting || uploading || uploadFailed || !title.trim())
+              submitting || uploading || uploadFailed || !title.trim()
                 ? "opacity-50 cursor-not-allowed"
-                : "hover:opacity-90"
+                : "hover:opacity-90",
             )}
           >
             {uploading || submitting ? (

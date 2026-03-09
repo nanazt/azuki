@@ -179,7 +179,11 @@ async fn run_normal(config: Config, pool: SqlitePool) -> anyhow::Result<()> {
 
     let initial_history: Vec<azuki_player::QueueEntry> =
         match azuki_db::queries::history::get_history_for_restore(&pool, 50).await {
-            Ok(entries) => entries.into_iter().rev().map(restore_entry_to_queue).collect(),
+            Ok(entries) => entries
+                .into_iter()
+                .rev()
+                .map(restore_entry_to_queue)
+                .collect(),
             Err(e) => {
                 tracing::error!("failed to restore history: {e}");
                 Vec::new()

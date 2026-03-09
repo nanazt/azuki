@@ -14,11 +14,9 @@ pub const REQUIRED_KEYS: &[&str] = &[
 ];
 
 pub async fn load_config(pool: &SqlitePool) -> DbResult<HashMap<String, String>> {
-    let rows = sqlx::query_as::<_, (String, String)>(
-        r#"SELECT key, value FROM app_config"#,
-    )
-    .fetch_all(pool)
-    .await?;
+    let rows = sqlx::query_as::<_, (String, String)>(r#"SELECT key, value FROM app_config"#)
+        .fetch_all(pool)
+        .await?;
 
     Ok(rows.into_iter().collect())
 }
@@ -35,23 +33,19 @@ pub async fn save_config(pool: &SqlitePool, entries: &[(&str, &str)]) -> DbResul
 }
 
 pub async fn get_config(pool: &SqlitePool, key: &str) -> DbResult<Option<String>> {
-    let row = sqlx::query_scalar::<_, String>(
-        r#"SELECT value FROM app_config WHERE key = ?"#,
-    )
-    .bind(key)
-    .fetch_optional(pool)
-    .await?;
+    let row = sqlx::query_scalar::<_, String>(r#"SELECT value FROM app_config WHERE key = ?"#)
+        .bind(key)
+        .fetch_optional(pool)
+        .await?;
     Ok(row.filter(|v| !v.is_empty()))
 }
 
 pub async fn is_configured(pool: &SqlitePool) -> DbResult<bool> {
     for key in REQUIRED_KEYS {
-        let row = sqlx::query_scalar::<_, String>(
-            r#"SELECT value FROM app_config WHERE key = ?"#,
-        )
-        .bind(key)
-        .fetch_optional(pool)
-        .await?;
+        let row = sqlx::query_scalar::<_, String>(r#"SELECT value FROM app_config WHERE key = ?"#)
+            .bind(key)
+            .fetch_optional(pool)
+            .await?;
 
         match row {
             Some(v) if !v.is_empty() => {}

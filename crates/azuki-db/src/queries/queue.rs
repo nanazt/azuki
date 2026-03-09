@@ -1,7 +1,7 @@
 use sqlx::SqlitePool;
 
-use crate::{DbError, DbResult};
 use crate::queries::history::RestoreEntry;
+use crate::{DbError, DbResult};
 
 pub async fn save_queue(
     pool: &SqlitePool,
@@ -52,29 +52,22 @@ pub async fn load_queue(pool: &SqlitePool) -> DbResult<Vec<RestoreEntry>> {
 }
 
 pub async fn save_loop_mode(pool: &SqlitePool, mode: &str) -> DbResult<()> {
-    sqlx::query(
-        "INSERT OR REPLACE INTO app_config (key, value) VALUES ('loop_mode', ?1)",
-    )
-    .bind(mode)
-    .execute(pool)
-    .await?;
+    sqlx::query("INSERT OR REPLACE INTO app_config (key, value) VALUES ('loop_mode', ?1)")
+        .bind(mode)
+        .execute(pool)
+        .await?;
     Ok(())
 }
 
 pub async fn load_loop_mode(pool: &SqlitePool) -> DbResult<String> {
-    let row = sqlx::query_scalar::<_, String>(
-        "SELECT value FROM app_config WHERE key = 'loop_mode'",
-    )
-    .fetch_optional(pool)
-    .await?;
+    let row =
+        sqlx::query_scalar::<_, String>("SELECT value FROM app_config WHERE key = 'loop_mode'")
+            .fetch_optional(pool)
+            .await?;
     Ok(row.unwrap_or_else(|| "off".to_string()))
 }
 
-pub async fn save_now_playing(
-    pool: &SqlitePool,
-    track_id: &str,
-    added_by: &str,
-) -> DbResult<()> {
+pub async fn save_now_playing(pool: &SqlitePool, track_id: &str, added_by: &str) -> DbResult<()> {
     let json = serde_json::json!({
         "track_id": track_id,
         "added_by": added_by,
@@ -95,11 +88,10 @@ pub async fn clear_now_playing(pool: &SqlitePool) -> DbResult<()> {
 }
 
 pub async fn load_now_playing(pool: &SqlitePool) -> DbResult<Option<RestoreEntry>> {
-    let row = sqlx::query_scalar::<_, String>(
-        "SELECT value FROM app_config WHERE key = 'now_playing'",
-    )
-    .fetch_optional(pool)
-    .await?;
+    let row =
+        sqlx::query_scalar::<_, String>("SELECT value FROM app_config WHERE key = 'now_playing'")
+            .fetch_optional(pool)
+            .await?;
 
     let Some(json_str) = row else {
         return Ok(None);
@@ -109,10 +101,9 @@ pub async fn load_now_playing(pool: &SqlitePool) -> DbResult<Option<RestoreEntry
         return Ok(None);
     };
 
-    let (Some(track_id), Some(added_by)) = (
-        parsed["track_id"].as_str(),
-        parsed["added_by"].as_str(),
-    ) else {
+    let (Some(track_id), Some(added_by)) =
+        (parsed["track_id"].as_str(), parsed["added_by"].as_str())
+    else {
         return Ok(None);
     };
 
@@ -138,4 +129,3 @@ pub async fn load_now_playing(pool: &SqlitePool) -> DbResult<Option<RestoreEntry
 
     Ok(entry)
 }
-

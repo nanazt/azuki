@@ -10,7 +10,13 @@ interface ModalProps {
   className?: string;
 }
 
-export function Modal({ open, onClose, title, children, className }: ModalProps) {
+export function Modal({
+  open,
+  onClose,
+  title,
+  children,
+  className,
+}: ModalProps) {
   // Close on Escape
   useEffect(() => {
     if (!open) return;
@@ -39,7 +45,7 @@ export function Modal({ open, onClose, title, children, className }: ModalProps)
     <div
       className={clsx(
         "fixed inset-0 z-50 flex items-center justify-center p-4",
-        "animate-[fadeIn_0.15s_ease-out]"
+        "animate-[fadeIn_0.15s_ease-out]",
       )}
     >
       {/* Overlay */}
@@ -57,7 +63,7 @@ export function Modal({ open, onClose, title, children, className }: ModalProps)
           "relative z-10 w-full max-w-md rounded-xl shadow-2xl",
           "bg-[var(--color-bg-secondary)] border border-[var(--color-border)]",
           "animate-[scaleIn_0.15s_ease-out]",
-          className
+          className,
         )}
       >
         {/* Header */}

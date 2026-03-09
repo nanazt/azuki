@@ -54,7 +54,11 @@ impl EventHandler for Handler {
                     .filter(|c| c.kind == ChannelType::Text)
                     .map(|c| (c.id.get(), c.name.clone()))
                     .collect();
-                info!("found {} voice channels, {} text channels", voice.len(), text.len());
+                info!(
+                    "found {} voice channels, {} text channels",
+                    voice.len(),
+                    text.len()
+                );
                 *self.state.voice_channels.write().unwrap() = voice;
                 *self.state.text_channels.write().unwrap() = text;
             }
@@ -157,7 +161,10 @@ async fn run_audio_subscriber(state: Arc<BotState>) {
         match rx.recv().await {
             Ok(seq_event) => match seq_event.event {
                 azuki_player::PlayerEvent::TrackStarted { ref track, .. } => {
-                    debug!("audio_subscriber: TrackStarted id={} title={:?} file_path={:?}", track.id, track.title, track.file_path);
+                    debug!(
+                        "audio_subscriber: TrackStarted id={} title={:?} file_path={:?}",
+                        track.id, track.title, track.file_path
+                    );
                     let Some(ref file_path) = track.file_path else {
                         debug!("audio_subscriber: file_path is None, skipping");
                         continue;
@@ -177,9 +184,11 @@ async fn run_audio_subscriber(state: Arc<BotState>) {
                     debug!("audio_subscriber: in_call={in_call}, playing file={file_path}");
 
                     let notifier_gen = generation.fetch_add(1, Ordering::SeqCst) + 1;
-                    let handle =
-                        crate::voice::play_file(sb, state.guild_id, file_path).await;
-                    debug!("audio_subscriber: play_file returned handle={}", handle.is_some());
+                    let handle = crate::voice::play_file(sb, state.guild_id, file_path).await;
+                    debug!(
+                        "audio_subscriber: play_file returned handle={}",
+                        handle.is_some()
+                    );
                     if let Some(ref h) = handle {
                         crate::voice::set_volume(h, track.volume);
                         let _ = h.add_event(
@@ -214,7 +223,8 @@ async fn run_audio_subscriber(state: Arc<BotState>) {
                     } else {
                         // Restored track: no songbird handle yet, need to play from scratch
                         let snapshot = state.player.get_state().await;
-                        if let azuki_player::PlayStateInfo::Playing { ref track, .. } = snapshot.state
+                        if let azuki_player::PlayStateInfo::Playing { ref track, .. } =
+                            snapshot.state
                             && let Some(ref file_path) = track.file_path
                         {
                             debug!("audio_subscriber: resuming restored track, playing from file");
@@ -224,13 +234,17 @@ async fn run_audio_subscriber(state: Arc<BotState>) {
                                     auto_join_default_channel(&state, sb).await;
                                 }
                                 let notifier_gen = generation.fetch_add(1, Ordering::SeqCst) + 1;
-                                let handle = crate::voice::play_file(sb, state.guild_id, file_path).await;
+                                let handle =
+                                    crate::voice::play_file(sb, state.guild_id, file_path).await;
                                 if let Some(ref h) = handle {
                                     crate::voice::set_volume(h, track.volume);
                                     if position_ms > 0 {
                                         let h2 = h.clone();
                                         tokio::spawn(async move {
-                                            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+                                            tokio::time::sleep(std::time::Duration::from_millis(
+                                                200,
+                                            ))
+                                            .await;
                                             crate::voice::seek_track(&h2, position_ms);
                                         });
                                     }
@@ -244,13 +258,17 @@ async fn run_audio_subscriber(state: Arc<BotState>) {
                                         },
                                     );
                                 }
-                                current_file = Some((file_path.clone(), track.id.clone(), track.volume));
+                                current_file =
+                                    Some((file_path.clone(), track.id.clone(), track.volume));
                                 current_track_handle = handle;
                             }
                         }
                     }
                 }
-                azuki_player::PlayerEvent::Seeked { position_ms, paused } => {
+                azuki_player::PlayerEvent::Seeked {
+                    position_ms,
+                    paused,
+                } => {
                     // Re-play file to avoid songbird backward-seek failures
                     if let Some((ref file_path, ref track_id, volume)) = current_file {
                         let sb_guard = state.songbird.lock().await;
@@ -265,7 +283,8 @@ async fn run_audio_subscriber(state: Arc<BotState>) {
                                     let h2 = h.clone();
                                     let should_pause = paused;
                                     tokio::spawn(async move {
-                                        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+                                        tokio::time::sleep(std::time::Duration::from_millis(200))
+                                            .await;
                                         crate::voice::seek_track(&h2, position_ms);
                                         if should_pause {
                                             crate::voice::pause_track(&h2);

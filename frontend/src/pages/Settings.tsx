@@ -214,7 +214,10 @@ export function Settings() {
   return (
     <div className="p-4 md:p-6 max-w-3xl mx-auto flex flex-col gap-10 pb-32 md:pb-6">
       <h1 className="text-lg font-semibold text-[var(--color-text)] flex items-center gap-2">
-        <SettingsIcon size={20} className="text-[var(--color-text-secondary)]" />
+        <SettingsIcon
+          size={20}
+          className="text-[var(--color-text-secondary)]"
+        />
         Settings
       </h1>
 
@@ -281,7 +284,10 @@ export function Settings() {
           >
             <HelpCircle size={16} />
             <span className="flex-1">Help</span>
-            <ChevronRight size={16} className="text-[var(--color-text-tertiary)]" />
+            <ChevronRight
+              size={16}
+              className="text-[var(--color-text-tertiary)]"
+            />
           </Link>
         </div>
       </section>
@@ -308,438 +314,454 @@ export function Settings() {
       </section>
 
       {/* SERVER (admin) */}
-      {isAdmin && <section className="flex flex-col gap-4">
-        <h2 className="text-sm font-semibold text-[var(--color-text-secondary)] uppercase tracking-wide">
-          Server
-        </h2>
+      {isAdmin && (
+        <section className="flex flex-col gap-4">
+          <h2 className="text-sm font-semibold text-[var(--color-text-secondary)] uppercase tracking-wide">
+            Server
+          </h2>
 
-        {/* Default Volume */}
-        <div className="rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border)] p-4 flex flex-col gap-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-medium text-[var(--color-text)] flex items-center gap-2">
-              <Volume2 size={16} className="text-[var(--color-text-secondary)]" />
-              Default Volume
-            </h3>
-            <span
-              className={clsx(
-                "flex items-center gap-1.5 text-xs transition-opacity duration-300",
-                savingBotVolume
-                  ? "opacity-100 text-[var(--color-text-tertiary)]"
-                  : botVolumeSaved
-                    ? "opacity-100 text-[var(--color-success)]"
-                    : "opacity-0 pointer-events-none",
-              )}
-              aria-live="polite"
-            >
-              {savingBotVolume ? (
-                <>
-                  <Loader2 size={12} className="animate-spin" />
-                  Saving
-                </>
-              ) : (
-                <>
-                  <CheckCircle size={12} />
-                  Saved
-                </>
-              )}
-            </span>
-          </div>
-          <p className="text-xs text-[var(--color-text-tertiary)] -mt-1">
-            Applied to new tracks without a saved volume.
-          </p>
-          <div className="flex flex-col gap-3">
+          {/* Default Volume */}
+          <div className="rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border)] p-4 flex flex-col gap-4">
             <div className="flex items-center justify-between">
-              <span className="text-sm text-[var(--color-text-secondary)]">
-                Volume
-              </span>
-              <span className="text-sm font-mono text-[var(--color-text)]">
-                {botDefaultVolume}
+              <h3 className="text-sm font-medium text-[var(--color-text)] flex items-center gap-2">
+                <Volume2
+                  size={16}
+                  className="text-[var(--color-text-secondary)]"
+                />
+                Default Volume
+              </h3>
+              <span
+                className={clsx(
+                  "flex items-center gap-1.5 text-xs transition-opacity duration-300",
+                  savingBotVolume
+                    ? "opacity-100 text-[var(--color-text-tertiary)]"
+                    : botVolumeSaved
+                      ? "opacity-100 text-[var(--color-success)]"
+                      : "opacity-0 pointer-events-none",
+                )}
+                aria-live="polite"
+              >
+                {savingBotVolume ? (
+                  <>
+                    <Loader2 size={12} className="animate-spin" />
+                    Saving
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle size={12} />
+                    Saved
+                  </>
+                )}
               </span>
             </div>
-            <Slider
-              value={botDefaultVolume}
-              min={0}
-              max={100}
-              onChange={(v) => {
-                setBotDefaultVolume(v);
-                setBotVolumeSaved(false);
-                if (botVolumeDebounceRef.current)
-                  clearTimeout(botVolumeDebounceRef.current);
-                botVolumeDebounceRef.current = setTimeout(async () => {
-                  setSavingBotVolume(true);
+            <p className="text-xs text-[var(--color-text-tertiary)] -mt-1">
+              Applied to new tracks without a saved volume.
+            </p>
+            <div className="flex flex-col gap-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-[var(--color-text-secondary)]">
+                  Volume
+                </span>
+                <span className="text-sm font-mono text-[var(--color-text)]">
+                  {botDefaultVolume}
+                </span>
+              </div>
+              <Slider
+                value={botDefaultVolume}
+                min={0}
+                max={100}
+                onChange={(v) => {
+                  setBotDefaultVolume(v);
+                  setBotVolumeSaved(false);
+                  if (botVolumeDebounceRef.current)
+                    clearTimeout(botVolumeDebounceRef.current);
+                  botVolumeDebounceRef.current = setTimeout(async () => {
+                    setSavingBotVolume(true);
+                    try {
+                      await api.updateBotSettings({ default_volume: v });
+                      setBotVolumeSaved(true);
+                      setTimeout(() => setBotVolumeSaved(false), 2000);
+                    } catch {
+                    } finally {
+                      setSavingBotVolume(false);
+                    }
+                  }, 500);
+                }}
+                aria-label="Default volume"
+              />
+            </div>
+          </div>
+
+          {/* Default Voice Channel */}
+          <div className="rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border)] p-4 flex flex-col gap-4">
+            {/* Header row */}
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-medium text-[var(--color-text)] flex items-center gap-2">
+                <Mic size={16} className="text-[var(--color-text-secondary)]" />
+                Default Voice Channel
+                {voiceChannels.length > 0 && (
+                  <span className="flex items-center gap-1 text-xs font-normal text-[var(--color-text-tertiary)]">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-success)] inline-block" />
+                    {voiceChannels.length} available
+                  </span>
+                )}
+              </h3>
+              {/* Inline save feedback */}
+              <span
+                className={clsx(
+                  "flex items-center gap-1.5 text-xs transition-opacity duration-300",
+                  savingVoice
+                    ? "opacity-100 text-[var(--color-text-tertiary)]"
+                    : voiceSaved
+                      ? "opacity-100 text-[var(--color-success)]"
+                      : "opacity-0 pointer-events-none",
+                )}
+                aria-live="polite"
+              >
+                {savingVoice ? (
+                  <>
+                    <Loader2 size={12} className="animate-spin" />
+                    Saving
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle size={12} />
+                    Saved
+                  </>
+                )}
+              </span>
+            </div>
+
+            <p className="text-xs text-[var(--color-text-tertiary)] -mt-1">
+              Bot will auto-join this channel when playing from the web.
+            </p>
+
+            {voiceChannels.length > 0 ? (
+              <Select
+                value={defaultVoiceChannel ?? ""}
+                onChange={async (val) => {
+                  setDefaultVoiceChannel(val || null);
+                  setSavingVoice(true);
+                  setVoiceSaved(false);
                   try {
-                    await api.updateBotSettings({ default_volume: v });
-                    setBotVolumeSaved(true);
-                    setTimeout(() => setBotVolumeSaved(false), 2000);
+                    await api.setVoiceChannel(val);
+                    setVoiceSaved(true);
+                    setTimeout(() => setVoiceSaved(false), 2000);
                   } catch {
                   } finally {
-                    setSavingBotVolume(false);
+                    setSavingVoice(false);
                   }
-                }, 500);
-              }}
-              aria-label="Default volume"
-            />
+                }}
+                options={[
+                  { value: "", label: "None — manual join only" },
+                  ...voiceChannels.map((ch) => ({
+                    value: ch.id,
+                    label: ch.name,
+                  })),
+                ]}
+                placeholder="None — manual join only"
+              />
+            ) : (
+              <div className="flex items-center gap-2 py-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-text-tertiary)] inline-block flex-shrink-0" />
+                <p className="text-xs text-[var(--color-text-tertiary)]">
+                  No voice channels available — bot may not be connected yet.
+                </p>
+              </div>
+            )}
           </div>
-        </div>
 
-        {/* Default Voice Channel */}
-        <div className="rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border)] p-4 flex flex-col gap-4">
-          {/* Header row */}
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-medium text-[var(--color-text)] flex items-center gap-2">
-              <Mic size={16} className="text-[var(--color-text-secondary)]" />
-              Default Voice Channel
-              {voiceChannels.length > 0 && (
-                <span className="flex items-center gap-1 text-xs font-normal text-[var(--color-text-tertiary)]">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-success)] inline-block" />
-                  {voiceChannels.length} available
-                </span>
-              )}
+          {/* yt-dlp */}
+          <div className="rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border)] p-4 flex flex-col gap-4">
+            <h3 className="text-sm font-medium text-[var(--color-text)]">
+              yt-dlp
             </h3>
-            {/* Inline save feedback */}
-            <span
-              className={clsx(
-                "flex items-center gap-1.5 text-xs transition-opacity duration-300",
-                savingVoice
-                  ? "opacity-100 text-[var(--color-text-tertiary)]"
-                  : voiceSaved
-                    ? "opacity-100 text-[var(--color-success)]"
-                    : "opacity-0 pointer-events-none",
-              )}
-              aria-live="polite"
-            >
-              {savingVoice ? (
-                <>
-                  <Loader2 size={12} className="animate-spin" />
-                  Saving
-                </>
-              ) : (
-                <>
-                  <CheckCircle size={12} />
-                  Saved
-                </>
-              )}
-            </span>
-          </div>
 
-          <p className="text-xs text-[var(--color-text-tertiary)] -mt-1">
-            Bot will auto-join this channel when playing from the web.
-          </p>
-
-          {voiceChannels.length > 0 ? (
-            <Select
-              value={defaultVoiceChannel ?? ""}
-              onChange={async (val) => {
-                setDefaultVoiceChannel(val || null);
-                setSavingVoice(true);
-                setVoiceSaved(false);
-                try {
-                  await api.setVoiceChannel(val);
-                  setVoiceSaved(true);
-                  setTimeout(() => setVoiceSaved(false), 2000);
-                } catch {
-                } finally {
-                  setSavingVoice(false);
-                }
-              }}
-              options={[
-                { value: "", label: "None — manual join only" },
-                ...voiceChannels.map((ch) => ({ value: ch.id, label: ch.name })),
-              ]}
-              placeholder="None — manual join only"
-            />
-          ) : (
-            <div className="flex items-center gap-2 py-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-text-tertiary)] inline-block flex-shrink-0" />
-              <p className="text-xs text-[var(--color-text-tertiary)]">
-                No voice channels available — bot may not be connected yet.
-              </p>
-            </div>
-          )}
-        </div>
-
-        {/* yt-dlp */}
-        <div className="rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border)] p-4 flex flex-col gap-4">
-          <h3 className="text-sm font-medium text-[var(--color-text)]">
-            yt-dlp
-          </h3>
-
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-[var(--color-text-secondary)]">
-              Current version
-            </span>
-            <span className="font-mono text-sm text-[var(--color-text)]">
-              {info?.current_version ?? "not installed"}
-            </span>
-          </div>
-
-          {info && !info.managed && info.current_version && (
-            <p className="text-xs text-[var(--color-text-tertiary)]">
-              Using system yt-dlp from PATH
-            </p>
-          )}
-
-          <button
-            onClick={handleCheck}
-            disabled={checking}
-            className="min-h-[44px] px-4 py-2 rounded-lg text-sm font-medium border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-bg-hover)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer"
-          >
-            {checking && <Loader2 size={16} className="animate-spin" />}
-            Check for updates
-          </button>
-
-          {latest && (
             <div className="flex items-center justify-between">
               <span className="text-sm text-[var(--color-text-secondary)]">
-                Latest version
+                Current version
               </span>
               <span className="font-mono text-sm text-[var(--color-text)]">
-                {latest.latest_version}
+                {info?.current_version ?? "not installed"}
               </span>
             </div>
-          )}
 
-          {latest &&
-            (latest.update_available ? (
-              <button
-                onClick={handleUpdate}
-                disabled={updating}
-                className="min-h-[44px] px-4 py-2 rounded-lg text-sm font-medium bg-[var(--color-accent)] text-[#1a1a1a] hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer"
-              >
-                {updating && <Loader2 size={16} className="animate-spin" />}
-                Update to {latest.latest_version}
-              </button>
-            ) : (
-              <div className="flex items-center gap-2 text-sm text-[var(--color-success)]">
-                <CheckCircle size={16} />
-                Up to date
-              </div>
-            ))}
+            {info && !info.managed && info.current_version && (
+              <p className="text-xs text-[var(--color-text-tertiary)]">
+                Using system yt-dlp from PATH
+              </p>
+            )}
 
-          {adminError && (
-            <div className="flex items-center gap-2 text-sm text-[var(--color-danger)]">
-              <AlertCircle size={16} className="flex-shrink-0" />
-              {adminError}
-            </div>
-          )}
-        </div>
-
-        {/* YouTube API */}
-        <div className="rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border)] p-4 flex flex-col gap-4">
-          <h3 className="text-sm font-medium text-[var(--color-text)]">
-            YouTube API
-          </h3>
-
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-[var(--color-text-secondary)]">
-              API Key
-            </span>
-            <span className="font-mono text-sm text-[var(--color-text)]">
-              {ytInfo?.has_key ? ytInfo.key_masked : "not set"}
-            </span>
-          </div>
-
-          <div className="flex gap-2">
-            <input
-              type="password"
-              value={newKey}
-              onChange={(e) => {
-                setNewKey(e.target.value);
-                setKeySaved(false);
-                setYtError(null);
-              }}
-              placeholder="Enter new API key"
-              className="flex-1 min-h-[44px] px-3 py-2 rounded-lg text-sm bg-[var(--color-bg)] border border-[var(--color-border)] text-[var(--color-text)] placeholder:text-[var(--color-text-tertiary)] outline-none focus:border-[var(--color-accent)]"
-            />
             <button
-              onClick={async () => {
-                if (!newKey.trim()) return;
-                setSavingKey(true);
-                setYtError(null);
-                try {
-                  await api.setYoutubeKey(newKey.trim());
-                  setKeySaved(true);
-                  setNewKey("");
-                  const info = await api.getYoutubeInfo();
-                  setYtInfo(info);
-                } catch (e) {
-                  setYtError(e instanceof Error ? e.message : "Failed to save");
-                } finally {
-                  setSavingKey(false);
-                }
-              }}
-              disabled={savingKey || !newKey.trim()}
-              className="min-h-[44px] px-4 py-2 rounded-lg text-sm font-medium bg-[var(--color-accent)] text-[#1a1a1a] hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 cursor-pointer"
+              onClick={handleCheck}
+              disabled={checking}
+              className="min-h-[44px] px-4 py-2 rounded-lg text-sm font-medium border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-bg-hover)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer"
             >
-              {savingKey && <Loader2 size={16} className="animate-spin" />}
-              Save
+              {checking && <Loader2 size={16} className="animate-spin" />}
+              Check for updates
             </button>
-          </div>
 
-          {keySaved && (
-            <div className="flex items-center gap-2 text-sm text-[var(--color-success)]">
-              <CheckCircle size={16} className="flex-shrink-0" />
-              API key saved successfully
-            </div>
-          )}
-
-          {ytError && (
-            <div className="flex items-center gap-2 text-sm text-[var(--color-danger)]">
-              <AlertCircle size={16} className="flex-shrink-0" />
-              {ytError}
-            </div>
-          )}
-        </div>
-
-        {/* History Channel */}
-        <div className="rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border)] p-4 flex flex-col gap-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-medium text-[var(--color-text)] flex items-center gap-2">
-              <Hash size={16} className="text-[var(--color-text-secondary)]" />
-              History Channel
-              {textChannels.length > 0 && (
-                <span className="flex items-center gap-1 text-xs font-normal text-[var(--color-text-tertiary)]">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-success)] inline-block" />
-                  {textChannels.length} available
+            {latest && (
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-[var(--color-text-secondary)]">
+                  Latest version
                 </span>
-              )}
-            </h3>
-            <span
-              className={clsx(
-                "flex items-center gap-1.5 text-xs transition-opacity duration-300",
-                savingHistory
-                  ? "opacity-100 text-[var(--color-text-tertiary)]"
-                  : historySaved
-                    ? "opacity-100 text-[var(--color-success)]"
-                    : "opacity-0 pointer-events-none",
-              )}
-              aria-live="polite"
-            >
-              {savingHistory ? (
-                <>
-                  <Loader2 size={12} className="animate-spin" />
-                  Saving
-                </>
+                <span className="font-mono text-sm text-[var(--color-text)]">
+                  {latest.latest_version}
+                </span>
+              </div>
+            )}
+
+            {latest &&
+              (latest.update_available ? (
+                <button
+                  onClick={handleUpdate}
+                  disabled={updating}
+                  className="min-h-[44px] px-4 py-2 rounded-lg text-sm font-medium bg-[var(--color-accent)] text-[#1a1a1a] hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  {updating && <Loader2 size={16} className="animate-spin" />}
+                  Update to {latest.latest_version}
+                </button>
               ) : (
-                <>
-                  <CheckCircle size={12} />
-                  Saved
-                </>
-              )}
-            </span>
+                <div className="flex items-center gap-2 text-sm text-[var(--color-success)]">
+                  <CheckCircle size={16} />
+                  Up to date
+                </div>
+              ))}
+
+            {adminError && (
+              <div className="flex items-center gap-2 text-sm text-[var(--color-danger)]">
+                <AlertCircle size={16} className="flex-shrink-0" />
+                {adminError}
+              </div>
+            )}
           </div>
 
-          <p className="text-xs text-[var(--color-text-tertiary)] -mt-1">
-            Track history embeds will be posted to this channel.
-          </p>
+          {/* YouTube API */}
+          <div className="rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border)] p-4 flex flex-col gap-4">
+            <h3 className="text-sm font-medium text-[var(--color-text)]">
+              YouTube API
+            </h3>
 
-          {textChannels.length > 0 ? (
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-[var(--color-text-secondary)]">
+                API Key
+              </span>
+              <span className="font-mono text-sm text-[var(--color-text)]">
+                {ytInfo?.has_key ? ytInfo.key_masked : "not set"}
+              </span>
+            </div>
+
+            <div className="flex gap-2">
+              <input
+                type="password"
+                value={newKey}
+                onChange={(e) => {
+                  setNewKey(e.target.value);
+                  setKeySaved(false);
+                  setYtError(null);
+                }}
+                placeholder="Enter new API key"
+                className="flex-1 min-h-[44px] px-3 py-2 rounded-lg text-sm bg-[var(--color-bg)] border border-[var(--color-border)] text-[var(--color-text)] placeholder:text-[var(--color-text-tertiary)] outline-none focus:border-[var(--color-accent)]"
+              />
+              <button
+                onClick={async () => {
+                  if (!newKey.trim()) return;
+                  setSavingKey(true);
+                  setYtError(null);
+                  try {
+                    await api.setYoutubeKey(newKey.trim());
+                    setKeySaved(true);
+                    setNewKey("");
+                    const info = await api.getYoutubeInfo();
+                    setYtInfo(info);
+                  } catch (e) {
+                    setYtError(
+                      e instanceof Error ? e.message : "Failed to save",
+                    );
+                  } finally {
+                    setSavingKey(false);
+                  }
+                }}
+                disabled={savingKey || !newKey.trim()}
+                className="min-h-[44px] px-4 py-2 rounded-lg text-sm font-medium bg-[var(--color-accent)] text-[#1a1a1a] hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 cursor-pointer"
+              >
+                {savingKey && <Loader2 size={16} className="animate-spin" />}
+                Save
+              </button>
+            </div>
+
+            {keySaved && (
+              <div className="flex items-center gap-2 text-sm text-[var(--color-success)]">
+                <CheckCircle size={16} className="flex-shrink-0" />
+                API key saved successfully
+              </div>
+            )}
+
+            {ytError && (
+              <div className="flex items-center gap-2 text-sm text-[var(--color-danger)]">
+                <AlertCircle size={16} className="flex-shrink-0" />
+                {ytError}
+              </div>
+            )}
+          </div>
+
+          {/* History Channel */}
+          <div className="rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border)] p-4 flex flex-col gap-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-medium text-[var(--color-text)] flex items-center gap-2">
+                <Hash
+                  size={16}
+                  className="text-[var(--color-text-secondary)]"
+                />
+                History Channel
+                {textChannels.length > 0 && (
+                  <span className="flex items-center gap-1 text-xs font-normal text-[var(--color-text-tertiary)]">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-success)] inline-block" />
+                    {textChannels.length} available
+                  </span>
+                )}
+              </h3>
+              <span
+                className={clsx(
+                  "flex items-center gap-1.5 text-xs transition-opacity duration-300",
+                  savingHistory
+                    ? "opacity-100 text-[var(--color-text-tertiary)]"
+                    : historySaved
+                      ? "opacity-100 text-[var(--color-success)]"
+                      : "opacity-0 pointer-events-none",
+                )}
+                aria-live="polite"
+              >
+                {savingHistory ? (
+                  <>
+                    <Loader2 size={12} className="animate-spin" />
+                    Saving
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle size={12} />
+                    Saved
+                  </>
+                )}
+              </span>
+            </div>
+
+            <p className="text-xs text-[var(--color-text-tertiary)] -mt-1">
+              Track history embeds will be posted to this channel.
+            </p>
+
+            {textChannels.length > 0 ? (
+              <Select
+                value={historyChannelId ?? ""}
+                onChange={async (val) => {
+                  setHistoryChannelId(val || null);
+                  setSavingHistory(true);
+                  setHistorySaved(false);
+                  try {
+                    await api.setHistoryChannel(val);
+                    setHistorySaved(true);
+                    setTimeout(() => setHistorySaved(false), 2000);
+                  } catch {
+                  } finally {
+                    setSavingHistory(false);
+                  }
+                }}
+                options={[
+                  { value: "", label: "None — disabled" },
+                  ...textChannels.map((ch) => ({
+                    value: ch.id,
+                    label: ch.name,
+                    prefix: "#",
+                  })),
+                ]}
+                placeholder="None — disabled"
+              />
+            ) : (
+              <div className="flex items-center gap-2 py-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-text-tertiary)] inline-block flex-shrink-0" />
+                <p className="text-xs text-[var(--color-text-tertiary)]">
+                  No text channels available — bot may not be connected yet.
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Timezone */}
+          <div className="rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border)] p-4 flex flex-col gap-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-medium text-[var(--color-text)] flex items-center gap-2">
+                <Globe
+                  size={16}
+                  className="text-[var(--color-text-secondary)]"
+                />
+                Timezone
+              </h3>
+              <span
+                className={clsx(
+                  "flex items-center gap-1.5 text-xs transition-opacity duration-300",
+                  savingTz
+                    ? "opacity-100 text-[var(--color-text-tertiary)]"
+                    : tzSaved
+                      ? "opacity-100 text-[var(--color-success)]"
+                      : "opacity-0 pointer-events-none",
+                )}
+                aria-live="polite"
+              >
+                {savingTz ? (
+                  <>
+                    <Loader2 size={12} className="animate-spin" />
+                    Saving
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle size={12} />
+                    Saved
+                  </>
+                )}
+              </span>
+            </div>
+
+            <p className="text-xs text-[var(--color-text-tertiary)] -mt-1">
+              Used for stats heatmap and trend date grouping.
+            </p>
+
             <Select
-              value={historyChannelId ?? ""}
-              onChange={async (val) => {
-                setHistoryChannelId(val || null);
-                setSavingHistory(true);
-                setHistorySaved(false);
+              value={timezone}
+              onChange={async (tz) => {
+                setTimezone(tz);
+                setSavingTz(true);
+                setTzSaved(false);
                 try {
-                  await api.setHistoryChannel(val);
-                  setHistorySaved(true);
-                  setTimeout(() => setHistorySaved(false), 2000);
+                  await api.setTimezone(tz);
+                  setTzSaved(true);
+                  setTimeout(() => setTzSaved(false), 2000);
                 } catch {
                 } finally {
-                  setSavingHistory(false);
+                  setSavingTz(false);
                 }
               }}
               options={[
-                { value: "", label: "None — disabled" },
-                ...textChannels.map((ch) => ({
-                  value: ch.id,
-                  label: ch.name,
-                  prefix: "#",
-                })),
-              ]}
-              placeholder="None — disabled"
+                "UTC",
+                "Asia/Seoul",
+                "Asia/Tokyo",
+                "Asia/Shanghai",
+                "Asia/Kolkata",
+                "Europe/London",
+                "Europe/Berlin",
+                "Europe/Paris",
+                "America/New_York",
+                "America/Chicago",
+                "America/Denver",
+                "America/Los_Angeles",
+                "America/Sao_Paulo",
+                "Australia/Sydney",
+                "Pacific/Auckland",
+              ].map((tz) => ({ value: tz, label: tz.replace(/_/g, " ") }))}
             />
-          ) : (
-            <div className="flex items-center gap-2 py-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-text-tertiary)] inline-block flex-shrink-0" />
-              <p className="text-xs text-[var(--color-text-tertiary)]">
-                No text channels available — bot may not be connected yet.
-              </p>
-            </div>
-          )}
-        </div>
-
-        {/* Timezone */}
-        <div className="rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border)] p-4 flex flex-col gap-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-medium text-[var(--color-text)] flex items-center gap-2">
-              <Globe size={16} className="text-[var(--color-text-secondary)]" />
-              Timezone
-            </h3>
-            <span
-              className={clsx(
-                "flex items-center gap-1.5 text-xs transition-opacity duration-300",
-                savingTz
-                  ? "opacity-100 text-[var(--color-text-tertiary)]"
-                  : tzSaved
-                    ? "opacity-100 text-[var(--color-success)]"
-                    : "opacity-0 pointer-events-none",
-              )}
-              aria-live="polite"
-            >
-              {savingTz ? (
-                <>
-                  <Loader2 size={12} className="animate-spin" />
-                  Saving
-                </>
-              ) : (
-                <>
-                  <CheckCircle size={12} />
-                  Saved
-                </>
-              )}
-            </span>
           </div>
-
-          <p className="text-xs text-[var(--color-text-tertiary)] -mt-1">
-            Used for stats heatmap and trend date grouping.
-          </p>
-
-          <Select
-            value={timezone}
-            onChange={async (tz) => {
-              setTimezone(tz);
-              setSavingTz(true);
-              setTzSaved(false);
-              try {
-                await api.setTimezone(tz);
-                setTzSaved(true);
-                setTimeout(() => setTzSaved(false), 2000);
-              } catch {
-              } finally {
-                setSavingTz(false);
-              }
-            }}
-            options={[
-              "UTC",
-              "Asia/Seoul",
-              "Asia/Tokyo",
-              "Asia/Shanghai",
-              "Asia/Kolkata",
-              "Europe/London",
-              "Europe/Berlin",
-              "Europe/Paris",
-              "America/New_York",
-              "America/Chicago",
-              "America/Denver",
-              "America/Los_Angeles",
-              "America/Sao_Paulo",
-              "Australia/Sydney",
-              "Pacific/Auckland",
-            ].map((tz) => ({ value: tz, label: tz.replace(/_/g, " ") }))}
-          />
-        </div>
-      </section>}
+        </section>
+      )}
     </div>
   );
 }

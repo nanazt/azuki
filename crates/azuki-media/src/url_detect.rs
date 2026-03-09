@@ -15,17 +15,12 @@ pub fn detect_url(input: &str) -> DetectedUrl {
         Err(_) => {
             return DetectedUrl::Other {
                 url: input.to_string(),
-            }
+            };
         }
     };
 
     match parsed.host_str() {
-        Some(
-            "www.youtube.com"
-            | "youtube.com"
-            | "m.youtube.com"
-            | "music.youtube.com",
-        ) => {
+        Some("www.youtube.com" | "youtube.com" | "m.youtube.com" | "music.youtube.com") => {
             let list = parsed
                 .query_pairs()
                 .find(|(k, _)| k == "list")

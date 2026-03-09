@@ -53,7 +53,10 @@ fn parse_metadata_inner(data: &[u8]) -> Result<AudioMetadata, MediaError> {
         .or_else(|| tagged_file.first_tag())
         .map(|tag| {
             let title = tag.title().map(|s| s.to_string()).filter(|s| !s.is_empty());
-            let artist = tag.artist().map(|s| s.to_string()).filter(|s| !s.is_empty());
+            let artist = tag
+                .artist()
+                .map(|s| s.to_string())
+                .filter(|s| !s.is_empty());
             (title, artist)
         })
         .unwrap_or((None, None));

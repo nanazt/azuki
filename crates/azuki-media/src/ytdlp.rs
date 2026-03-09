@@ -6,9 +6,9 @@ use tokio::process::Command;
 use tokio::sync::Semaphore;
 use tracing::warn;
 
+use crate::MediaError;
 use crate::types::TrackMeta;
 use crate::ytdlp_updater::ReleaseInfo;
-use crate::MediaError;
 
 #[derive(Debug, Clone)]
 pub struct DownloadProgress {
@@ -163,7 +163,24 @@ impl YtDlp {
     fn sanitize_query(input: &str) -> String {
         input
             .chars()
-            .filter(|c| !matches!(c, ';' | '&' | '|' | '$' | '`' | '(' | ')' | '{' | '}' | '<' | '>' | '!' | '\n' | '\r'))
+            .filter(|c| {
+                !matches!(
+                    c,
+                    ';' | '&'
+                        | '|'
+                        | '$'
+                        | '`'
+                        | '('
+                        | ')'
+                        | '{'
+                        | '}'
+                        | '<'
+                        | '>'
+                        | '!'
+                        | '\n'
+                        | '\r'
+                )
+            })
             .collect()
     }
 
@@ -176,12 +193,17 @@ impl YtDlp {
         url: &str,
         mut on_progress: impl FnMut(DownloadProgress),
     ) -> Result<(PathBuf, TrackMeta), MediaError> {
-        let _permit = SEMAPHORE.acquire().await.map_err(|_| {
-            MediaError::YtDlp("semaphore closed".to_string())
-        })?;
+        let _permit = SEMAPHORE
+            .acquire()
+            .await
+            .map_err(|_| MediaError::YtDlp("semaphore closed".to_string()))?;
 
         let sanitized_url = Self::sanitize_query(url);
-        let output_template = self.media_dir.join("%(id)s.%(ext)s").to_string_lossy().to_string();
+        let output_template = self
+            .media_dir
+            .join("%(id)s.%(ext)s")
+            .to_string_lossy()
+            .to_string();
 
         let mut child = Command::new(self.bin_path())
             .args([
@@ -191,9 +213,12 @@ impl YtDlp {
                 "--progress",
                 "--newline",
                 "-x",
-                "--audio-format", "opus",
-                "--audio-quality", "0",
-                "-o", &output_template,
+                "--audio-format",
+                "opus",
+                "--audio-quality",
+                "0",
+                "-o",
+                &output_template,
                 "--",
                 &sanitized_url,
             ])
@@ -206,12 +231,15 @@ impl YtDlp {
         let stderr_handle = child.stderr.take().unwrap();
         let stdout_handle = child.stdout.take().unwrap();
 
-        let (progress_tx, mut progress_rx) = tokio::sync::mpsc::unbounded_channel::<DownloadProgress>();
+        let (progress_tx, mut progress_rx) =
+            tokio::sync::mpsc::unbounded_channel::<DownloadProgress>();
 
         // stderr: collect error output only
         let stderr_task = tokio::spawn(async move {
             let mut buf = Vec::new();
-            tokio::io::AsyncReadExt::read_to_end(&mut BufReader::new(stderr_handle), &mut buf).await.ok();
+            tokio::io::AsyncReadExt::read_to_end(&mut BufReader::new(stderr_handle), &mut buf)
+                .await
+                .ok();
             String::from_utf8_lossy(&buf).to_string()
         });
 
@@ -261,16 +289,22 @@ impl YtDlp {
             on_progress(p);
         }
 
-        let stderr_result = stderr_task.await
+        let stderr_result = stderr_task
+            .await
             .map_err(|e| MediaError::YtDlp(format!("stderr task: {e}")))?;
-        let stdout_json = stdout_task.await
+        let stdout_json = stdout_task
+            .await
             .map_err(|e| MediaError::YtDlp(format!("stdout task: {e}")))?;
 
-        let status = child.wait().await
+        let status = child
+            .wait()
+            .await
             .map_err(|e| MediaError::YtDlp(format!("failed to wait for yt-dlp: {e}")))?;
 
         if !status.success() {
-            return Err(MediaError::YtDlp(format!("yt-dlp download failed: {stderr_result}")));
+            return Err(MediaError::YtDlp(format!(
+                "yt-dlp download failed: {stderr_result}"
+            )));
         }
 
         let last_json = stdout_json
@@ -294,7 +328,10 @@ impl YtDlp {
         let line = line.trim();
 
         // [youtube] ... — resolving metadata
-        if line.starts_with("[youtube]") || line.starts_with("[generic]") || line.starts_with("[info]") {
+        if line.starts_with("[youtube]")
+            || line.starts_with("[generic]")
+            || line.starts_with("[info]")
+        {
             return Some(DownloadProgress {
                 stage: DownloadStage::Resolving,
                 percent: 0.0,
@@ -327,7 +364,10 @@ impl YtDlp {
         }
 
         // [ExtractAudio] ... — converting
-        if line.starts_with("[ExtractAudio]") || line.starts_with("[Merger]") || line.starts_with("[ffmpeg]") {
+        if line.starts_with("[ExtractAudio]")
+            || line.starts_with("[Merger]")
+            || line.starts_with("[ffmpeg]")
+        {
             return Some(DownloadProgress {
                 stage: DownloadStage::Converting,
                 percent: 0.0,
@@ -363,9 +403,10 @@ impl YtDlp {
     }
 
     pub async fn get_metadata(&self, url: &str) -> Result<TrackMeta, MediaError> {
-        let _permit = SEMAPHORE.acquire().await.map_err(|_| {
-            MediaError::YtDlp("semaphore closed".to_string())
-        })?;
+        let _permit = SEMAPHORE
+            .acquire()
+            .await
+            .map_err(|_| MediaError::YtDlp("semaphore closed".to_string()))?;
 
         let sanitized_url = Self::sanitize_query(url);
 
@@ -384,7 +425,9 @@ impl YtDlp {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(MediaError::YtDlp(format!("yt-dlp metadata failed: {stderr}")));
+            return Err(MediaError::YtDlp(format!(
+                "yt-dlp metadata failed: {stderr}"
+            )));
         }
 
         let stdout = String::from_utf8_lossy(&output.stdout);
@@ -404,16 +447,17 @@ impl YtDlp {
             artist: entry.uploader.clone(),
             duration_ms: (duration_secs * 1000.0) as u64,
             thumbnail_url: entry.thumbnail.clone(),
-            source_url: entry
-                .webpage_url
-                .clone()
-                .unwrap_or_else(|| format!("https://www.youtube.com/watch?v={}", entry.id.as_deref().unwrap_or(""))),
+            source_url: entry.webpage_url.clone().unwrap_or_else(|| {
+                format!(
+                    "https://www.youtube.com/watch?v={}",
+                    entry.id.as_deref().unwrap_or("")
+                )
+            }),
         })
     }
 
     fn find_downloaded_file(&self, video_id: &str) -> Result<PathBuf, MediaError> {
-        let read_dir = std::fs::read_dir(&self.media_dir)
-            .map_err(MediaError::Io)?;
+        let read_dir = std::fs::read_dir(&self.media_dir).map_err(MediaError::Io)?;
 
         for entry in read_dir {
             let entry = entry.map_err(MediaError::Io)?;
@@ -430,7 +474,9 @@ impl YtDlp {
             }
         }
 
-        Err(MediaError::FileNotFound(format!("downloaded file for {video_id}")))
+        Err(MediaError::FileNotFound(format!(
+            "downloaded file for {video_id}"
+        )))
     }
 
     pub fn media_dir(&self) -> &Path {
@@ -507,8 +553,8 @@ impl YtDlp {
                 .unwrap_or_else(|| format!("https://www.youtube.com/watch?v={id}"));
 
             let title_str = parsed.title.as_deref().unwrap_or("");
-            let is_youtube = sanitized_url.contains("youtube.com")
-                || sanitized_url.contains("youtu.be");
+            let is_youtube =
+                sanitized_url.contains("youtube.com") || sanitized_url.contains("youtu.be");
             let is_unavailable = title_str.contains("[Private video]")
                 || title_str.contains("[Deleted video]")
                 || (is_youtube && parsed.duration.is_none());
@@ -594,9 +640,13 @@ impl YtDlp {
 
         // Canonical path check
         if let Some(parent) = save_path.parent() {
-            tokio::fs::create_dir_all(parent).await.map_err(MediaError::Io)?;
+            tokio::fs::create_dir_all(parent)
+                .await
+                .map_err(MediaError::Io)?;
         }
-        tokio::fs::write(save_path, &bytes).await.map_err(MediaError::Io)?;
+        tokio::fs::write(save_path, &bytes)
+            .await
+            .map_err(MediaError::Io)?;
 
         // Verify canonical path stays within thumbnails dir
         if let Ok(canonical) = save_path.canonicalize()

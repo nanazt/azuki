@@ -94,9 +94,7 @@ export function Select({
           open
             ? "border-[var(--color-accent)]"
             : "border-[var(--color-border)] hover:border-[var(--color-text-tertiary)]",
-          disabled
-            ? "opacity-40 cursor-not-allowed"
-            : "cursor-pointer",
+          disabled ? "opacity-40 cursor-not-allowed" : "cursor-pointer",
         )}
       >
         {/* Left icon slot */}
@@ -118,7 +116,9 @@ export function Select({
           {selected ? (
             <>
               {selected.prefix && (
-                <span className="text-[var(--color-text-secondary)]">{selected.prefix}</span>
+                <span className="text-[var(--color-text-secondary)]">
+                  {selected.prefix}
+                </span>
               )}
               {selected.label}
             </>
@@ -180,9 +180,7 @@ export function Select({
                 <span
                   className={clsx(
                     "flex-shrink-0 self-stretch w-0.5 rounded-full transition-colors duration-100",
-                    isSelected
-                      ? "bg-[var(--color-accent)]"
-                      : "bg-transparent",
+                    isSelected ? "bg-[var(--color-accent)]" : "bg-transparent",
                   )}
                 />
 

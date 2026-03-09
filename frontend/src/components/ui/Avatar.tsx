@@ -25,7 +25,7 @@ export function Avatar({ src, username, size = "md", className }: AvatarProps) {
         "rounded-full overflow-hidden flex items-center justify-center flex-shrink-0 select-none font-semibold",
         "bg-[var(--color-bg-tertiary)] text-[var(--color-text-secondary)]",
         sizeClasses[size],
-        className
+        className,
       )}
       title={username}
     >

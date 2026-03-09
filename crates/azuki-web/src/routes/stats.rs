@@ -1,9 +1,9 @@
-use axum::extract::{Path, Query, State};
-use axum::Json;
-use axum_extra::extract::CookieJar;
 use crate::auth::extract_user_id;
-use crate::routes::content::{decode_cursor, encode_cursor, CursorQuery};
+use crate::routes::content::{CursorQuery, decode_cursor, encode_cursor};
 use crate::{ApiError, WebState};
+use axum::Json;
+use axum::extract::{Path, Query, State};
+use axum_extra::extract::CookieJar;
 
 pub async fn stats_overview(
     jar: CookieJar,
@@ -47,11 +47,7 @@ pub async fn top_tracks(
     extract_user_id(&jar, &state).await?;
     let limit = params.limit.unwrap_or(20).clamp(1, 100);
 
-    let cursor: Option<(i64, String)> = params
-        .cursor
-        .as_deref()
-        .map(decode_cursor)
-        .transpose()?;
+    let cursor: Option<(i64, String)> = params.cursor.as_deref().map(decode_cursor).transpose()?;
 
     if let Some((count, ref id)) = cursor
         && (count < 0 || id.len() > 64)
@@ -103,11 +99,7 @@ pub async fn top_artists(
     extract_user_id(&jar, &state).await?;
     let limit = params.limit.unwrap_or(20).clamp(1, 100);
 
-    let cursor: Option<(i64, String)> = params
-        .cursor
-        .as_deref()
-        .map(decode_cursor)
-        .transpose()?;
+    let cursor: Option<(i64, String)> = params.cursor.as_deref().map(decode_cursor).transpose()?;
 
     if let Some((count, ref artist)) = cursor
         && (count < 0 || artist.len() > 64)

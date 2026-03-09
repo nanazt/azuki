@@ -50,11 +50,17 @@ export function useWebSocket() {
     reconnectTimer.current = setTimeout(connect, delay);
   }, [connect]);
 
-  const restoreActiveDownloads = (downloads?: import("../lib/types").DownloadStatus[]) => {
+  const restoreActiveDownloads = (
+    downloads?: import("../lib/types").DownloadStatus[],
+  ) => {
     if (!downloads?.length) return;
     const dlStore = useDownloadStore.getState();
     for (const dl of downloads) {
-      dlStore.startDownload(dl.download_id, dl.query, dl.user_info ?? undefined);
+      dlStore.startDownload(
+        dl.download_id,
+        dl.query,
+        dl.user_info ?? undefined,
+      );
       if (dl.title) {
         dlStore.resolveMetadata(dl.download_id, {
           title: dl.title,
@@ -64,11 +70,19 @@ export function useWebSocket() {
           source_url: dl.source_url ?? "",
         });
       }
-      if (dl.percent > 0) dlStore.updateProgress(dl.download_id, "downloading", dl.percent, dl.speed_bps);
+      if (dl.percent > 0)
+        dlStore.updateProgress(
+          dl.download_id,
+          "downloading",
+          dl.percent,
+          dl.speed_bps,
+        );
     }
   };
 
-  const handleEvent = (data: SeqEvent | { event: { type: "state_snapshot" } }) => {
+  const handleEvent = (
+    data: SeqEvent | { event: { type: "state_snapshot" } },
+  ) => {
     const state = store.getState();
 
     // Initial snapshot (no seq wrapper)
@@ -92,7 +106,11 @@ export function useWebSocket() {
         restoreActiveDownloads(ev.active_downloads);
         break;
       case "track_started":
-        state.setPlayState({ status: "playing", track: ev.track, position_ms: ev.position_ms });
+        state.setPlayState({
+          status: "playing",
+          track: ev.track,
+          position_ms: ev.position_ms,
+        });
         state.setCurrentAddedBy(ev.added_by ?? null);
         break;
       case "track_loading":
@@ -113,7 +131,10 @@ export function useWebSocket() {
         }
         break;
       case "paused":
-        if (state.playState.status === "playing" || state.playState.status === "paused") {
+        if (
+          state.playState.status === "playing" ||
+          state.playState.status === "paused"
+        ) {
           state.setPlayState({
             status: "paused",
             track: state.playState.track,
@@ -122,7 +143,10 @@ export function useWebSocket() {
         }
         break;
       case "resumed":
-        if (state.playState.status === "paused" || state.playState.status === "playing") {
+        if (
+          state.playState.status === "paused" ||
+          state.playState.status === "playing"
+        ) {
           state.setPlayState({
             status: "playing",
             track: state.playState.track,
@@ -132,9 +156,15 @@ export function useWebSocket() {
         break;
       case "seeked":
         if (state.playState.status === "playing") {
-          state.setPlayState({ ...state.playState, position_ms: ev.position_ms });
+          state.setPlayState({
+            ...state.playState,
+            position_ms: ev.position_ms,
+          });
         } else if (state.playState.status === "paused") {
-          state.setPlayState({ ...state.playState, position_ms: ev.position_ms });
+          state.setPlayState({
+            ...state.playState,
+            position_ms: ev.position_ms,
+          });
         }
         break;
       case "volume_changed":
@@ -153,12 +183,18 @@ export function useWebSocket() {
         // Video sync handled by VideoPlayer component via playerStore
         break;
       case "history_added":
-        window.dispatchEvent(new CustomEvent("history-added", { detail: { track: ev.track, user_id: ev.user_id } }));
+        window.dispatchEvent(
+          new CustomEvent("history-added", {
+            detail: { track: ev.track, user_id: ev.user_id },
+          }),
+        );
         break;
       case "history_updated":
         break;
       case "download_started":
-        useDownloadStore.getState().startDownload(ev.download_id, ev.query, ev.user_info);
+        useDownloadStore
+          .getState()
+          .startDownload(ev.download_id, ev.query, ev.user_info);
         break;
       case "download_metadata_resolved":
         useDownloadStore.getState().resolveMetadata(ev.download_id, {
@@ -170,17 +206,30 @@ export function useWebSocket() {
         });
         break;
       case "download_progress":
-        useDownloadStore.getState().updateProgress(ev.download_id, ev.stage ?? "downloading", ev.percent, ev.speed_bps);
+        useDownloadStore
+          .getState()
+          .updateProgress(
+            ev.download_id,
+            ev.stage ?? "downloading",
+            ev.percent,
+            ev.speed_bps,
+          );
         break;
       case "download_complete":
         useDownloadStore.getState().completeDownload(ev.download_id, ev.track);
 
-        setTimeout(() => useDownloadStore.getState().removeDownload(ev.download_id), 3000);
+        setTimeout(
+          () => useDownloadStore.getState().removeDownload(ev.download_id),
+          3000,
+        );
         break;
       case "download_failed":
         useDownloadStore.getState().failDownload(ev.download_id, ev.error);
         showToastRef.current(ev.error ?? "Failed to add to queue", "error");
-        setTimeout(() => useDownloadStore.getState().removeDownload(ev.download_id), 3000);
+        setTimeout(
+          () => useDownloadStore.getState().removeDownload(ev.download_id),
+          3000,
+        );
         break;
     }
   };

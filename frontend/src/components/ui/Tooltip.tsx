@@ -50,7 +50,7 @@ export function Tooltip({
             "bg-[var(--color-bg-tertiary)] text-[var(--color-text)] border border-[var(--color-border)] shadow-md",
             "animate-[fadeIn_0.1s_ease-out]",
             positionClasses[position],
-            className
+            className,
           )}
         >
           {content}

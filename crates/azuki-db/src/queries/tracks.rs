@@ -124,11 +124,7 @@ pub async fn update_track_volume(pool: &SqlitePool, track_id: &str, volume: i64)
     Ok(())
 }
 
-pub async fn update_file_path(
-    pool: &SqlitePool,
-    track_id: &str,
-    file_path: &str,
-) -> DbResult<()> {
+pub async fn update_file_path(pool: &SqlitePool, track_id: &str, file_path: &str) -> DbResult<()> {
     sqlx::query("UPDATE tracks SET file_path = ?1 WHERE id = ?2")
         .bind(file_path)
         .bind(track_id)
@@ -165,10 +161,9 @@ pub async fn list_uploads(
 }
 
 pub async fn count_uploads(pool: &SqlitePool) -> DbResult<i64> {
-    let row: (i64,) =
-        sqlx::query_as("SELECT COUNT(*) FROM tracks WHERE source_type = 'upload'")
-            .fetch_one(pool)
-            .await?;
+    let row: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM tracks WHERE source_type = 'upload'")
+        .fetch_one(pool)
+        .await?;
     Ok(row.0)
 }
 
