@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-03-06 | Updated: 2026-03-06 -->
+<!-- Generated: 2026-03-06 | Updated: 2026-03-10 -->
 
 # azuki
 

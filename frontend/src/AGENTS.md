@@ -1,11 +1,11 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-03-06 | Updated: 2026-03-06 -->
+<!-- Generated: 2026-03-06 | Updated: 2026-03-10 -->
 
 # src
 
 ## Purpose
 
-React application source. Contains components, hooks, pages, stores, and utilities for the azuki web dashboard.
+React application source. Contains components, hooks, pages, stores, locales, and utilities for the azuki web dashboard.
 
 ## Key Files
 
@@ -22,7 +22,8 @@ React application source. Contains components, hooks, pages, stores, and utiliti
 | ------------- | ------------------------------------------------------------------------ |
 | `components/` | UI components organized by feature and type (see `components/AGENTS.md`) |
 | `hooks/`      | Custom React hooks (see `hooks/AGENTS.md`)                               |
-| `lib/`        | Utilities and API client (see `lib/AGENTS.md`)                           |
+| `lib/`        | Utilities, API client, types (see `lib/AGENTS.md`)                       |
+| `locales/`    | i18n translation files (see `locales/AGENTS.md`)                         |
 | `pages/`      | Page-level route components (see `pages/AGENTS.md`)                      |
 | `stores/`     | Zustand state management (see `stores/AGENTS.md`)                        |
 

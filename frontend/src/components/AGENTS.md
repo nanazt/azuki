@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-03-06 | Updated: 2026-03-06 -->
+<!-- Generated: 2026-03-06 | Updated: 2026-03-10 -->
 
 # components
 
@@ -9,11 +9,11 @@ Reusable React components organized by feature domains, layout structure, and ge
 
 ## Subdirectories
 
-| Directory   | Purpose                                                                                          |
-| ----------- | ------------------------------------------------------------------------------------------------ |
-| `features/` | Feature-specific components: player, queue, search, lyrics, video                                |
-| `layout/`   | App layout: AppShell (3-column responsive), Sidebar, NowPlayingPanel, MobileTabBar               |
-| `ui/`       | Generic UI primitives: Button, Slider, Avatar, Modal, Toast, Tooltip, Skeleton, ConnectionStatus |
+| Directory   | Purpose                                                                                                        |
+| ----------- | -------------------------------------------------------------------------------------------------------------- |
+| `features/` | Feature-specific components: player, queue, search, upload, uploads, video, onboarding (see `features/AGENTS.md`) |
+| `layout/`   | App layout: AppShell (3-column responsive), Sidebar, MobileTabBar (see `layout/AGENTS.md`)                     |
+| `ui/`       | Generic UI primitives: Button, Slider, Avatar, Modal, Toast, Tooltip, Skeleton, etc. (see `ui/AGENTS.md`)      |
 
 ## For AI Agents
 

@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-03-06 | Updated: 2026-03-06 -->
+<!-- Generated: 2026-03-06 | Updated: 2026-03-10 -->
 
 # crates
 
@@ -11,11 +11,11 @@ Rust workspace containing 6 crates that form the azuki Discord music bot backend
 | Directory | Purpose |
 |-----------|---------|
 | `azuki/` | Binary entry point — startup, config loading, setup wizard (see `azuki/AGENTS.md`) |
-| `azuki-bot/` | Discord bot — serenity EventHandler, slash commands, voice (see `azuki-bot/AGENTS.md`) |
+| `azuki-bot/` | Discord bot — serenity EventHandler, slash commands, voice, i18n messages (see `azuki-bot/AGENTS.md`) |
 | `azuki-db/` | Database layer — SQLite via sqlx, models, queries, config (see `azuki-db/AGENTS.md`) |
-| `azuki-media/` | Media services — yt-dlp wrapper, file store, lyrics fetcher (see `azuki-media/AGENTS.md`) |
-| `azuki-player/` | Playback engine — actor-pattern controller, queue, WebSocket events (see `azuki-player/AGENTS.md`) |
-| `azuki-web/` | Web server — axum REST API, Discord OAuth, WebSocket hub (see `azuki-web/AGENTS.md`) |
+| `azuki-media/` | Media services — yt-dlp, YouTube resolver, file store, metadata, uploads (see `azuki-media/AGENTS.md`) |
+| `azuki-player/` | Playback engine — actor-pattern controller (actor.rs), queue, WebSocket events (see `azuki-player/AGENTS.md`) |
+| `azuki-web/` | Web server — axum REST API, Discord OAuth, WebSocket hub, admin (see `azuki-web/AGENTS.md`) |
 
 ## For AI Agents
 

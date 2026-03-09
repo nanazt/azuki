@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-03-06 | Updated: 2026-03-06 -->
+<!-- Generated: 2026-03-06 | Updated: 2026-03-10 -->
 
 # stores
 
@@ -9,10 +9,11 @@ Zustand state management stores for client-side application state.
 
 ## Key Files
 
-| File             | Description                                                                      |
-| ---------------- | -------------------------------------------------------------------------------- |
-| `playerStore.ts` | Player state: current track, queue, playback status, volume, loop mode, position |
-| `authStore.ts`   | Auth state: current user, login status                                           |
+| File               | Description                                                                      |
+| ------------------ | -------------------------------------------------------------------------------- |
+| `playerStore.ts`   | Player state: current track, queue, playback status, volume, loop mode, position |
+| `authStore.ts`     | Auth state: current user, login status                                           |
+| `downloadStore.ts` | Download progress tracking for media files                                       |
 
 ## For AI Agents
 

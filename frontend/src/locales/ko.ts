@@ -184,7 +184,7 @@ export const ko = {
     title: "업로드",
     uploadedTracks: "{n}개 업로드된 트랙",
     empty: "업로드된 파일이 없어요",
-    emptyHint: "오디오 파일을 드래그 앤 드롭하여 업로드해요",
+    emptyHint: "오디오 파일을 드래그 앤 드롭하여 업로드 할 수 있어요",
     unknownArtist: "알 수 없는 아티스트",
     addToQueue: "대기열에 추가",
     deleteTrack: "트랙 삭제",

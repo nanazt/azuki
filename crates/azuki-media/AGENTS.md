@@ -1,21 +1,25 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-03-06 | Updated: 2026-03-06 -->
+<!-- Generated: 2026-03-06 | Updated: 2026-03-10 -->
 
 # azuki-media
 
 ## Purpose
-Media services: yt-dlp subprocess wrapper for YouTube downloads, file-based media store with cache management, file upload handling, and lrclib lyrics fetching.
+Media services: yt-dlp subprocess wrapper for YouTube downloads, URL detection and resolution, metadata extraction, file-based media store with cache management, file upload handling, and lrclib lyrics fetching.
 
 ## Key Files
 
 | File | Description |
 |------|-------------|
 | `Cargo.toml` | Media dependencies (reqwest, tokio, sha2) |
-| `src/lib.rs` | Re-exports: `MediaStore`, `YtDlp`, `LyricsService` |
+| `src/lib.rs` | Re-exports: `MediaStore`, `YtDlp`, `LyricsService`, `UrlDetector`, etc. |
 | `src/ytdlp.rs` | yt-dlp subprocess wrapper for audio extraction |
+| `src/ytdlp_updater.rs` | Automatic yt-dlp binary self-update |
+| `src/youtube.rs` | YouTube URL resolution and playlist expansion |
+| `src/url_detect.rs` | URL type detection (YouTube, direct audio, unknown) |
+| `src/metadata.rs` | Audio file metadata extraction (duration, title, artist) |
 | `src/store.rs` | File-based media store with size-limited cache cleanup |
-| `src/upload.rs` | File upload handling |
-| `src/lyrics.rs` | lrclib.net lyrics fetcher (synced + plain) |
+| `src/upload.rs` | File upload handling (multipart, validation, storage) |
+| `src/types.rs` | Shared type definitions for media module |
 
 ## For AI Agents
 
@@ -24,5 +28,8 @@ Media services: yt-dlp subprocess wrapper for YouTube downloads, file-based medi
 - `MediaStore::new(dir, max_gb)` creates media directory if needed
 - Cache cleanup runs hourly from main.rs via `cleanup_cache()`
 - Requires `yt-dlp` binary on PATH for YouTube downloads
+- `url_detect.rs` classifies URLs before routing to appropriate handler
+- `youtube.rs` handles playlist expansion (fetching all tracks from a playlist URL)
+- `ytdlp_updater.rs` keeps yt-dlp binary up-to-date automatically
 
 <!-- MANUAL: -->

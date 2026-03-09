@@ -1,16 +1,17 @@
-<!-- Generated: 2026-03-06 | Updated: 2026-03-06 -->
+<!-- Generated: 2026-03-06 | Updated: 2026-03-10 -->
 
 # azuki
 
 ## Purpose
 
-Discord music bot with web dashboard. Rust workspace backend (6 crates) + React frontend. Supports YouTube playback, queue management, playlists, favorites, lyrics, and real-time WebSocket sync.
+Discord music bot with web dashboard. Rust workspace backend (6 crates) + React frontend. Supports YouTube playback, queue management, lyrics, file uploads, and real-time WebSocket sync. Bilingual UI (Korean/English).
 
 ## Key Files
 
 | File         | Description                                        |
 | ------------ | -------------------------------------------------- |
 | `Cargo.toml` | Workspace manifest with all dependency versions    |
+| `justfile`   | Task runner commands (dev, build, check, test)     |
 | `.gitignore` | Ignore rules for Rust, Node, OS, and project files |
 
 ## Subdirectories
@@ -52,7 +53,7 @@ Discord music bot with web dashboard. Rust workspace backend (6 crates) + React 
 ### Architecture Overview
 
 - Dependency flow: azuki-db → azuki-player, azuki-media → azuki-bot, azuki-web → azuki (binary)
-- PlayerController uses actor pattern with mpsc command channel
+- PlayerController uses actor pattern with mpsc command channel (actor.rs separated from controller.rs)
 - Web uses axum + cookie-based JWT auth + WebSocket hub
 - songbird DAVE fork: `beerpsi-forks/songbird` branch `davey`
 - Config stored in SQLite `app_config` table (DB-based, not .env)
