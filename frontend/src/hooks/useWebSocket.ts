@@ -1,6 +1,7 @@
 import { useEffect, useRef, useCallback } from "react";
 import { usePlayerStore } from "../stores/playerStore";
 import { useDownloadStore } from "../stores/downloadStore";
+import { useImportStore } from "../stores/importStore";
 import { useToast } from "./useToast";
 import type { SeqEvent } from "../lib/types";
 
@@ -141,7 +142,9 @@ export function useWebSocket() {
         state.setVolume(ev.volume);
         break;
       case "queue_updated":
-        state.setQueue(ev.queue);
+        if (ev.slot_id === undefined || ev.slot_id === state.activeSlot) {
+          state.setQueue(ev.queue);
+        }
         break;
       case "loop_mode_changed":
         state.setLoopMode(ev.mode);
@@ -184,6 +187,33 @@ export function useWebSocket() {
         useDownloadStore.getState().failDownload(ev.download_id, ev.error);
         showToastRef.current(ev.error ?? "Failed to add to queue", "error");
         setTimeout(() => useDownloadStore.getState().removeDownload(ev.download_id), 3000);
+        break;
+      case "queue_slot_created":
+        window.dispatchEvent(new CustomEvent("queue-slots-changed"));
+        break;
+      case "queue_slot_deleted":
+        window.dispatchEvent(new CustomEvent("queue-slots-changed"));
+        break;
+      case "queue_switched": {
+        state.setActiveSlot(ev.slot_id);
+        window.dispatchEvent(new CustomEvent("queue-slots-changed"));
+        break;
+      }
+      case "queue_slot_exhausted":
+        showToastRef.current("Playlist queue finished — slot released", "info");
+        window.dispatchEvent(new CustomEvent("queue-slots-changed"));
+        break;
+      case "multi_queue_state":
+        state.setQueueSlots(ev.slots);
+        break;
+      case "playlist_import_progress":
+        useImportStore.getState().setImportProgress(ev.fetched, ev.total);
+        break;
+      case "playlist_import_complete":
+        useImportStore.getState().completeImport(ev.playlist_id, ev.track_count);
+        break;
+      case "playlist_import_failed":
+        useImportStore.getState().failImport(ev.error);
         break;
     }
   };

@@ -24,6 +24,17 @@ export interface UserInfo {
 
 export type LoopMode = "off" | "one" | "all";
 
+export type QueueKind = { type: "default" } | { type: "playlist"; playlist_id: number };
+
+export interface QueueSlotInfo {
+  slot_id: number;
+  kind: QueueKind;
+  track_count: number;
+  current_track: QueueEntry | null;
+  loop_mode: LoopMode;
+  paused_track_id: string | null;
+}
+
 export interface DownloadStatus {
   download_id: string;
   query: string;
@@ -45,6 +56,8 @@ export interface PlayerSnapshot {
   listeners: UserInfo[];
   current_added_by?: UserInfo | null;
   active_downloads?: DownloadStatus[];
+  active_slot: number;
+  queue_slots: QueueSlotInfo[];
 }
 
 export type PlayStateInfo =
@@ -63,7 +76,7 @@ export type PlayerEvent =
   | { type: "resumed"; position_ms: number }
   | { type: "seeked"; position_ms: number }
   | { type: "volume_changed"; volume: number }
-  | { type: "queue_updated"; queue: QueueEntry[] }
+  | { type: "queue_updated"; queue: QueueEntry[]; slot_id: number }
   | { type: "loop_mode_changed"; mode: LoopMode }
   | {
       type: "video_sync";
@@ -81,7 +94,12 @@ export type PlayerEvent =
   | { type: "download_failed"; download_id: string; error: string }
   | { type: "playlist_updated"; playlist_id: number }
   | { type: "history_added"; track: TrackInfo; user_id: string }
-  | { type: "history_updated"; history: QueueEntry[] };
+  | { type: "history_updated"; history: QueueEntry[] }
+  | { type: "queue_slot_created"; slot_id: number; kind: QueueKind }
+  | { type: "queue_slot_deleted"; slot_id: number }
+  | { type: "queue_switched"; slot_id: number; previous_slot: number }
+  | { type: "queue_slot_exhausted"; slot_id: number }
+  | { type: "multi_queue_state"; slots: QueueSlotInfo[] };
 
 export interface SeqEvent {
   seq: number;
@@ -95,6 +113,12 @@ export interface Playlist {
   is_shared: boolean;
   created_at: string;
   track_count?: number;
+  source_kind?: string | null;
+  source_id?: string | null;
+  source_url?: string | null;
+  description?: string | null;
+  thumbnail_url?: string | null;
+  channel_name?: string | null;
 }
 
 export interface PlaylistTrack {

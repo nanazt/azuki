@@ -13,7 +13,7 @@ use axum::middleware::{self, Next};
 use axum::response::IntoResponse;
 use dashmap::DashMap;
 use sqlx::SqlitePool;
-use tokio::sync::{broadcast, mpsc};
+use tokio::sync::{Semaphore, broadcast, mpsc};
 use tokio_util::sync::CancellationToken;
 use tower_http::cors::{AllowOrigin, CorsLayer};
 use tower_http::services::{ServeDir, ServeFile};
@@ -52,6 +52,8 @@ pub struct WebState {
     pub active_downloads: Arc<DashMap<String, DownloadStatus>>,
     pub download_tx: mpsc::Sender<DownloadRequest>,
     pub history_channel_id: Arc<AtomicU64>,
+    pub import_semaphore: Arc<Semaphore>,
+    pub importing_users: Arc<tokio::sync::Mutex<std::collections::HashSet<String>>>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -163,6 +165,7 @@ pub async fn start_web(
         .merge(routes::stats::stats_routes())
         .merge(routes::admin::admin_routes())
         .merge(routes::preferences::preferences_routes())
+        .merge(routes::queues::queue_routes())
         .layer(middleware::from_fn(csrf_check));
 
     let mut app = axum::Router::new()

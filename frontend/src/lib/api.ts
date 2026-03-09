@@ -5,6 +5,7 @@ import type {
   Playlist,
   PlaylistTrack,
   QueueEntry,
+  QueueSlotInfo,
   Stats,
   TrackInfo,
   UploadResponse,
@@ -161,6 +162,14 @@ export const api = {
     put<TrackInfo>(`/api/tracks/${trackId}`, data),
   fetchOEmbed: (url: string) =>
     get<OEmbedResponse>(`/api/oembed?url=${encodeURIComponent(url)}`),
+
+  // Multi-queue
+  importPlaylist: (url: string) => post<Playlist>("/api/playlists/import", { url }),
+  playPlaylist: (id: number) => post<{ slot_id: number }>(`/api/playlists/${id}/play`),
+  getQueues: () => get<{ slots: QueueSlotInfo[] }>("/api/queues"),
+  getQueueItems: (slotId: number) => get<{ queue: QueueEntry[] }>(`/api/queues/${slotId}/items`),
+  switchQueue: (slotId: number) => post<void>(`/api/queues/${slotId}/switch`),
+  deleteQueueSlot: (slotId: number) => del<void>(`/api/queues/${slotId}`),
 
   // Auth
   logout: () => post<void>("/auth/logout"),

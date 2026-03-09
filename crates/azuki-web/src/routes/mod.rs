@@ -3,4 +3,5 @@ pub mod content;
 pub mod player;
 pub mod playlists;
 pub mod preferences;
+pub mod queues;
 pub mod stats;

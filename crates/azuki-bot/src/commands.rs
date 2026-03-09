@@ -509,6 +509,8 @@ fn player_error_message(err: &PlayerError) -> &'static str {
         PlayerError::InvalidPosition => "잘못된 위치입니다",
         PlayerError::QueueFull => "대기열이 가득 찼습니다",
         PlayerError::Duplicate => "이미 대기열에 있는 곡입니다",
+        PlayerError::PlaylistQueueReadOnly => "플레이리스트 대기열에는 곡을 추가할 수 없습니다",
+        PlayerError::SlotLimitReached => "대기열 슬롯이 가득 찼습니다 (최대 4개)",
     }
 }
 

@@ -4,7 +4,7 @@ import type { Playlist, PlaylistTrack } from "../lib/types";
 import { Skeleton } from "../components/ui/Skeleton";
 import { Modal } from "../components/ui/Modal";
 import { Button } from "../components/ui/Button";
-import { ListMusic, Plus, Trash2, ChevronLeft, Loader2 } from "lucide-react";
+import { ListMusic, Plus, Trash2, ChevronLeft, Loader2, Download, Play, ExternalLink } from "lucide-react";
 import { TrackThumbnail } from "../components/ui/TrackThumbnail";
 import { formatTime } from "../lib/utils";
 import { useToast } from "../components/ui/Toast";
@@ -15,6 +15,14 @@ export function Playlists() {
   const [createOpen, setCreateOpen] = useState(false);
   const [newName, setNewName] = useState("");
   const [creating, setCreating] = useState(false);
+
+  // Import state
+  const [importOpen, setImportOpen] = useState(false);
+  const [importUrl, setImportUrl] = useState("");
+  const [importing, setImporting] = useState(false);
+
+  // Play state
+  const [playingId, setPlayingId] = useState<number | null>(null);
 
   // Detail view
   const [selected, setSelected] = useState<Playlist | null>(null);
@@ -89,6 +97,35 @@ export function Playlists() {
   const [addingIds, setAddingIds] = useState<Set<string>>(new Set());
   const { showToast } = useToast();
 
+  const handleImport = async () => {
+    if (!importUrl.trim()) return;
+    setImporting(true);
+    try {
+      await api.importPlaylist(importUrl.trim());
+      setImportUrl("");
+      setImportOpen(false);
+      loadPlaylists();
+      showToast("Playlist imported successfully", "success");
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Failed to import playlist", "error");
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const handlePlay = async (pl: Playlist) => {
+    if (playingId) return;
+    setPlayingId(pl.id);
+    try {
+      await api.playPlaylist(pl.id);
+      showToast(`Playing: ${pl.name}`, "success");
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Failed to play playlist", "error");
+    } finally {
+      setPlayingId(null);
+    }
+  };
+
   const handleAddTrack = async (track: PlaylistTrack) => {
     if (addingIds.has(track.track.id)) return;
     setAddingIds(prev => new Set(prev).add(track.track.id));
@@ -121,6 +158,15 @@ export function Playlists() {
               {tracks.length} track{tracks.length !== 1 ? "s" : ""}
             </p>
           </div>
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => handlePlay(selected)}
+            disabled={playingId === selected.id}
+          >
+            {playingId === selected.id ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} />}
+            Play All
+          </Button>
           <Button
             variant="ghost"
             size="sm"
@@ -194,10 +240,16 @@ export function Playlists() {
     <div className="p-4 md:p-6 max-w-3xl mx-auto flex flex-col gap-6">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold text-[var(--color-text)]">Playlists</h1>
-        <Button variant="primary" size="sm" onClick={() => setCreateOpen(true)}>
-          <Plus size={16} />
-          New Playlist
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="sm" onClick={() => setImportOpen(true)}>
+            <Download size={16} />
+            Import
+          </Button>
+          <Button variant="primary" size="sm" onClick={() => setCreateOpen(true)}>
+            <Plus size={16} />
+            New Playlist
+          </Button>
+        </div>
       </div>
 
       {loading ? (
@@ -221,15 +273,33 @@ export function Playlists() {
                   onClick={() => openPlaylist(pl)}
                   className="flex items-center gap-3 flex-1 min-w-0 text-left"
                 >
-                  <div className="w-10 h-10 rounded-lg bg-[var(--color-accent)]/20 flex items-center justify-center flex-shrink-0">
-                    <ListMusic size={18} className="text-[var(--color-text-secondary)]" />
-                  </div>
+                  {pl.source_kind === "youtube" ? (
+                    <div className="w-10 h-10 rounded-lg bg-red-500/20 flex items-center justify-center flex-shrink-0">
+                      <ExternalLink size={18} className="text-red-400" />
+                    </div>
+                  ) : pl.source_kind === "soundcloud" ? (
+                    <div className="w-10 h-10 rounded-lg bg-orange-500/20 flex items-center justify-center flex-shrink-0">
+                      <ExternalLink size={18} className="text-orange-400" />
+                    </div>
+                  ) : (
+                    <div className="w-10 h-10 rounded-lg bg-[var(--color-accent)]/20 flex items-center justify-center flex-shrink-0">
+                      <ListMusic size={18} className="text-[var(--color-text-secondary)]" />
+                    </div>
+                  )}
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-[var(--color-text)] truncate">{pl.name}</p>
                     <p className="text-xs text-[var(--color-text-tertiary)]">
                       {pl.track_count ?? 0} track{(pl.track_count ?? 0) !== 1 ? "s" : ""}
                     </p>
                   </div>
+                </button>
+                <button
+                  onClick={() => handlePlay(pl)}
+                  disabled={playingId === pl.id}
+                  className="p-2 rounded-lg text-[var(--color-text-tertiary)] hover:text-[var(--color-accent)] opacity-0 group-hover:opacity-100 [@media(hover:none)]:opacity-100 transition-all flex-shrink-0"
+                  aria-label="Play playlist"
+                >
+                  {playingId === pl.id ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} />}
                 </button>
                 <button
                   onClick={() => handleDelete(pl.id)}
@@ -261,6 +331,36 @@ export function Playlists() {
             </Button>
             <Button variant="primary" onClick={handleCreate} disabled={!newName.trim() || creating}>
               {creating ? "Creating..." : "Create"}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal open={importOpen} onClose={() => { if (!importing) { setImportOpen(false); setImportUrl(""); } }} title="Import Playlist">
+        <div className="flex flex-col gap-4">
+          <p className="text-sm text-[var(--color-text-secondary)]">
+            Paste a YouTube playlist URL to import.
+          </p>
+          <input
+            type="url"
+            placeholder="https://youtube.com/playlist?list=..."
+            value={importUrl}
+            onChange={(e) => setImportUrl(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && !importing && handleImport()}
+            className="w-full px-3 py-2 rounded-lg bg-[var(--color-bg)] border border-[var(--color-border)] text-[var(--color-text)] placeholder:text-[var(--color-text-tertiary)] focus:outline-none focus:border-[var(--color-accent)] text-[16px]"
+            disabled={importing}
+            autoFocus
+          />
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => { setImportOpen(false); setImportUrl(""); }} disabled={importing}>
+              Cancel
+            </Button>
+            <Button variant="primary" onClick={handleImport} disabled={!importUrl.trim() || importing}>
+              {importing ? (
+                <><Loader2 size={14} className="animate-spin" /> Importing...</>
+              ) : (
+                "Import"
+              )}
             </Button>
           </div>
         </div>

@@ -4,6 +4,7 @@ import type {
   PlayStateInfo,
   PlayerSnapshot,
   QueueEntry,
+  QueueSlotInfo,
   TrackInfo,
   UserInfo,
 } from "../lib/types";
@@ -19,6 +20,8 @@ interface PlayerState {
   lastSeq: number;
   connected: boolean;
   boostMode: boolean;
+  activeSlot: number;
+  queueSlots: QueueSlotInfo[];
 
   currentTrack: () => TrackInfo | null;
   isPlaying: () => boolean;
@@ -34,6 +37,8 @@ interface PlayerState {
   setLastSeq: (s: number) => void;
   setConnected: (c: boolean) => void;
   setBoostMode: (v: boolean) => void;
+  setActiveSlot: (s: number) => void;
+  setQueueSlots: (slots: QueueSlotInfo[]) => void;
 }
 
 export const usePlayerStore = create<PlayerState>((set, get) => ({
@@ -47,6 +52,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   lastSeq: 0,
   connected: false,
   boostMode: false,
+  activeSlot: 0,
+  queueSlots: [],
 
   currentTrack: () => {
     const s = get().playState;
@@ -65,6 +72,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       volume: snapshot.volume,
       loopMode: snapshot.loop_mode,
       listeners: snapshot.listeners,
+      activeSlot: snapshot.active_slot ?? 0,
+      queueSlots: snapshot.queue_slots ?? [],
       ...(seq != null ? { lastSeq: seq } : {}),
     }),
 
@@ -78,4 +87,6 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   setLastSeq: (s) => set({ lastSeq: s }),
   setConnected: (c) => set({ connected: c }),
   setBoostMode: (v) => set({ boostMode: v }),
+  setActiveSlot: (s) => set({ activeSlot: s }),
+  setQueueSlots: (slots) => set({ queueSlots: slots }),
 }));

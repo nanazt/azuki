@@ -3,49 +3,56 @@ use sqlx::SqlitePool;
 use crate::models::{Playlist, PlaylistTrack, Track};
 use crate::{DbError, DbResult};
 
+const PLAYLIST_COLUMNS: &str = "id, name, owner_id, is_shared, created_at,
+    source_kind, source_id, source_url, description, thumbnail_url,
+    channel_name, track_count, last_synced_at";
+
 pub async fn create_playlist(
     pool: &SqlitePool,
     name: &str,
     owner_id: Option<&str>,
     is_shared: bool,
 ) -> DbResult<Playlist> {
-    sqlx::query_as::<_, Playlist>(
+    let sql = format!(
         "INSERT INTO playlists (name, owner_id, is_shared)
          VALUES (?1, ?2, ?3)
-         RETURNING id, name, owner_id, is_shared, created_at",
-    )
-    .bind(name)
-    .bind(owner_id)
-    .bind(is_shared)
-    .fetch_one(pool)
-    .await
-    .map_err(DbError::from)
+         RETURNING {PLAYLIST_COLUMNS}"
+    );
+    sqlx::query_as::<_, Playlist>(&sql)
+        .bind(name)
+        .bind(owner_id)
+        .bind(is_shared)
+        .fetch_one(pool)
+        .await
+        .map_err(DbError::from)
 }
 
 pub async fn get_playlist(pool: &SqlitePool, id: i64) -> DbResult<Playlist> {
-    sqlx::query_as::<_, Playlist>(
-        "SELECT id, name, owner_id, is_shared, created_at FROM playlists WHERE id = ?1",
-    )
-    .bind(id)
-    .fetch_optional(pool)
-    .await?
-    .ok_or(DbError::NotFound)
+    let sql = format!(
+        "SELECT {PLAYLIST_COLUMNS} FROM playlists WHERE id = ?1"
+    );
+    sqlx::query_as::<_, Playlist>(&sql)
+        .bind(id)
+        .fetch_optional(pool)
+        .await?
+        .ok_or(DbError::NotFound)
 }
 
 pub async fn list_playlists(
     pool: &SqlitePool,
     user_id: &str,
 ) -> DbResult<Vec<Playlist>> {
-    sqlx::query_as::<_, Playlist>(
-        "SELECT id, name, owner_id, is_shared, created_at
+    let sql = format!(
+        "SELECT {PLAYLIST_COLUMNS}
          FROM playlists
          WHERE owner_id = ?1 OR is_shared = 1 OR owner_id IS NULL
-         ORDER BY created_at DESC",
-    )
-    .bind(user_id)
-    .fetch_all(pool)
-    .await
-    .map_err(DbError::from)
+         ORDER BY created_at DESC"
+    );
+    sqlx::query_as::<_, Playlist>(&sql)
+        .bind(user_id)
+        .fetch_all(pool)
+        .await
+        .map_err(DbError::from)
 }
 
 pub async fn rename_playlist(
@@ -137,7 +144,8 @@ pub async fn get_playlist_tracks(
 ) -> DbResult<Vec<Track>> {
     sqlx::query_as::<_, Track>(
         "SELECT t.id, t.title, t.artist, t.duration_ms, t.thumbnail_url,
-                t.source_url, t.source_type, t.file_path, t.youtube_id, t.volume, t.created_at
+                t.source_url, t.source_type, t.file_path, t.youtube_id,
+                t.volume, t.uploaded_by, t.created_at
          FROM playlist_tracks pt
          JOIN tracks t ON t.id = pt.track_id
          WHERE pt.playlist_id = ?1
@@ -161,6 +169,87 @@ pub async fn get_playlist_entries(
          ORDER BY position ASC",
     )
     .bind(playlist_id)
+    .fetch_all(pool)
+    .await
+    .map_err(DbError::from)
+}
+
+#[derive(Debug)]
+pub struct ExternalPlaylistParams<'a> {
+    pub name: &'a str,
+    pub owner_id: &'a str,
+    pub source_kind: &'a str,
+    pub source_id: &'a str,
+    pub source_url: &'a str,
+    pub description: Option<&'a str>,
+    pub thumbnail_url: Option<&'a str>,
+    pub channel_name: Option<&'a str>,
+    pub track_count: i64,
+}
+
+pub async fn create_external_playlist(
+    pool: &SqlitePool,
+    params: &ExternalPlaylistParams<'_>,
+) -> DbResult<Playlist> {
+    let sql = format!(
+        "INSERT INTO playlists
+             (name, owner_id, is_shared, source_kind, source_id, source_url,
+              description, thumbnail_url, channel_name, track_count)
+         VALUES (?1, ?2, 0, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+         RETURNING {PLAYLIST_COLUMNS}"
+    );
+    sqlx::query_as::<_, Playlist>(&sql)
+        .bind(params.name)
+        .bind(params.owner_id)
+        .bind(params.source_kind)
+        .bind(params.source_id)
+        .bind(params.source_url)
+        .bind(params.description)
+        .bind(params.thumbnail_url)
+        .bind(params.channel_name)
+        .bind(params.track_count)
+        .fetch_one(pool)
+        .await
+        .map_err(DbError::from)
+}
+
+pub async fn find_by_source(
+    pool: &SqlitePool,
+    source_kind: &str,
+    source_id: &str,
+) -> DbResult<Option<Playlist>> {
+    let sql = format!(
+        "SELECT {PLAYLIST_COLUMNS}
+         FROM playlists
+         WHERE source_kind = ?1 AND source_id = ?2"
+    );
+    sqlx::query_as::<_, Playlist>(&sql)
+        .bind(source_kind)
+        .bind(source_id)
+        .fetch_optional(pool)
+        .await
+        .map_err(DbError::from)
+}
+
+pub async fn get_playlist_tracks_window(
+    pool: &SqlitePool,
+    playlist_id: i64,
+    offset: i64,
+    limit: i64,
+) -> DbResult<Vec<Track>> {
+    sqlx::query_as::<_, Track>(
+        "SELECT t.id, t.title, t.artist, t.duration_ms, t.thumbnail_url,
+                t.source_url, t.source_type, t.file_path, t.youtube_id,
+                t.volume, t.uploaded_by, t.created_at
+         FROM playlist_tracks pt
+         JOIN tracks t ON t.id = pt.track_id
+         WHERE pt.playlist_id = ?1
+         ORDER BY pt.position ASC
+         LIMIT ?2 OFFSET ?3",
+    )
+    .bind(playlist_id)
+    .bind(limit)
+    .bind(offset)
     .fetch_all(pool)
     .await
     .map_err(DbError::from)

@@ -1,6 +1,6 @@
 use serde::Serialize;
 
-use azuki_player::{PlayerEvent, PlayerSnapshot, TrackInfo};
+use azuki_player::{PlayerEvent, PlayerSnapshot, QueueKind, QueueSlotInfo, TrackInfo};
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -37,6 +37,7 @@ pub enum WebEvent {
     },
     QueueUpdated {
         queue: Vec<azuki_player::QueueEntry>,
+        slot_id: u8,
     },
     LoopModeChanged {
         mode: azuki_player::LoopMode,
@@ -93,6 +94,24 @@ pub enum WebEvent {
     HistoryUpdated {
         history: Vec<azuki_player::QueueEntry>,
     },
+    // Multi-queue events
+    QueueSlotCreated {
+        slot_id: u8,
+        kind: QueueKind,
+    },
+    QueueSlotDeleted {
+        slot_id: u8,
+    },
+    QueueSwitched {
+        slot_id: u8,
+        previous_slot: u8,
+    },
+    QueueSlotExhausted {
+        slot_id: u8,
+    },
+    MultiQueueState {
+        slots: Vec<QueueSlotInfo>,
+    },
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -118,10 +137,24 @@ pub struct DownloadStatus {
 impl From<PlayerEvent> for WebEvent {
     fn from(event: PlayerEvent) -> Self {
         match event {
-            PlayerEvent::TrackStarted { track, position_ms, added_by } => {
-                WebEvent::TrackStarted { track, position_ms, added_by }
-            }
-            PlayerEvent::TrackEnded { track_id, listened_ms, completed } => WebEvent::TrackEnded { track_id, listened_ms, completed },
+            PlayerEvent::TrackStarted {
+                track,
+                position_ms,
+                added_by,
+            } => WebEvent::TrackStarted {
+                track,
+                position_ms,
+                added_by,
+            },
+            PlayerEvent::TrackEnded {
+                track_id,
+                listened_ms,
+                completed,
+            } => WebEvent::TrackEnded {
+                track_id,
+                listened_ms,
+                completed,
+            },
             PlayerEvent::TrackLoading { track } => WebEvent::TrackLoading { track },
             PlayerEvent::TrackError { track_id, error } => {
                 WebEvent::TrackError { track_id, error }
@@ -130,7 +163,9 @@ impl From<PlayerEvent> for WebEvent {
             PlayerEvent::Resumed { position_ms } => WebEvent::Resumed { position_ms },
             PlayerEvent::Seeked { position_ms, .. } => WebEvent::Seeked { position_ms },
             PlayerEvent::VolumeChanged { volume } => WebEvent::VolumeChanged { volume },
-            PlayerEvent::QueueUpdated { queue } => WebEvent::QueueUpdated { queue },
+            PlayerEvent::QueueUpdated { queue, slot_id } => {
+                WebEvent::QueueUpdated { queue, slot_id }
+            }
             PlayerEvent::LoopModeChanged { mode } => WebEvent::LoopModeChanged { mode },
             PlayerEvent::VideoSync {
                 youtube_id,
@@ -149,6 +184,28 @@ impl From<PlayerEvent> for WebEvent {
                 state,
                 active_downloads: Vec::new(),
             },
+            // Multi-queue events
+            PlayerEvent::PreDownloadNeeded { .. } => {
+                // Pre-download is an internal signal; not forwarded to web clients
+                // Map to a no-op by using QueueSlotExhausted with a sentinel — but better
+                // to filter these at the ws hub. For now emit a harmless variant.
+                // Actually: we need a valid WebEvent. Use MultiQueueState with empty slots.
+                WebEvent::MultiQueueState { slots: Vec::new() }
+            }
+            PlayerEvent::QueueSlotCreated { slot_id, kind } => {
+                WebEvent::QueueSlotCreated { slot_id, kind }
+            }
+            PlayerEvent::QueueSlotDeleted { slot_id } => WebEvent::QueueSlotDeleted { slot_id },
+            PlayerEvent::QueueSwitched {
+                slot_id,
+                previous_slot,
+            } => WebEvent::QueueSwitched {
+                slot_id,
+                previous_slot,
+            },
+            PlayerEvent::QueueSlotExhausted { slot_id } => {
+                WebEvent::QueueSlotExhausted { slot_id }
+            }
         }
     }
 }

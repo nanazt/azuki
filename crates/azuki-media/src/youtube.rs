@@ -124,6 +124,189 @@ impl YouTubeClient {
         Ok(results)
     }
 
+    pub fn extract_playlist_id(url: &str) -> Option<String> {
+        let parsed = Url::parse(url).ok()?;
+        parsed
+            .query_pairs()
+            .find(|(k, _)| k == "list")
+            .map(|(_, v)| v.to_string())
+    }
+
+    pub async fn get_playlist_meta(&self, playlist_id: &str) -> Result<PlaylistMeta, MediaError> {
+        let url = Url::parse_with_params(
+            "https://www.googleapis.com/youtube/v3/playlists",
+            &[
+                ("part", "snippet,contentDetails"),
+                ("id", playlist_id),
+                ("key", &self.api_key),
+            ],
+        )
+        .map_err(|e| MediaError::YouTube(format!("failed to build playlist URL: {e}")))?;
+
+        let resp: PlaylistResponse = self
+            .client
+            .get(url)
+            .send()
+            .await
+            .map_err(|e| MediaError::YouTube(sanitize_error(e)))?
+            .error_for_status()
+            .map_err(|e| MediaError::YouTube(sanitize_error(e)))?
+            .json()
+            .await
+            .map_err(|e| MediaError::YouTube(sanitize_error(e)))?;
+
+        let item = resp
+            .items
+            .into_iter()
+            .next()
+            .ok_or_else(|| MediaError::YouTube("playlist not found".to_string()))?;
+
+        let thumbnail_url = item
+            .snippet
+            .thumbnails
+            .as_ref()
+            .and_then(|t| t.default.as_ref())
+            .map(|t| t.url.clone());
+
+        Ok(PlaylistMeta {
+            playlist_id: playlist_id.to_string(),
+            title: item.snippet.title,
+            description: item.snippet.description.filter(|d| !d.is_empty()),
+            thumbnail_url,
+            channel_title: item.snippet.channel_title,
+            item_count: item
+                .content_details
+                .as_ref()
+                .map(|cd| cd.item_count)
+                .unwrap_or(0),
+        })
+    }
+
+    pub async fn get_playlist_items(
+        &self,
+        playlist_id: &str,
+        max_items: u32,
+    ) -> Result<Vec<PlaylistItemMeta>, MediaError> {
+        let mut items: Vec<PlaylistItemMeta> = Vec::new();
+        let mut page_token: Option<String> = None;
+        let cap = max_items.min(300);
+
+        loop {
+            if items.len() as u32 >= cap {
+                break;
+            }
+
+            let remaining = cap - items.len() as u32;
+            let page_size = remaining.min(50);
+
+            let mut params: Vec<(&str, String)> = vec![
+                ("part", "snippet,contentDetails".to_string()),
+                ("playlistId", playlist_id.to_string()),
+                ("maxResults", page_size.to_string()),
+                ("key", self.api_key.clone()),
+            ];
+            if let Some(ref token) = page_token {
+                params.push(("pageToken", token.clone()));
+            }
+
+            let url = Url::parse_with_params(
+                "https://www.googleapis.com/youtube/v3/playlistItems",
+                &params,
+            )
+            .map_err(|e| MediaError::YouTube(format!("failed to build playlistItems URL: {e}")))?;
+
+            let resp: PlaylistItemsResponse = self
+                .client
+                .get(url)
+                .send()
+                .await
+                .map_err(|e| MediaError::YouTube(sanitize_error(e)))?
+                .error_for_status()
+                .map_err(|e| MediaError::YouTube(sanitize_error(e)))?
+                .json()
+                .await
+                .map_err(|e| MediaError::YouTube(sanitize_error(e)))?;
+
+            // Batch fetch video details for duration and status
+            let video_ids: Vec<&str> = resp
+                .items
+                .iter()
+                .map(|i| i.snippet.resource_id.video_id.as_str())
+                .collect();
+
+            let video_details = if video_ids.is_empty() {
+                std::collections::HashMap::new()
+            } else {
+                let ids_str = video_ids.join(",");
+                let vurl = Url::parse_with_params(
+                    "https://www.googleapis.com/youtube/v3/videos",
+                    &[
+                        ("part", "contentDetails,status"),
+                        ("id", &ids_str),
+                        ("key", &self.api_key),
+                    ],
+                )
+                .map_err(|e| {
+                    MediaError::YouTube(format!("failed to build videos URL: {e}"))
+                })?;
+
+                let vresp: VideoStatusResponse = self
+                    .client
+                    .get(vurl)
+                    .send()
+                    .await
+                    .map_err(|e| MediaError::YouTube(sanitize_error(e)))?
+                    .error_for_status()
+                    .map_err(|e| MediaError::YouTube(sanitize_error(e)))?
+                    .json()
+                    .await
+                    .map_err(|e| MediaError::YouTube(sanitize_error(e)))?;
+
+                vresp
+                    .items
+                    .into_iter()
+                    .map(|v| (v.id.clone(), v))
+                    .collect::<std::collections::HashMap<_, _>>()
+            };
+
+            for pi in resp.items {
+                let video_id = pi.snippet.resource_id.video_id.clone();
+                let detail = video_details.get(&video_id);
+                let duration_ms = detail
+                    .and_then(|d| d.content_details.as_ref())
+                    .map(|cd| parse_iso8601_duration(&cd.duration))
+                    .unwrap_or(0);
+                let is_unavailable = detail
+                    .and_then(|d| d.status.as_ref())
+                    .map(|s| s.privacy_status != "public" && s.privacy_status != "unlisted")
+                    .unwrap_or(true);
+                let thumbnail_url = pi
+                    .snippet
+                    .thumbnails
+                    .as_ref()
+                    .and_then(|t| t.default.as_ref())
+                    .map(|t| t.url.clone());
+
+                items.push(PlaylistItemMeta {
+                    video_id,
+                    title: pi.snippet.title,
+                    channel_title: pi.snippet.channel_title,
+                    duration_ms,
+                    thumbnail_url,
+                    position: pi.snippet.position,
+                    is_unavailable,
+                });
+            }
+
+            page_token = resp.next_page_token;
+            if page_token.is_none() {
+                break;
+            }
+        }
+
+        Ok(items)
+    }
+
     /// Fetch metadata for a single video by ID using the YouTube Data API.
     pub async fn get_video(&self, video_id: &str) -> Result<TrackMeta, MediaError> {
         let snippet_url = Url::parse_with_params(
@@ -166,6 +349,25 @@ impl YouTubeClient {
             source_url: format!("https://www.youtube.com/watch?v={video_id}"),
         })
     }
+}
+
+pub struct PlaylistMeta {
+    pub playlist_id: String,
+    pub title: String,
+    pub description: Option<String>,
+    pub thumbnail_url: Option<String>,
+    pub channel_title: Option<String>,
+    pub item_count: u32,
+}
+
+pub struct PlaylistItemMeta {
+    pub video_id: String,
+    pub title: String,
+    pub channel_title: Option<String>,
+    pub duration_ms: u64,
+    pub thumbnail_url: Option<String>,
+    pub position: u32,
+    pub is_unavailable: bool,
 }
 
 /// Extract a YouTube video ID from a URL, if present.
@@ -305,4 +507,80 @@ struct VideoSnippetResponse {
 struct VideoSnippetItem {
     snippet: Snippet,
     content_details: ContentDetails,
+}
+
+// Playlist API response structs
+
+#[derive(Deserialize)]
+struct PlaylistResponse {
+    items: Vec<PlaylistItem>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PlaylistItem {
+    snippet: PlaylistSnippet,
+    content_details: Option<PlaylistContentDetails>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PlaylistSnippet {
+    title: String,
+    description: Option<String>,
+    channel_title: Option<String>,
+    thumbnails: Option<Thumbnails>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PlaylistContentDetails {
+    item_count: u32,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PlaylistItemsResponse {
+    items: Vec<PlaylistItemEntry>,
+    next_page_token: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct PlaylistItemEntry {
+    snippet: PlaylistItemSnippet,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PlaylistItemSnippet {
+    title: String,
+    channel_title: Option<String>,
+    thumbnails: Option<Thumbnails>,
+    position: u32,
+    resource_id: ResourceId,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ResourceId {
+    video_id: String,
+}
+
+#[derive(Deserialize)]
+struct VideoStatusResponse {
+    items: Vec<VideoStatusItem>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct VideoStatusItem {
+    id: String,
+    content_details: Option<ContentDetails>,
+    status: Option<VideoStatus>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct VideoStatus {
+    privacy_status: String,
 }

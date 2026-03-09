@@ -28,6 +28,33 @@ pub enum DownloadStage {
 const PERMITS: u32 = 3;
 static SEMAPHORE: Semaphore = Semaphore::const_new(PERMITS as usize);
 
+/// Separate semaphore for overflow refill/pre-download (2 permits)
+pub static REFILL_SEMAPHORE: Semaphore = Semaphore::const_new(2);
+
+#[derive(Debug, Clone)]
+pub struct FlatPlaylistEntry {
+    pub id: String,
+    pub title: Option<String>,
+    pub uploader: Option<String>,
+    pub duration: Option<f64>,
+    pub url: String,
+    pub thumbnail: Option<String>,
+    pub is_unavailable: bool,
+}
+
+#[derive(Debug, Deserialize)]
+struct FlatPlaylistJson {
+    id: Option<String>,
+    title: Option<String>,
+    uploader: Option<String>,
+    duration: Option<f64>,
+    url: Option<String>,
+    webpage_url: Option<String>,
+    thumbnail: Option<String>,
+    playlist_title: Option<String>,
+    playlist_id: Option<String>,
+}
+
 #[derive(Debug, Deserialize)]
 struct YtDlpOutput {
     id: Option<String>,
@@ -408,6 +435,96 @@ impl YtDlp {
 
     pub fn media_dir(&self) -> &Path {
         &self.media_dir
+    }
+
+    /// Fetch playlist metadata using --flat-playlist --dump-json.
+    /// Each output line is a JSON object for one entry.
+    /// Returns (playlist_title, playlist_id, entries).
+    pub async fn get_playlist_metadata(
+        &self,
+        url: &str,
+        max_entries: usize,
+    ) -> Result<(String, String, Vec<FlatPlaylistEntry>), MediaError> {
+        let sanitized_url = Self::sanitize_query(url);
+
+        let output = Command::new(self.bin_path())
+            .args([
+                "--flat-playlist",
+                "--dump-json",
+                "--no-warnings",
+                "--",
+                &sanitized_url,
+            ])
+            .output()
+            .await
+            .map_err(|e| MediaError::YtDlp(format!("failed to run yt-dlp: {e}")))?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(MediaError::YtDlp(format!(
+                "yt-dlp playlist failed: {stderr}"
+            )));
+        }
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let mut entries: Vec<FlatPlaylistEntry> = Vec::new();
+        let mut playlist_title = String::new();
+        let mut playlist_id = String::new();
+
+        for line in stdout.lines() {
+            if !line.starts_with('{') {
+                continue;
+            }
+            if entries.len() >= max_entries {
+                break;
+            }
+
+            let parsed: FlatPlaylistJson = match serde_json::from_str(line) {
+                Ok(v) => v,
+                Err(_) => continue,
+            };
+
+            if playlist_title.is_empty()
+                && let Some(ref t) = parsed.playlist_title
+            {
+                playlist_title = t.clone();
+            }
+            if playlist_id.is_empty()
+                && let Some(ref id) = parsed.playlist_id
+            {
+                playlist_id = id.clone();
+            }
+
+            let id = match parsed.id {
+                Some(ref s) => s.clone(),
+                None => continue,
+            };
+
+            let entry_url = parsed
+                .url
+                .clone()
+                .or_else(|| parsed.webpage_url.clone())
+                .unwrap_or_else(|| format!("https://www.youtube.com/watch?v={id}"));
+
+            let title_str = parsed.title.as_deref().unwrap_or("");
+            let is_youtube = sanitized_url.contains("youtube.com")
+                || sanitized_url.contains("youtu.be");
+            let is_unavailable = title_str.contains("[Private video]")
+                || title_str.contains("[Deleted video]")
+                || (is_youtube && parsed.duration.is_none());
+
+            entries.push(FlatPlaylistEntry {
+                id,
+                title: parsed.title,
+                uploader: parsed.uploader,
+                duration: parsed.duration,
+                url: entry_url,
+                thumbnail: parsed.thumbnail,
+                is_unavailable,
+            });
+        }
+
+        Ok((playlist_title, playlist_id, entries))
     }
 
     pub async fn download_thumbnail(url: &str, save_path: &Path) -> Result<(), MediaError> {

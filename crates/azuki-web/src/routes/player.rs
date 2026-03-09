@@ -188,6 +188,18 @@ pub async fn queue_add(
 ) -> Result<(StatusCode, Json<serde_json::Value>), ApiError> {
     let user_id = extract_user_id(&jar, &state).await?;
 
+    // Block playlist URLs — use /api/playlists/import instead
+    let detected = azuki_media::detect_url(&body.query_or_url);
+    if matches!(
+        detected,
+        azuki_media::DetectedUrl::YoutubePlaylist { .. }
+            | azuki_media::DetectedUrl::SoundcloudPlaylist { .. }
+    ) {
+        return Err(ApiError::BadRequest(
+            "Playlist URLs cannot be added to queue. Use playlist import instead.".to_string(),
+        ));
+    }
+
     let download_id = uuid::Uuid::new_v4().to_string();
 
     // Check for duplicate active downloads by URL hash
