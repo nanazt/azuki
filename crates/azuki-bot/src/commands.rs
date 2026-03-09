@@ -2,8 +2,8 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
 use serenity::all::{
-    ButtonStyle, ChannelId, CommandInteraction, CommandOptionType, ComponentInteraction,
-    ComponentInteractionDataKind, Context, CreateActionRow, CreateButton, CreateCommand,
+    ChannelId, CommandInteraction, CommandOptionType, ComponentInteraction,
+    ComponentInteractionDataKind, Context, CreateCommand,
     CreateCommandOption, CreateInteractionResponse, CreateInteractionResponseFollowup,
     CreateInteractionResponseMessage, GuildId, UserId,
 };
@@ -36,7 +36,6 @@ pub async fn register_commands(ctx: &Context, guild_id: GuildId) -> Result<(), s
         CreateCommand::new("pause").description("Pause playback"),
         CreateCommand::new("resume").description("Resume playback"),
         CreateCommand::new("skip").description("Skip to next track"),
-        CreateCommand::new("queue").description("Show current queue"),
         CreateCommand::new("now").description("Show now playing"),
         CreateCommand::new("volume")
             .description("Set volume (0-100)")
@@ -58,7 +57,7 @@ pub async fn register_commands(ctx: &Context, guild_id: GuildId) -> Result<(), s
     ];
 
     guild_id.set_commands(&ctx.http, commands).await?;
-    info!("registered 8 slash commands");
+    info!("registered 7 slash commands");
     Ok(())
 }
 
@@ -73,7 +72,6 @@ pub async fn handle_command(
         "pause" => handle_pause(ctx, cmd, state, is_history).await,
         "resume" => handle_resume(ctx, cmd, state, is_history).await,
         "skip" => handle_skip(ctx, cmd, state, is_history).await,
-        "queue" => handle_queue(ctx, cmd, state, is_history).await,
         "now" => handle_now(ctx, cmd, state, is_history).await,
         "volume" => handle_volume(ctx, cmd, state, is_history).await,
         "loop" => handle_loop(ctx, cmd, state, is_history).await,
@@ -353,165 +351,6 @@ async fn handle_skip(
 }
 
 // ---------------------------------------------------------------------------
-// /queue (paginated)
-// ---------------------------------------------------------------------------
-
-const QUEUE_PAGE_SIZE: usize = 5;
-
-async fn handle_queue(
-    ctx: &Context,
-    cmd: &CommandInteraction,
-    state: &Arc<BotState>,
-    is_history: bool,
-) -> Result<(), crate::BotError> {
-    let snapshot = state.player.get_state().await;
-    if snapshot.queue.is_empty() {
-        return respond(ctx, cmd, "Queue is empty", is_history).await;
-    }
-
-    let (content, components) = build_queue_page(&snapshot.queue, 0);
-    let msg = CreateInteractionResponseMessage::new()
-        .content(content)
-        .components(components)
-        .ephemeral(is_history);
-    cmd.create_response(&ctx.http, CreateInteractionResponse::Message(msg))
-        .await
-        .map_err(|e| crate::BotError::Serenity(e.to_string()))
-}
-
-fn build_queue_page(
-    queue: &[azuki_player::QueueEntry],
-    page: usize,
-) -> (String, Vec<CreateActionRow>) {
-    let total_pages = queue.len().div_ceil(QUEUE_PAGE_SIZE);
-    let page = page.min(total_pages.saturating_sub(1));
-    let start = page * QUEUE_PAGE_SIZE;
-    let end = (start + QUEUE_PAGE_SIZE).min(queue.len());
-    let page_items = &queue[start..end];
-
-    // Build content
-    let mut content = String::from("**Queue:**\n");
-    for (i, entry) in page_items.iter().enumerate() {
-        let pos = start + i + 1;
-        let duration = format_duration(entry.track.duration_ms);
-        content.push_str(&format!(
-            "{}. **{}** — {} [{duration}]\n",
-            pos,
-            entry.track.title,
-            entry.track.artist.as_deref().unwrap_or("Unknown"),
-        ));
-    }
-
-    let mut components = Vec::new();
-
-    // Row 1: Remove buttons for displayed tracks
-    let remove_buttons: Vec<CreateButton> = page_items
-        .iter()
-        .enumerate()
-        .map(|(i, _)| {
-            let abs_pos = start + i;
-            CreateButton::new(format!("qr:{abs_pos}"))
-                .label(format!("✕ {}", start + i + 1))
-                .style(ButtonStyle::Danger)
-        })
-        .collect();
-    if !remove_buttons.is_empty() {
-        components.push(CreateActionRow::Buttons(remove_buttons));
-    }
-
-    // Row 2: Pagination
-    let prev_btn = CreateButton::new(format!("qp:{}", page.saturating_sub(1)))
-        .label("◀ Prev")
-        .style(ButtonStyle::Secondary)
-        .disabled(page == 0);
-    let page_btn = CreateButton::new("qpage:info")
-        .label(format!("{}/{}", page + 1, total_pages))
-        .style(ButtonStyle::Secondary)
-        .disabled(true);
-    let next_btn = CreateButton::new(format!("qn:{}", page + 1))
-        .label("Next ▶")
-        .style(ButtonStyle::Secondary)
-        .disabled(page + 1 >= total_pages);
-    components.push(CreateActionRow::Buttons(vec![prev_btn, page_btn, next_btn]));
-
-    (content, components)
-}
-
-pub async fn handle_queue_remove(
-    ctx: &Context,
-    component: &ComponentInteraction,
-    state: &Arc<BotState>,
-    position: usize,
-) {
-    let _ = state.player.remove(position).await;
-
-    // Re-render queue
-    let snapshot = state.player.get_state().await;
-    if snapshot.queue.is_empty() {
-        let _ = component
-            .create_response(
-                &ctx.http,
-                CreateInteractionResponse::UpdateMessage(
-                    CreateInteractionResponseMessage::new()
-                        .content("Queue is empty")
-                        .components(vec![]),
-                ),
-            )
-            .await;
-        return;
-    }
-
-    // Figure out which page we were on
-    let current_page = position / QUEUE_PAGE_SIZE;
-    let total_pages = snapshot.queue.len().div_ceil(QUEUE_PAGE_SIZE);
-    let page = current_page.min(total_pages.saturating_sub(1));
-
-    let (content, components) = build_queue_page(&snapshot.queue, page);
-    let _ = component
-        .create_response(
-            &ctx.http,
-            CreateInteractionResponse::UpdateMessage(
-                CreateInteractionResponseMessage::new()
-                    .content(content)
-                    .components(components),
-            ),
-        )
-        .await;
-}
-
-pub async fn handle_queue_page(
-    ctx: &Context,
-    component: &ComponentInteraction,
-    state: &Arc<BotState>,
-    page: usize,
-) {
-    let snapshot = state.player.get_state().await;
-    if snapshot.queue.is_empty() {
-        let _ = component
-            .create_response(
-                &ctx.http,
-                CreateInteractionResponse::UpdateMessage(
-                    CreateInteractionResponseMessage::new()
-                        .content("Queue is empty")
-                        .components(vec![]),
-                ),
-            )
-            .await;
-        return;
-    }
-
-    let (content, components) = build_queue_page(&snapshot.queue, page);
-    let _ = component
-        .create_response(
-            &ctx.http,
-            CreateInteractionResponse::UpdateMessage(
-                CreateInteractionResponseMessage::new()
-                    .content(content)
-                    .components(components),
-            ),
-        )
-        .await;
-}
 
 // ---------------------------------------------------------------------------
 // /now
