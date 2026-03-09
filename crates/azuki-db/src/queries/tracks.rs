@@ -52,28 +52,6 @@ pub async fn get_track(pool: &SqlitePool, id: &str) -> DbResult<Track> {
         .ok_or(DbError::NotFound)
 }
 
-pub async fn search_tracks(
-    pool: &SqlitePool,
-    query: &str,
-    limit: i64,
-    offset: i64,
-) -> DbResult<Vec<Track>> {
-    let pattern = format!("%{query}%");
-    let sql = format!(
-        "SELECT {TRACK_COLUMNS} FROM tracks
-         WHERE title LIKE ?1 OR artist LIKE ?1
-         ORDER BY created_at DESC
-         LIMIT ?2 OFFSET ?3"
-    );
-    sqlx::query_as::<_, Track>(&sql)
-        .bind(&pattern)
-        .bind(limit)
-        .bind(offset)
-        .fetch_all(pool)
-        .await
-        .map_err(DbError::from)
-}
-
 /// Escape LIKE wildcard characters
 fn escape_like(input: &str) -> String {
     input

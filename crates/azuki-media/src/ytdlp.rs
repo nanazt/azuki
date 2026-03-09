@@ -638,6 +638,12 @@ impl YtDlp {
             return Ok(());
         }
 
+        // Pre-write filename sanitization
+        let filename = save_path.file_name().ok_or(MediaError::PathTraversal)?;
+        if filename.to_string_lossy().contains("..") {
+            return Err(MediaError::PathTraversal);
+        }
+
         // Canonical path check
         if let Some(parent) = save_path.parent() {
             tokio::fs::create_dir_all(parent)

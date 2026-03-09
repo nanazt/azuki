@@ -18,9 +18,13 @@ pub async fn ws_upgrade(
     ws: WebSocketUpgrade,
 ) -> impl IntoResponse {
     // Validate origin
-    if let Some(origin) = headers.get("origin").and_then(|v| v.to_str().ok())
-        && !state.allowed_origins.iter().any(|o| o == origin)
-    {
+    let origin = match headers.get("origin").and_then(|v| v.to_str().ok()) {
+        Some(o) => o,
+        None => {
+            return (axum::http::StatusCode::FORBIDDEN, "missing origin").into_response();
+        }
+    };
+    if !state.allowed_origins.iter().any(|o| o == origin) {
         return (axum::http::StatusCode::FORBIDDEN, "invalid origin").into_response();
     }
 

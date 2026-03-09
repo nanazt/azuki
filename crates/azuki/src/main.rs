@@ -143,19 +143,19 @@ async fn run_normal(config: Config, pool: SqlitePool) -> anyhow::Result<()> {
 
     // Player — restore state from DB
     let restore_entry_to_queue = |e: azuki_db::queries::history::RestoreEntry| {
-        let file_path = e.source_type == "youtube" && e.youtube_id.is_some();
-        let fp = if file_path {
-            let media_dir = &config.media_dir;
-            let yt_id = e.youtube_id.as_deref().unwrap();
-            let path = format!("{media_dir}/{yt_id}.opus");
-            if std::path::Path::new(&path).exists() {
-                Some(path)
-            } else {
-                None
-            }
-        } else {
-            None
-        };
+        let fp = e
+            .file_path
+            .filter(|p| std::path::Path::new(p).exists())
+            .or_else(|| {
+                if e.source_type == "youtube" {
+                    e.youtube_id
+                        .as_deref()
+                        .map(|yt_id| format!("{}/{yt_id}.opus", config.media_dir))
+                        .filter(|p| std::path::Path::new(p).exists())
+                } else {
+                    None
+                }
+            });
         azuki_player::QueueEntry {
             track: azuki_player::TrackInfo {
                 id: e.track_id,
