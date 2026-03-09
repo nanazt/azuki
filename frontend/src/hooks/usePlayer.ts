@@ -16,8 +16,8 @@ export function usePlayer() {
         track: s.playState.track,
         position_ms: s.playState.position_ms,
       });
+      api.pause().catch(() => {});
     }
-    api.pause();
   }, []);
 
   const resume = useCallback(() => {
@@ -28,8 +28,8 @@ export function usePlayer() {
         track: s.playState.track,
         position_ms: s.playState.position_ms,
       });
+      api.resume().catch(() => {});
     }
-    api.resume();
   }, []);
 
   const togglePlay = useCallback(() => {
@@ -38,15 +38,15 @@ export function usePlayer() {
     else if (status === "paused") resume();
   }, [pause, resume]);
 
-  const skip = useCallback(() => api.skip(), []);
-  const previous = useCallback(() => api.previous(), []);
+  const skip = useCallback(() => api.skip().catch(() => {}), []);
+  const previous = useCallback(() => api.previous().catch(() => {}), []);
 
   const seek = useCallback((ms: number) => {
     const s = usePlayerStore.getState();
     if (s.playState.status === "playing" || s.playState.status === "paused") {
       s.setPlayState({ ...s.playState, position_ms: ms });
     }
-    api.seek(ms);
+    api.seek(ms).catch(() => {});
   }, []);
 
   const setVolume = useCallback((v: number) => {
@@ -59,7 +59,7 @@ export function usePlayer() {
 
   const setLoop = useCallback((mode: "off" | "one" | "all") => {
     usePlayerStore.getState().setLoopMode(mode);
-    api.setLoop(mode);
+    api.setLoop(mode).catch(() => {});
   }, []);
 
   const cycleLoop = useCallback(() => {
@@ -70,15 +70,20 @@ export function usePlayer() {
 
   const moveInQueue = useCallback((from: number, to: number) => {
     const s = usePlayerStore.getState();
+    const prevQueue = s.queue;
     const newQueue = [...s.queue];
     const [moved] = newQueue.splice(from, 1);
     newQueue.splice(to, 0, moved);
     s.setQueue(newQueue);
-    api.moveInQueue(from, to);
+    api.moveInQueue(from, to).catch(() => {
+      usePlayerStore.getState().setQueue(prevQueue);
+    });
   }, []);
 
   const playAt = useCallback((position: number) => {
     const s = usePlayerStore.getState();
+    const prevQueue = s.queue;
+    const prevPlayState = s.playState;
     const entry = s.queue[position];
     if (entry) {
       const newQueue = [...s.queue];
@@ -90,7 +95,11 @@ export function usePlayer() {
         position_ms: 0,
       });
     }
-    return api.playAt(position);
+    return api.playAt(position).catch((err) => {
+      usePlayerStore.getState().setQueue(prevQueue);
+      usePlayerStore.getState().setPlayState(prevPlayState);
+      throw err;
+    });
   }, []);
 
   return {

@@ -56,7 +56,8 @@ export function useKeyboardShortcuts() {
           {
             const ps = usePlayerStore.getState().playState;
             if (ps.status === "playing" || ps.status === "paused") {
-              seek(ps.position_ms + 5000);
+              const maxMs = ps.track?.duration_ms ?? Infinity;
+              seek(Math.min(ps.position_ms + 5000, maxMs));
             }
           }
           break;

@@ -21,7 +21,10 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
     headers: { ...headers(), ...init?.headers },
   });
   if (res.status === 401) {
-    window.location.href = "/auth/login";
+    const path = window.location.pathname;
+    if (!path.startsWith("/login") && !path.startsWith("/auth")) {
+      window.location.href = "/auth/login";
+    }
     throw new Error("unauthorized");
   }
   if (!res.ok) {

@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import clsx from "clsx";
 
 type AvatarSize = "xs" | "sm" | "md" | "lg";
@@ -18,6 +19,11 @@ const sizeClasses: Record<AvatarSize, string> = {
 
 export function Avatar({ src, username, size = "md", className }: AvatarProps) {
   const initial = username ? username[0].toUpperCase() : "?";
+  const [imgError, setImgError] = useState(false);
+
+  useEffect(() => {
+    setImgError(false);
+  }, [src]);
 
   return (
     <div
@@ -29,15 +35,12 @@ export function Avatar({ src, username, size = "md", className }: AvatarProps) {
       )}
       title={username}
     >
-      {src ? (
+      {src && !imgError ? (
         <img
           src={src}
           alt={username}
           className="w-full h-full object-cover"
-          onError={(e) => {
-            // Hide broken image, show initial fallback
-            (e.target as HTMLImageElement).style.display = "none";
-          }}
+          onError={() => setImgError(true)}
         />
       ) : (
         <span>{initial}</span>

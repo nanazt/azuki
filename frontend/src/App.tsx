@@ -8,7 +8,6 @@ import {
 } from "react-router-dom";
 import { ToastProvider, ToastContainer } from "./components/ui/Toast";
 import { useAuthStore } from "./stores/authStore";
-import { api } from "./lib/api";
 import { useWebSocket } from "./hooks/useWebSocket";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 import { usePasteDetection } from "./hooks/usePasteDetection";
@@ -33,11 +32,13 @@ function ProtectedRoute() {
 
   useEffect(() => {
     if (!checking) return;
-    fetch("/api/stats/me", { credentials: "include" })
+    fetch("/api/me", { credentials: "include" })
       .then((res) => {
         setAuthenticated(res.ok);
         if (res.ok) {
-          api.getMe().then((me) => setIsAdmin(me.is_admin));
+          res
+            .json()
+            .then((me: { is_admin: boolean }) => setIsAdmin(me.is_admin));
         }
       })
       .catch(() => {

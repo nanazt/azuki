@@ -42,6 +42,10 @@ export function TrackThumbnail({
   const [stage, setStage] = useState<Stage>(initialStage);
 
   useEffect(() => {
+    setStage(initialStage);
+  }, [track.id, track.thumbnail_url]);
+
+  useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
     const observer = new IntersectionObserver(
