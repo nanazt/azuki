@@ -160,7 +160,9 @@ async fn run_audio_subscriber(state: Arc<BotState>) {
     loop {
         match rx.recv().await {
             Ok(seq_event) => match seq_event.event {
-                azuki_player::PlayerEvent::TrackStarted { ref track, .. } => {
+                azuki_player::PlayerEvent::TrackStarted {
+                    ref track, paused, ..
+                } => {
                     debug!(
                         "audio_subscriber: TrackStarted id={} title={:?} file_path={:?}",
                         track.id, track.title, track.file_path
@@ -191,6 +193,9 @@ async fn run_audio_subscriber(state: Arc<BotState>) {
                     );
                     if let Some(ref h) = handle {
                         crate::voice::set_volume(h, track.volume);
+                        if paused {
+                            crate::voice::pause_track(h);
+                        }
                         let _ = h.add_event(
                             Event::Track(TrackEvent::End),
                             TrackEndNotifier {

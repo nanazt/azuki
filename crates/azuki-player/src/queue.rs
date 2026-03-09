@@ -60,6 +60,21 @@ impl Queue {
         }
     }
 
+    /// Like `advance()`, but always moves to the next track (ignoring LoopMode::One).
+    /// Used by Skip to ensure the user actually advances past the current track.
+    pub fn skip_advance(&mut self) -> Option<QueueEntry> {
+        match self.loop_mode {
+            LoopMode::Off | LoopMode::One => self.items.pop_front(),
+            LoopMode::All => {
+                let entry = self.items.pop_front();
+                if let Some(ref e) = entry {
+                    self.items.push_back(e.clone());
+                }
+                entry
+            }
+        }
+    }
+
     pub fn push_to_history(&mut self, entry: QueueEntry) {
         self.push_history(entry);
     }
@@ -72,8 +87,22 @@ impl Queue {
         self.items.push_front(entry);
     }
 
+    pub fn push_back(&mut self, entry: QueueEntry) {
+        self.items.push_back(entry);
+    }
+
     pub fn pop_back(&mut self) -> Option<QueueEntry> {
         self.items.pop_back()
+    }
+
+    /// Remove the last occurrence of a track by ID from the queue.
+    /// Used to clean up rotation clones in LoopMode::All before/after go_previous.
+    pub fn remove_last_by_track_id(&mut self, id: &str) -> Option<QueueEntry> {
+        if let Some(pos) = self.items.iter().rposition(|e| e.track.id == id) {
+            self.items.remove(pos)
+        } else {
+            None
+        }
     }
 
     pub fn history(&self) -> &[QueueEntry] {
@@ -140,90 +169,5 @@ impl Queue {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn make_track(id: &str) -> TrackInfo {
-        TrackInfo {
-            id: id.to_string(),
-            title: format!("Track {id}"),
-            artist: None,
-            duration_ms: 180_000,
-            thumbnail_url: None,
-            source_url: format!("https://example.com/{id}"),
-            source_type: "youtube".to_string(),
-            file_path: None,
-            youtube_id: Some(id.to_string()),
-            volume: 5,
-        }
-    }
-
-    fn test_user() -> UserInfo {
-        UserInfo {
-            id: "user1".into(),
-            username: "User 1".into(),
-            avatar_url: None,
-        }
-    }
-
-    #[test]
-    fn test_enqueue_and_advance() {
-        let mut q = Queue::new();
-        q.enqueue(make_track("1"), test_user());
-        q.enqueue(make_track("2"), test_user());
-        q.enqueue(make_track("3"), test_user());
-        assert_eq!(q.len(), 3);
-
-        let e = q.advance().unwrap();
-        assert_eq!(e.track.id, "1");
-        let e = q.advance().unwrap();
-        assert_eq!(e.track.id, "2");
-        assert_eq!(q.len(), 1);
-
-        let e = q.advance().unwrap();
-        assert_eq!(e.track.id, "3");
-        assert!(q.advance().is_none());
-    }
-
-    #[test]
-    fn test_loop_one() {
-        let mut q = Queue::new();
-        q.set_loop_mode(LoopMode::One);
-        q.enqueue(make_track("1"), test_user());
-        q.enqueue(make_track("2"), test_user());
-
-        let e1 = q.advance().unwrap();
-        assert_eq!(e1.track.id, "1");
-        let e2 = q.advance().unwrap();
-        assert_eq!(e2.track.id, "1");
-        assert_eq!(q.len(), 2); // Nothing removed
-    }
-
-    #[test]
-    fn test_loop_all() {
-        let mut q = Queue::new();
-        q.set_loop_mode(LoopMode::All);
-        q.enqueue(make_track("1"), test_user());
-        q.enqueue(make_track("2"), test_user());
-
-        let e = q.advance().unwrap();
-        assert_eq!(e.track.id, "1");
-        let e = q.advance().unwrap();
-        assert_eq!(e.track.id, "2");
-        let e = q.advance().unwrap();
-        assert_eq!(e.track.id, "1"); // Wraps around
-        assert_eq!(q.len(), 2);
-    }
-
-    #[test]
-    fn test_remove() {
-        let mut q = Queue::new();
-        q.enqueue(make_track("1"), test_user());
-        q.enqueue(make_track("2"), test_user());
-        q.enqueue(make_track("3"), test_user());
-
-        let removed = q.remove(1).unwrap();
-        assert_eq!(removed.track.id, "2");
-        assert_eq!(q.len(), 2);
-    }
-}
+#[path = "queue_tests.rs"]
+mod tests;

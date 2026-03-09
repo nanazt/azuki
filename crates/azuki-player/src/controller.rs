@@ -510,7 +510,7 @@ impl PlayerActor {
                     self.queue.push_to_history(entry.clone());
                 }
 
-                if let Some(next) = self.queue.advance() {
+                if let Some(next) = self.queue.skip_advance() {
                     self.current_added_by = Some(next.added_by.clone());
                     let added_by = next.added_by;
                     let track = next.track;
@@ -545,6 +545,11 @@ impl PlayerActor {
                     let _ = reply.send(Ok(Some(track)));
                 } else {
                     self.state = PlayState::Idle;
+                    if current_entry.is_some() {
+                        self.broadcast(PlayerEvent::HistoryUpdated {
+                            history: self.queue.history().to_vec(),
+                        });
+                    }
                     let _ = reply.send(Ok(None));
                 }
             }
@@ -663,9 +668,8 @@ impl PlayerActor {
                     return;
                 }
 
-                // LoopMode::One or position > threshold → seek to 0
-                let should_restart =
-                    self.queue.loop_mode() == LoopMode::One || current_pos > RESTART_THRESHOLD_MS;
+                // Position > threshold → seek to 0 (restart current track)
+                let should_restart = current_pos > RESTART_THRESHOLD_MS;
 
                 if should_restart {
                     match &self.state {
@@ -698,92 +702,18 @@ impl PlayerActor {
                     return;
                 }
 
-                // LoopMode::All and position <= threshold → rotate queue backward
+                // Position <= threshold → go to history (all loop modes)
+                // LoopAll: remove current track's rotation clone before going to history
                 if self.queue.loop_mode() == LoopMode::All {
-                    let prev = self.queue.pop_back();
-                    if let Some(prev_entry) = prev {
-                        let current_track = match &self.state {
-                            PlayState::Playing { track, .. } | PlayState::Paused { track, .. } => {
-                                track.clone()
-                            }
-                            _ => unreachable!(),
-                        };
-                        let current_id = current_track.id.clone();
-                        let listened_ms = self.current_position_ms();
-                        self.queue.push_front(QueueEntry {
-                            track: current_track,
-                            added_by: self
-                                .current_added_by
-                                .clone()
-                                .unwrap_or_else(UserInfo::unknown),
-                        });
-                        self.broadcast(PlayerEvent::TrackEnded {
-                            track_id: current_id,
-                            listened_ms,
-                            completed: false,
-                        });
-                        self.current_added_by = Some(prev_entry.added_by.clone());
-                        let added_by = prev_entry.added_by;
-                        let track = prev_entry.track;
-                        self.volume = track.volume;
-                        self.state = if was_paused {
-                            PlayState::Paused {
-                                track: track.clone(),
-                                position_ms: 0,
-                            }
-                        } else {
-                            PlayState::Playing {
-                                track: track.clone(),
-                                started_at: Instant::now(),
-                                position_ms: 0,
-                            }
-                        };
-                        self.broadcast(PlayerEvent::TrackStarted {
-                            track,
-                            position_ms: 0,
-                            added_by,
-                            paused: was_paused,
-                        });
-                        self.broadcast(PlayerEvent::VolumeChanged {
-                            volume: self.volume,
-                        });
-                        self.broadcast(PlayerEvent::QueueUpdated {
-                            queue: self.queue.items(),
-                        });
-                    } else {
-                        // Empty queue in All mode, just seek to 0
-                        match &self.state {
-                            PlayState::Playing { track, .. } => {
-                                let track = track.clone();
-                                self.state = PlayState::Playing {
-                                    track,
-                                    started_at: Instant::now(),
-                                    position_ms: 0,
-                                };
-                                self.broadcast(PlayerEvent::Seeked {
-                                    position_ms: 0,
-                                    paused: false,
-                                });
-                            }
-                            PlayState::Paused { track, .. } => {
-                                let track = track.clone();
-                                self.state = PlayState::Paused {
-                                    track,
-                                    position_ms: 0,
-                                };
-                                self.broadcast(PlayerEvent::Seeked {
-                                    position_ms: 0,
-                                    paused: true,
-                                });
-                            }
-                            _ => unreachable!(),
+                    let current_id = match &self.state {
+                        PlayState::Playing { track, .. } | PlayState::Paused { track, .. } => {
+                            track.id.clone()
                         }
-                    }
-                    let _ = reply.send(Ok(()));
-                    return;
+                        _ => unreachable!(),
+                    };
+                    self.queue.remove_last_by_track_id(&current_id);
                 }
 
-                // LoopMode::Off and position <= threshold → go to history
                 if let Some(prev_entry) = self.queue.go_previous() {
                     let current_track = match &self.state {
                         PlayState::Playing { track, .. } | PlayState::Paused { track, .. } => {
@@ -793,6 +723,12 @@ impl PlayerActor {
                     };
                     let current_id = current_track.id.clone();
                     let listened_ms = self.current_position_ms();
+
+                    // LoopAll: remove prev's rotation clone from queue
+                    if self.queue.loop_mode() == LoopMode::All {
+                        self.queue.remove_last_by_track_id(&prev_entry.track.id);
+                    }
+
                     self.queue.push_front(QueueEntry {
                         track: current_track,
                         added_by: self
@@ -800,6 +736,15 @@ impl PlayerActor {
                             .clone()
                             .unwrap_or_else(UserInfo::unknown),
                     });
+
+                    // LoopAll: push prev's clone to back to maintain rotation invariant
+                    if self.queue.loop_mode() == LoopMode::All {
+                        self.queue.push_back(QueueEntry {
+                            track: prev_entry.track.clone(),
+                            added_by: prev_entry.added_by.clone(),
+                        });
+                    }
+
                     self.broadcast(PlayerEvent::TrackEnded {
                         track_id: current_id,
                         listened_ms,
@@ -1060,29 +1005,20 @@ impl PlayerActor {
                     });
                 }
 
-                // Push current track to history before advancing
+                // Extract current track info
                 let current_track = match &self.state {
                     PlayState::Playing { track, .. }
                     | PlayState::Loading { track }
                     | PlayState::Error { track, .. } => Some(track.clone()),
                     _ => None,
                 };
-                if let Some(ref track) = current_track {
-                    self.queue.push_to_history(QueueEntry {
-                        track: track.clone(),
-                        added_by: self
-                            .current_added_by
-                            .clone()
-                            .unwrap_or_else(UserInfo::unknown),
-                    });
-                }
 
                 let completed = matches!(reason, TrackEndReason::Finished);
                 let listened_ms = current_track
                     .as_ref()
                     .map_or(0, |t| self.current_position_ms().min(t.duration_ms));
 
-                // LoopMode::One → replay same track instead of advancing
+                // LoopMode::One → replay same track without touching history
                 if self.queue.loop_mode() == LoopMode::One
                     && let Some(track) = current_track
                 {
@@ -1109,10 +1045,18 @@ impl PlayerActor {
                     self.broadcast(PlayerEvent::VolumeChanged {
                         volume: self.volume,
                     });
-                    self.broadcast(PlayerEvent::HistoryUpdated {
-                        history: self.queue.history().to_vec(),
-                    });
                     return;
+                }
+
+                // Push current track to history (not for LoopMode::One which returned above)
+                if let Some(ref track) = current_track {
+                    self.queue.push_to_history(QueueEntry {
+                        track: track.clone(),
+                        added_by: self
+                            .current_added_by
+                            .clone()
+                            .unwrap_or_else(UserInfo::unknown),
+                    });
                 }
 
                 // Auto-advance
@@ -1163,3 +1107,7 @@ impl PlayerActor {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "controller_tests.rs"]
+mod tests;
