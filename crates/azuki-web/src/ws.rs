@@ -36,13 +36,15 @@ pub async fn ws_upgrade(
         }
     };
 
-    ws.on_upgrade(move |socket| handle_ws(socket, state, user_id))
+    ws.max_message_size(64 * 1024)
+        .on_upgrade(move |socket| handle_ws(socket, state, user_id))
         .into_response()
 }
 
 async fn handle_ws(socket: WebSocket, state: WebState, user_id: String) {
     let (mut sender, mut receiver) = socket.split();
     let mut event_rx = state.web_tx.subscribe();
+    let (response_tx, mut response_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
 
     debug!("WebSocket connected: {user_id}");
 
@@ -62,40 +64,54 @@ async fn handle_ws(socket: WebSocket, state: WebState, user_id: String) {
         let _ = sender.send(Message::Text(json.into())).await;
     }
 
-    // Forward web events to WebSocket
+    // Forward web events and error responses to WebSocket
     let state_clone = state.clone();
     let forward_task = tokio::spawn(async move {
         loop {
-            match event_rx.recv().await {
-                Ok(seq_event) => {
-                    if let Ok(json) = serde_json::to_string(&seq_event)
-                        && sender.send(Message::Text(json.into())).await.is_err()
-                    {
-                        break;
+            tokio::select! {
+                event = event_rx.recv() => {
+                    match event {
+                        Ok(seq_event) => {
+                            if let Ok(json) = serde_json::to_string(&seq_event)
+                                && sender.send(Message::Text(json.into())).await.is_err()
+                            {
+                                break;
+                            }
+                        }
+                        Err(broadcast::error::RecvError::Lagged(n)) => {
+                            warn!("WS client lagged by {n}, sending snapshot");
+                            let snapshot = state_clone.player.get_state().await;
+                            let downloads: Vec<_> = state_clone
+                                .active_downloads
+                                .iter()
+                                .map(|entry| entry.value().clone())
+                                .collect();
+                            let event = crate::events::WebSeqEvent {
+                                seq: 0,
+                                event: WebEvent::StateSnapshot {
+                                    state: snapshot,
+                                    active_downloads: downloads,
+                                },
+                            };
+                            if let Ok(json) = serde_json::to_string(&event)
+                                && sender.send(Message::Text(json.into())).await.is_err()
+                            {
+                                break;
+                            }
+                        }
+                        Err(broadcast::error::RecvError::Closed) => break,
                     }
                 }
-                Err(broadcast::error::RecvError::Lagged(n)) => {
-                    warn!("WS client lagged by {n}, sending snapshot");
-                    let snapshot = state_clone.player.get_state().await;
-                    let downloads: Vec<_> = state_clone
-                        .active_downloads
-                        .iter()
-                        .map(|entry| entry.value().clone())
-                        .collect();
-                    let event = crate::events::WebSeqEvent {
-                        seq: 0,
-                        event: WebEvent::StateSnapshot {
-                            state: snapshot,
-                            active_downloads: downloads,
-                        },
-                    };
-                    if let Ok(json) = serde_json::to_string(&event)
-                        && sender.send(Message::Text(json.into())).await.is_err()
-                    {
-                        break;
+                response = response_rx.recv() => {
+                    match response {
+                        Some(msg) => {
+                            if sender.send(Message::Text(msg.into())).await.is_err() {
+                                break;
+                            }
+                        }
+                        None => break,
                     }
                 }
-                Err(broadcast::error::RecvError::Closed) => break,
             }
         }
     });
@@ -104,7 +120,9 @@ async fn handle_ws(socket: WebSocket, state: WebState, user_id: String) {
     while let Some(msg) = receiver.next().await {
         match msg {
             Ok(Message::Text(text)) => {
-                handle_ws_command(&text, &state, &user_id).await;
+                if let Some(err_json) = handle_ws_command(&text, &state, &user_id).await {
+                    let _ = response_tx.send(err_json);
+                }
             }
             Ok(Message::Close(_)) => break,
             Err(_) => break,
@@ -116,7 +134,8 @@ async fn handle_ws(socket: WebSocket, state: WebState, user_id: String) {
     forward_task.abort();
 }
 
-async fn handle_ws_command(text: &str, state: &WebState, _user_id: &str) {
+/// Returns `Some(json)` with an error message to send back to the client on failure.
+async fn handle_ws_command(text: &str, state: &WebState, _user_id: &str) -> Option<String> {
     #[derive(serde::Deserialize)]
     struct WsCommand {
         action: String,
@@ -128,35 +147,56 @@ async fn handle_ws_command(text: &str, state: &WebState, _user_id: &str) {
         mode: Option<String>,
     }
 
+    fn err_json(action: &str, msg: &str) -> Option<String> {
+        serde_json::to_string(&serde_json::json!({
+            "type": "command_error",
+            "action": action,
+            "message": msg,
+        }))
+        .ok()
+    }
+
     let cmd: WsCommand = match serde_json::from_str(text) {
         Ok(c) => c,
-        Err(_) => return,
+        Err(_) => return None,
     };
 
     match cmd.action.as_str() {
         "pause" => {
-            state.player.pause().await.ok();
+            if let Err(e) = state.player.pause().await {
+                return err_json("pause", &e.to_string());
+            }
         }
         "resume" => {
-            state.player.resume().await.ok();
+            if let Err(e) = state.player.resume().await {
+                return err_json("resume", &e.to_string());
+            }
         }
         "skip" => {
-            state.player.skip().await.ok();
+            if let Err(e) = state.player.skip().await {
+                return err_json("skip", &e.to_string());
+            }
         }
         "stop" => {
-            state.player.stop().await.ok();
+            if let Err(e) = state.player.stop().await {
+                return err_json("stop", &e.to_string());
+            }
         }
         "seek" => {
-            if let Some(pos) = cmd.position_ms {
-                state.player.seek(pos).await.ok();
+            if let Some(pos) = cmd.position_ms
+                && let Err(e) = state.player.seek(pos).await
+            {
+                return err_json("seek", &e.to_string());
             }
         }
         "volume" => {
             if let Some(vol) = cmd.volume {
                 if vol > 100 {
-                    return;
+                    return err_json("volume", "volume must be 0-100");
                 }
-                state.player.set_volume(vol).await.ok();
+                if let Err(e) = state.player.set_volume(vol).await {
+                    return err_json("volume", &e.to_string());
+                }
                 let snapshot = state.player.get_state().await;
                 if let azuki_player::PlayStateInfo::Playing { ref track, .. }
                 | azuki_player::PlayStateInfo::Paused { ref track, .. } = snapshot.state
@@ -176,11 +216,14 @@ async fn handle_ws_command(text: &str, state: &WebState, _user_id: &str) {
                     "all" => azuki_player::LoopMode::All,
                     _ => azuki_player::LoopMode::Off,
                 };
-                state.player.set_loop(lm).await.ok();
+                if let Err(e) = state.player.set_loop(lm).await {
+                    return err_json("loop", &e.to_string());
+                }
             }
         }
         _ => {}
     }
+    None
 }
 
 pub fn ws_routes() -> axum::Router<WebState> {

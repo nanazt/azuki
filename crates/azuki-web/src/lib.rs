@@ -179,6 +179,10 @@ pub async fn start_web(
             HeaderName::from_static("x-frame-options"),
             HeaderValue::from_static("DENY"),
         ))
+        .layer(SetResponseHeaderLayer::overriding(
+            HeaderName::from_static("content-security-policy"),
+            HeaderValue::from_static("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; connect-src 'self' wss: ws:; media-src 'self'"),
+        ))
         .with_state(state);
 
     // Serve thumbnails

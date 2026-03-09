@@ -11,24 +11,30 @@ export function usePlayer() {
   const pause = useCallback(() => {
     const s = usePlayerStore.getState();
     if (s.playState.status === "playing") {
+      const prev = s.playState;
       s.setPlayState({
         status: "paused",
         track: s.playState.track,
         position_ms: s.playState.position_ms,
       });
-      api.pause().catch(() => {});
+      api.pause().catch(() => {
+        usePlayerStore.getState().setPlayState(prev);
+      });
     }
   }, []);
 
   const resume = useCallback(() => {
     const s = usePlayerStore.getState();
     if (s.playState.status === "paused") {
+      const prev = s.playState;
       s.setPlayState({
         status: "playing",
         track: s.playState.track,
         position_ms: s.playState.position_ms,
       });
-      api.resume().catch(() => {});
+      api.resume().catch(() => {
+        usePlayerStore.getState().setPlayState(prev);
+      });
     }
   }, []);
 

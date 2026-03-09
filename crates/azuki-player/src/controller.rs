@@ -194,7 +194,9 @@ impl PlayerController {
     }
 
     async fn send_cmd(&self, cmd: PlayerCommand) {
-        let _ = self.cmd_tx.send(cmd).await;
+        if self.cmd_tx.send(cmd).await.is_err() {
+            tracing::error!("Player actor is dead — command dropped");
+        }
     }
 
     pub async fn play(&self, track: TrackInfo, user_info: UserInfo) -> Result<(), PlayerError> {
@@ -640,14 +642,18 @@ impl PlayerActor {
             PlayerCommand::Previous { reply } => {
                 const RESTART_THRESHOLD_MS: u64 = 3000;
 
-                let (current_pos, has_track) = match &self.state {
+                let (current_pos, has_track, was_paused) = match &self.state {
                     PlayState::Playing {
                         started_at,
                         position_ms,
                         ..
-                    } => (*position_ms + started_at.elapsed().as_millis() as u64, true),
-                    PlayState::Paused { position_ms, .. } => (*position_ms, true),
-                    _ => (0, false),
+                    } => (
+                        *position_ms + started_at.elapsed().as_millis() as u64,
+                        true,
+                        false,
+                    ),
+                    PlayState::Paused { position_ms, .. } => (*position_ms, true, true),
+                    _ => (0, false, false),
                 };
 
                 if !has_track {
@@ -720,16 +726,23 @@ impl PlayerActor {
                         let added_by = prev_entry.added_by;
                         let track = prev_entry.track;
                         self.volume = track.volume;
-                        self.state = PlayState::Playing {
-                            track: track.clone(),
-                            started_at: Instant::now(),
-                            position_ms: 0,
+                        self.state = if was_paused {
+                            PlayState::Paused {
+                                track: track.clone(),
+                                position_ms: 0,
+                            }
+                        } else {
+                            PlayState::Playing {
+                                track: track.clone(),
+                                started_at: Instant::now(),
+                                position_ms: 0,
+                            }
                         };
                         self.broadcast(PlayerEvent::TrackStarted {
                             track,
                             position_ms: 0,
                             added_by,
-                            paused: false,
+                            paused: was_paused,
                         });
                         self.broadcast(PlayerEvent::VolumeChanged {
                             volume: self.volume,
@@ -796,16 +809,23 @@ impl PlayerActor {
                     let added_by = prev_entry.added_by;
                     let track = prev_entry.track;
                     self.volume = track.volume;
-                    self.state = PlayState::Playing {
-                        track: track.clone(),
-                        started_at: Instant::now(),
-                        position_ms: 0,
+                    self.state = if was_paused {
+                        PlayState::Paused {
+                            track: track.clone(),
+                            position_ms: 0,
+                        }
+                    } else {
+                        PlayState::Playing {
+                            track: track.clone(),
+                            started_at: Instant::now(),
+                            position_ms: 0,
+                        }
                     };
                     self.broadcast(PlayerEvent::TrackStarted {
                         track,
                         position_ms: 0,
                         added_by,
-                        paused: false,
+                        paused: was_paused,
                     });
                     self.broadcast(PlayerEvent::VolumeChanged {
                         volume: self.volume,
@@ -849,6 +869,7 @@ impl PlayerActor {
             }
 
             PlayerCommand::PlayAt { position, reply } => {
+                let was_paused = matches!(&self.state, PlayState::Paused { .. });
                 if let Some(entry) = self.queue.remove(position) {
                     let current_entry = match &self.state {
                         PlayState::Playing { track, .. }
@@ -878,16 +899,23 @@ impl PlayerActor {
                     self.volume = entry.track.volume;
                     let added_by = entry.added_by;
                     let track = entry.track;
-                    self.state = PlayState::Playing {
-                        track: track.clone(),
-                        started_at: Instant::now(),
-                        position_ms: 0,
+                    self.state = if was_paused {
+                        PlayState::Paused {
+                            track: track.clone(),
+                            position_ms: 0,
+                        }
+                    } else {
+                        PlayState::Playing {
+                            track: track.clone(),
+                            started_at: Instant::now(),
+                            position_ms: 0,
+                        }
                     };
                     self.broadcast(PlayerEvent::TrackStarted {
                         track,
                         position_ms: 0,
                         added_by,
-                        paused: false,
+                        paused: was_paused,
                     });
                     self.broadcast(PlayerEvent::VolumeChanged {
                         volume: self.volume,
@@ -1053,6 +1081,39 @@ impl PlayerActor {
                 let listened_ms = current_track
                     .as_ref()
                     .map_or(0, |t| self.current_position_ms().min(t.duration_ms));
+
+                // LoopMode::One → replay same track instead of advancing
+                if self.queue.loop_mode() == LoopMode::One
+                    && let Some(track) = current_track
+                {
+                    self.broadcast(PlayerEvent::TrackEnded {
+                        track_id,
+                        listened_ms,
+                        completed,
+                    });
+                    self.volume = track.volume;
+                    self.state = PlayState::Playing {
+                        track: track.clone(),
+                        started_at: Instant::now(),
+                        position_ms: 0,
+                    };
+                    self.broadcast(PlayerEvent::TrackStarted {
+                        track,
+                        position_ms: 0,
+                        added_by: self
+                            .current_added_by
+                            .clone()
+                            .unwrap_or_else(UserInfo::unknown),
+                        paused: false,
+                    });
+                    self.broadcast(PlayerEvent::VolumeChanged {
+                        volume: self.volume,
+                    });
+                    self.broadcast(PlayerEvent::HistoryUpdated {
+                        history: self.queue.history().to_vec(),
+                    });
+                    return;
+                }
 
                 // Auto-advance
                 if let Some(next) = self.queue.advance() {

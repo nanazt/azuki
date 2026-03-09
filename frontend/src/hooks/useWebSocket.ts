@@ -46,7 +46,7 @@ export function useWebSocket() {
   }, []);
 
   const scheduleReconnect = useCallback(() => {
-    const delay = 1000;
+    const delay = Math.min(1000 * 2 ** retriesRef.current, 30000);
     retriesRef.current++;
     reconnectTimer.current = setTimeout(connect, delay);
   }, [connect]);
@@ -95,8 +95,14 @@ export function useWebSocket() {
     }
 
     const seqEvent = data as SeqEvent;
-    if (seqEvent.seq && seqEvent.seq <= state.lastSeq) return;
-    if (seqEvent.seq) state.setLastSeq(seqEvent.seq);
+    if (
+      seqEvent.seq != null &&
+      seqEvent.seq > 0 &&
+      seqEvent.seq <= state.lastSeq
+    )
+      return;
+    if (seqEvent.seq != null && seqEvent.seq > 0)
+      state.setLastSeq(seqEvent.seq);
 
     const event = seqEvent.event ?? data;
     const ev = event as any;

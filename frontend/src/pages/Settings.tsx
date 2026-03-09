@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from "react";
 import { api } from "../lib/api";
 import { useAuthStore } from "../stores/authStore";
 import { useTheme } from "../hooks/useTheme";
+import { useToast } from "../hooks/useToast";
 import { useLocale, setLocale, t } from "../hooks/useLocale";
 import type { Locale } from "../locales";
 import { Skeleton } from "../components/ui/Skeleton";
@@ -69,6 +70,7 @@ export function Settings() {
   const logout = useAuthStore((s) => s.logout);
   const isAdmin = useAuthStore((s) => s.isAdmin);
   const { theme, setTheme } = useTheme();
+  const { showToast } = useToast();
 
   // Preferences state (loading gate only)
   const [prefsLoaded, setPrefsLoaded] = useState(false);
@@ -394,6 +396,7 @@ export function Settings() {
               ]}
               value={botLocale}
               onChange={async (v) => {
+                const prev = botLocale;
                 setBotLocale(v);
                 setSavingBotLocale(true);
                 setBotLocaleSaved(false);
@@ -402,6 +405,8 @@ export function Settings() {
                   setBotLocaleSaved(true);
                   setTimeout(() => setBotLocaleSaved(false), 2000);
                 } catch {
+                  setBotLocale(prev);
+                  showToast(s.toast.failedToSave, "error");
                 } finally {
                   setSavingBotLocale(false);
                 }
@@ -464,6 +469,7 @@ export function Settings() {
                   setBotVolumeSaved(false);
                   if (botVolumeDebounceRef.current)
                     clearTimeout(botVolumeDebounceRef.current);
+                  const prevVol = botDefaultVolume;
                   botVolumeDebounceRef.current = setTimeout(async () => {
                     setSavingBotVolume(true);
                     try {
@@ -471,6 +477,8 @@ export function Settings() {
                       setBotVolumeSaved(true);
                       setTimeout(() => setBotVolumeSaved(false), 2000);
                     } catch {
+                      setBotDefaultVolume(prevVol);
+                      showToast(s.toast.failedToSave, "error");
                     } finally {
                       setSavingBotVolume(false);
                     }
@@ -532,6 +540,7 @@ export function Settings() {
               <Select
                 value={defaultVoiceChannel ?? ""}
                 onChange={async (val) => {
+                  const prev = defaultVoiceChannel;
                   setDefaultVoiceChannel(val || null);
                   setSavingVoice(true);
                   setVoiceSaved(false);
@@ -540,6 +549,8 @@ export function Settings() {
                     setVoiceSaved(true);
                     setTimeout(() => setVoiceSaved(false), 2000);
                   } catch {
+                    setDefaultVoiceChannel(prev);
+                    showToast(s.toast.failedToSave, "error");
                   } finally {
                     setSavingVoice(false);
                   }
@@ -754,6 +765,7 @@ export function Settings() {
               <Select
                 value={historyChannelId ?? ""}
                 onChange={async (val) => {
+                  const prev = historyChannelId;
                   setHistoryChannelId(val || null);
                   setSavingHistory(true);
                   setHistorySaved(false);
@@ -762,6 +774,8 @@ export function Settings() {
                     setHistorySaved(true);
                     setTimeout(() => setHistorySaved(false), 2000);
                   } catch {
+                    setHistoryChannelId(prev);
+                    showToast(s.toast.failedToSave, "error");
                   } finally {
                     setSavingHistory(false);
                   }
@@ -828,6 +842,7 @@ export function Settings() {
             <Select
               value={timezone}
               onChange={async (tz) => {
+                const prev = timezone;
                 setTimezone(tz);
                 setSavingTz(true);
                 setTzSaved(false);
@@ -836,6 +851,8 @@ export function Settings() {
                   setTzSaved(true);
                   setTimeout(() => setTzSaved(false), 2000);
                 } catch {
+                  setTimezone(prev);
+                  showToast(s.toast.failedToSave, "error");
                 } finally {
                   setSavingTz(false);
                 }
