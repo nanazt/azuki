@@ -38,19 +38,19 @@ pub struct MoveRequest {
 pub async fn pause(jar: CookieJar, State(state): State<WebState>) -> Result<StatusCode, ApiError> {
     extract_user_id(&jar, &state).await?;
     state.player.pause().await?;
-    Ok(StatusCode::OK)
+    Ok(StatusCode::NO_CONTENT)
 }
 
 pub async fn resume(jar: CookieJar, State(state): State<WebState>) -> Result<StatusCode, ApiError> {
     extract_user_id(&jar, &state).await?;
     state.player.resume().await?;
-    Ok(StatusCode::OK)
+    Ok(StatusCode::NO_CONTENT)
 }
 
 pub async fn skip(jar: CookieJar, State(state): State<WebState>) -> Result<StatusCode, ApiError> {
     extract_user_id(&jar, &state).await?;
     state.player.skip().await?;
-    Ok(StatusCode::OK)
+    Ok(StatusCode::NO_CONTENT)
 }
 
 pub async fn previous(
@@ -59,7 +59,7 @@ pub async fn previous(
 ) -> Result<StatusCode, ApiError> {
     extract_user_id(&jar, &state).await?;
     state.player.previous().await?;
-    Ok(StatusCode::OK)
+    Ok(StatusCode::NO_CONTENT)
 }
 
 pub async fn seek(
@@ -69,7 +69,7 @@ pub async fn seek(
 ) -> Result<StatusCode, ApiError> {
     extract_user_id(&jar, &state).await?;
     state.player.seek(body.position_ms).await?;
-    Ok(StatusCode::OK)
+    Ok(StatusCode::NO_CONTENT)
 }
 
 pub async fn volume(
@@ -90,7 +90,7 @@ pub async fn volume(
             .await
             .ok();
     }
-    Ok(StatusCode::OK)
+    Ok(StatusCode::NO_CONTENT)
 }
 
 pub async fn set_loop(
@@ -105,7 +105,7 @@ pub async fn set_loop(
         _ => LoopMode::Off,
     };
     state.player.set_loop(mode).await?;
-    Ok(StatusCode::OK)
+    Ok(StatusCode::NO_CONTENT)
 }
 
 pub async fn get_queue(
@@ -187,18 +187,6 @@ pub async fn queue_add(
     Json(body): Json<QueueAddRequest>,
 ) -> Result<(StatusCode, Json<serde_json::Value>), ApiError> {
     let user_id = extract_user_id(&jar, &state).await?;
-
-    // Block playlist URLs — use /api/playlists/import instead
-    let detected = azuki_media::detect_url(&body.query_or_url);
-    if matches!(
-        detected,
-        azuki_media::DetectedUrl::YoutubePlaylist { .. }
-            | azuki_media::DetectedUrl::SoundcloudPlaylist { .. }
-    ) {
-        return Err(ApiError::BadRequest(
-            "Playlist URLs cannot be added to queue. Use playlist import instead.".to_string(),
-        ));
-    }
 
     let download_id = uuid::Uuid::new_v4().to_string();
 
@@ -341,7 +329,10 @@ pub fn player_routes() -> axum::Router<WebState> {
         .route("/api/queue/add-track", axum::routing::post(queue_add_track))
         .route("/api/queue/move", axum::routing::put(queue_move))
         .route("/api/queue/{position}", axum::routing::delete(queue_remove))
-        .route("/api/queue/{position}/play", axum::routing::post(queue_play_at))
+        .route(
+            "/api/queue/{position}/play",
+            axum::routing::post(queue_play_at),
+        )
         .route(
             "/api/settings/bot",
             axum::routing::get(get_bot_settings).put(update_bot_settings),

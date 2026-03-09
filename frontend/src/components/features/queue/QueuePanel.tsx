@@ -1,5 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import clsx from "clsx";
+import { useCallback, useMemo, useState } from "react";
 import { ListMusic, Search, Loader2 } from "lucide-react";
 import {
   DndContext,
@@ -41,14 +40,8 @@ export function QueuePanel({ onOpenSearch }: QueuePanelProps) {
   const playState = usePlayerStore((s) => s.playState);
   const queue = usePlayerStore((s) => s.queue);
   const currentAddedBy = usePlayerStore((s) => s.currentAddedBy);
-  const activeSlot = usePlayerStore((s) => s.activeSlot);
-  const queueSlots = usePlayerStore((s) => s.queueSlots);
   const downloads = useDownloadStore((s) => s.downloads);
 
-  const activeKind = useMemo(
-    () => queueSlots.find((s) => s.slot_id === activeSlot)?.kind,
-    [queueSlots, activeSlot],
-  );
   const activeDownloads = Array.from(downloads.values()).filter(
     (d) => d.status === "downloading",
   );
@@ -114,34 +107,6 @@ export function QueuePanel({ onOpenSearch }: QueuePanelProps) {
     [playAt, showToast],
   );
 
-  const handleSwitchQueue = useCallback(async (slotId: number) => {
-    if (slotId === activeSlot) return;
-    try {
-      await api.switchQueue(slotId);
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : "Failed to switch queue", "error");
-    }
-  }, [activeSlot, showToast]);
-
-  const handleDeleteSlot = useCallback(async (slotId: number) => {
-    try {
-      await api.deleteQueueSlot(slotId);
-      showToast("Queue slot removed", "success");
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : "Failed to delete slot", "error");
-    }
-  }, [showToast]);
-
-  useEffect(() => {
-    const handler = () => {
-      api.getQueues().then((res) => {
-        usePlayerStore.getState().setQueueSlots(res.slots);
-      }).catch(() => {});
-    };
-    window.addEventListener("queue-slots-changed", handler);
-    return () => window.removeEventListener("queue-slots-changed", handler);
-  }, []);
-
   return (
     <div className="flex flex-col h-full bg-[var(--color-bg-secondary)]">
       <div className="flex items-center gap-2 px-4 py-3 border-b border-[var(--color-border)]">
@@ -150,35 +115,6 @@ export function QueuePanel({ onOpenSearch }: QueuePanelProps) {
           Queue
         </span>
       </div>
-
-      {queueSlots.length > 1 && (
-        <div className="flex items-center gap-1.5 px-3 py-2 border-b border-[var(--color-border)] overflow-x-auto">
-          {queueSlots.map((slot) => (
-            <button
-              key={slot.slot_id}
-              onClick={() => handleSwitchQueue(slot.slot_id)}
-              className={clsx(
-                "flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium whitespace-nowrap transition-colors flex-shrink-0",
-                slot.slot_id === activeSlot
-                  ? "bg-[var(--color-accent)] text-white"
-                  : "bg-[var(--color-bg-tertiary)] text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover)]"
-              )}
-            >
-              {slot.kind.type === "default" ? "Default" : "Playlist"}
-              <span className="opacity-70">{slot.track_count}</span>
-              {slot.slot_id !== 0 && (
-                <span
-                  role="button"
-                  onClick={(e) => { e.stopPropagation(); handleDeleteSlot(slot.slot_id); }}
-                  className="ml-0.5 opacity-50 hover:opacity-100 transition-opacity"
-                >
-                  ×
-                </span>
-              )}
-            </button>
-          ))}
-        </div>
-      )}
 
       <div className="flex-1 overflow-y-auto py-2">
         {/* Now playing */}
@@ -235,11 +171,6 @@ export function QueuePanel({ onOpenSearch }: QueuePanelProps) {
               <span className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-tertiary)]">
                 Up Next
               </span>
-              {activeKind?.type === "playlist" && (
-                <span className="px-2 py-0.5 text-[10px] rounded-full bg-[var(--color-accent)]/15 text-[var(--color-accent)]">
-                  Playlist
-                </span>
-              )}
             </div>
             <DndContext
               sensors={sensors}
@@ -287,13 +218,7 @@ export function QueuePanel({ onOpenSearch }: QueuePanelProps) {
             </p>
             {onOpenSearch && (
               <button
-                onClick={() => {
-                  if (activeKind?.type === "playlist") {
-                    showToast("Can't add tracks to playlist queue", "error");
-                    return;
-                  }
-                  onOpenSearch();
-                }}
+                onClick={onOpenSearch}
                 className="flex items-center gap-1.5 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors cursor-pointer"
               >
                 <Search size={12} />

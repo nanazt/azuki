@@ -39,42 +39,6 @@ pub struct PlayHistory {
     pub listened_ms: Option<i64>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
-pub struct Playlist {
-    pub id: i64,
-    pub name: String,
-    pub owner_id: Option<String>,
-    pub is_shared: bool,
-    pub created_at: String,
-    pub source_kind: Option<String>,
-    pub source_id: Option<String>,
-    pub source_url: Option<String>,
-    pub description: Option<String>,
-    pub thumbnail_url: Option<String>,
-    pub channel_name: Option<String>,
-    pub track_count: i64,
-    pub last_synced_at: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
-pub struct QueueSlot {
-    pub slot_id: i64,
-    pub playlist_id: Option<i64>,
-    pub is_active: bool,
-    pub paused_track_id: Option<String>,
-    pub overflow_offset: i64,
-    pub created_at: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
-pub struct PlaylistTrack {
-    pub playlist_id: i64,
-    pub track_id: String,
-    pub position: i64,
-    pub added_by: Option<String>,
-    pub added_at: String,
-}
-
 #[non_exhaustive]
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct UserPreferences {

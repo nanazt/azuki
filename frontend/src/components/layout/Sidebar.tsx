@@ -4,7 +4,6 @@ import {
   Clock,
   HelpCircle,
   Home,
-  ListMusic,
   Search,
   Settings,
   Upload,
@@ -64,7 +63,6 @@ export function Sidebar() {
 
         {/* Library */}
         <div className="mt-4 space-y-0.5">
-          <NavItem to="/playlists" icon={<ListMusic size={16} />} label="Playlists" />
           <NavItem to="/history" icon={<Clock size={16} />} label="History" />
           <NavItem to="/uploads" icon={<Upload size={16} />} label="Uploads" />
           <NavItem to="/stats" icon={<BarChart3 size={16} />} label="Stats" />

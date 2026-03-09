@@ -1,7 +1,6 @@
 import {
   HelpCircle,
   Search,
-  ListMusic,
   Clock,
   Upload,
   BarChart3,
@@ -56,12 +55,7 @@ const webFeatures: WebFeature[] = [
   {
     icon: Search,
     label: "Search",
-    description: "Search YouTube, history, or playlists and add to queue",
-  },
-  {
-    icon: ListMusic,
-    label: "Playlists",
-    description: "Create and manage playlists, load into queue",
+    description: "Search YouTube or history and add to queue",
   },
   {
     icon: Clock,

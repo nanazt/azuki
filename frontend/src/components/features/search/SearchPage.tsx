@@ -6,12 +6,11 @@ import type { TrackInfo } from "../../../lib/types";
 import { SearchResult } from "./SearchResult";
 import { useToast } from "../../../hooks/useToast";
 
-type SearchSource = "youtube" | "history" | "playlists";
+type SearchSource = "youtube" | "history";
 
 const SOURCES: { id: SearchSource; label: string }[] = [
   { id: "youtube", label: "YouTube" },
   { id: "history", label: "History" },
-  { id: "playlists", label: "Playlists" },
 ];
 
 function SkeletonRow() {

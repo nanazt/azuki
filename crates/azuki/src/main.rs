@@ -187,7 +187,7 @@ async fn run_normal(config: Config, pool: SqlitePool) -> anyhow::Result<()> {
         };
 
     let initial_queue: Vec<azuki_player::QueueEntry> =
-        match azuki_db::queries::queue::load_queue(&pool, 0).await {
+        match azuki_db::queries::queue::load_queue(&pool).await {
             Ok(entries) => entries.into_iter().map(restore_entry_to_queue).collect(),
             Err(e) => {
                 tracing::error!("failed to restore queue: {e}");
@@ -275,8 +275,6 @@ async fn run_normal(config: Config, pool: SqlitePool) -> anyhow::Result<()> {
         active_downloads: Arc::clone(&active_downloads),
         download_tx,
         history_channel_id: Arc::clone(&history_channel_id),
-        import_semaphore: Arc::new(tokio::sync::Semaphore::new(2)),
-        importing_users: Arc::new(tokio::sync::Mutex::new(std::collections::HashSet::new())),
     };
 
     // Http watch channel for embed sending
@@ -345,13 +343,11 @@ async fn run_normal(config: Config, pool: SqlitePool) -> anyhow::Result<()> {
     let bridge_player = player.clone();
     let bridge_cancel = cancel.clone();
     let bridge_db = pool.clone();
-    let bridge_ytdlp = ytdlp.clone();
     let bridge_guild_id = serenity::all::GuildId::new(config.discord_guild_id);
     let bridge_http_rx = http_rx;
     let seq_counter = Arc::new(AtomicU64::new(0));
     tokio::spawn({
         let seq = Arc::clone(&seq_counter);
-        let bridge_ytdlp = bridge_ytdlp;
         async move {
             let mut player_rx = bridge_player.subscribe();
 
@@ -517,38 +513,15 @@ async fn run_normal(config: Config, pool: SqlitePool) -> anyhow::Result<()> {
                                     }
                                 }
 
-                                // Persist queue to DB (only default slot 0)
-                                if let azuki_player::PlayerEvent::QueueUpdated { ref queue, slot_id } = player_seq_event.event
-                                    && slot_id == 0
+                                // Persist queue to DB
+                                if let azuki_player::PlayerEvent::QueueUpdated { ref queue } = player_seq_event.event
                                 {
                                     let items: Vec<(String, String)> = queue
                                         .iter()
                                         .map(|e| (e.track.id.clone(), e.added_by.id.clone()))
                                         .collect();
-                                    if let Err(e) = azuki_db::queries::queue::save_queue(&bridge_db, 0, &items).await {
+                                    if let Err(e) = azuki_db::queries::queue::save_queue(&bridge_db, &items).await {
                                         tracing::warn!("failed to persist queue: {e}");
-                                    }
-                                }
-
-                                // Pre-download upcoming tracks in the background
-                                if let azuki_player::PlayerEvent::PreDownloadNeeded { ref tracks } = player_seq_event.event {
-                                    for track in tracks.iter().take(3) {
-                                        if track.file_path.is_none() {
-                                            let ytdlp = bridge_ytdlp.clone();
-                                            let db = bridge_db.clone();
-                                            let source_url = track.source_url.clone();
-                                            let track_id = track.id.clone();
-                                            tokio::spawn(async move {
-                                                let _permit = azuki_media::REFILL_SEMAPHORE.acquire().await;
-                                                if let Ok((_path, _meta)) = ytdlp.download(&source_url).await {
-                                                    let _ = sqlx::query("UPDATE tracks SET file_path = ?1 WHERE id = ?2")
-                                                        .bind(_path.to_string_lossy().as_ref())
-                                                        .bind(&track_id)
-                                                        .execute(&db)
-                                                        .await;
-                                                }
-                                            });
-                                        }
                                     }
                                 }
 

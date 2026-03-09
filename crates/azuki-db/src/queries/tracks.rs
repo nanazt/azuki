@@ -150,10 +150,6 @@ pub async fn delete_track_cascade(pool: &SqlitePool, track_id: &str) -> DbResult
         .bind(track_id)
         .execute(&mut *tx)
         .await?;
-    sqlx::query("DELETE FROM playlist_tracks WHERE track_id = ?1")
-        .bind(track_id)
-        .execute(&mut *tx)
-        .await?;
     sqlx::query("DELETE FROM play_history WHERE track_id = ?1")
         .bind(track_id)
         .execute(&mut *tx)

@@ -1,4 +1,3 @@
-use std::collections::VecDeque;
 use std::time::Instant;
 
 use tokio::sync::{broadcast, mpsc, oneshot};
@@ -7,7 +6,6 @@ use tracing::{info, warn};
 use crate::events::{
     LoopMode, PlayStateInfo, PlayerEvent, PlayerSnapshot, QueueEntry, SeqEvent, TrackInfo, UserInfo,
 };
-use crate::multi_queue::{MultiQueue, PlaylistOverflow, QueueKind, QueueSlotInfo, SlotId};
 use crate::queue::Queue;
 
 const BROADCAST_CAPACITY: usize = 64;
@@ -17,28 +15,6 @@ pub enum TrackEndReason {
     Finished,
     Error(String),
     Replaced,
-}
-
-pub enum MultiQueueCommand {
-    PlayPlaylist {
-        playlist_id: i64,
-        entries: Vec<QueueEntry>,
-        overflow_entries: Vec<QueueEntry>,
-        total_tracks: usize,
-        imported_by: UserInfo,
-        reply: oneshot::Sender<Result<SlotId, PlayerError>>,
-    },
-    SwitchQueue {
-        slot_id: SlotId,
-        reply: oneshot::Sender<Result<(), PlayerError>>,
-    },
-    DeleteSlot {
-        slot_id: SlotId,
-        reply: oneshot::Sender<Result<(), PlayerError>>,
-    },
-    GetMultiQueueState {
-        reply: oneshot::Sender<Vec<QueueSlotInfo>>,
-    },
 }
 
 pub enum PlayerCommand {
@@ -104,7 +80,6 @@ pub enum PlayerCommand {
         track_id: String,
         reason: TrackEndReason,
     },
-    MultiQueue(MultiQueueCommand),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -125,10 +100,6 @@ pub enum PlayerError {
     QueueFull,
     #[error("track already in queue or playing")]
     Duplicate,
-    #[error("playlist queue: cannot modify")]
-    PlaylistQueueReadOnly,
-    #[error("slot limit reached (max 4)")]
-    SlotLimitReached,
 }
 
 #[allow(dead_code)]
@@ -202,11 +173,7 @@ impl PlayerController {
             cmd_rx,
             event_tx: event_tx.clone(),
             state: initial_state,
-            multi_queue: MultiQueue::with_default_queue(Queue::with_state(
-                queue_items,
-                history,
-                loop_mode,
-            )),
+            queue: Queue::with_state(queue_items, history, loop_mode),
             volume: 5,
             seq: 0,
             listeners: Vec::new(),
@@ -357,8 +324,6 @@ impl PlayerController {
             loop_mode: LoopMode::Off,
             listeners: Vec::new(),
             current_added_by: None,
-            active_slot: 0,
-            queue_slots: Vec::new(),
         })
     }
 
@@ -366,63 +331,13 @@ impl PlayerController {
         self.send_cmd(PlayerCommand::OnTrackEnd { track_id, reason })
             .await;
     }
-
-    pub async fn play_playlist(
-        &self,
-        playlist_id: i64,
-        entries: Vec<QueueEntry>,
-        overflow_entries: Vec<QueueEntry>,
-        total_tracks: usize,
-        imported_by: UserInfo,
-    ) -> Result<SlotId, PlayerError> {
-        let (tx, rx) = oneshot::channel();
-        self.send_cmd(PlayerCommand::MultiQueue(MultiQueueCommand::PlayPlaylist {
-            playlist_id,
-            entries,
-            overflow_entries,
-            total_tracks,
-            imported_by,
-            reply: tx,
-        }))
-        .await;
-        rx.await.unwrap_or(Err(PlayerError::NoTrack))
-    }
-
-    pub async fn switch_queue(&self, slot_id: SlotId) -> Result<(), PlayerError> {
-        let (tx, rx) = oneshot::channel();
-        self.send_cmd(PlayerCommand::MultiQueue(MultiQueueCommand::SwitchQueue {
-            slot_id,
-            reply: tx,
-        }))
-        .await;
-        rx.await.unwrap_or(Err(PlayerError::NoTrack))
-    }
-
-    pub async fn delete_slot(&self, slot_id: SlotId) -> Result<(), PlayerError> {
-        let (tx, rx) = oneshot::channel();
-        self.send_cmd(PlayerCommand::MultiQueue(MultiQueueCommand::DeleteSlot {
-            slot_id,
-            reply: tx,
-        }))
-        .await;
-        rx.await.unwrap_or(Err(PlayerError::NoTrack))
-    }
-
-    pub async fn get_multi_queue_state(&self) -> Vec<QueueSlotInfo> {
-        let (tx, rx) = oneshot::channel();
-        self.send_cmd(PlayerCommand::MultiQueue(
-            MultiQueueCommand::GetMultiQueueState { reply: tx },
-        ))
-        .await;
-        rx.await.unwrap_or_default()
-    }
 }
 
 struct PlayerActor {
     cmd_rx: mpsc::Receiver<PlayerCommand>,
     event_tx: broadcast::Sender<SeqEvent>,
     state: PlayState,
-    multi_queue: MultiQueue,
+    queue: Queue,
     volume: u8,
     seq: u64,
     listeners: Vec<UserInfo>,
@@ -459,16 +374,6 @@ impl PlayerActor {
         }
     }
 
-    fn current_track_id(&self) -> Option<String> {
-        match &self.state {
-            PlayState::Playing { track, .. }
-            | PlayState::Paused { track, .. }
-            | PlayState::Loading { track }
-            | PlayState::Error { track, .. } => Some(track.id.clone()),
-            PlayState::Idle => None,
-        }
-    }
-
     fn snapshot(&self) -> PlayerSnapshot {
         let state_info = match &self.state {
             PlayState::Idle => PlayStateInfo::Idle,
@@ -495,14 +400,12 @@ impl PlayerActor {
 
         PlayerSnapshot {
             state: state_info,
-            queue: self.multi_queue.active_queue().items(),
-            history: self.multi_queue.active_queue().history().to_vec(),
+            queue: self.queue.items(),
+            history: self.queue.history().to_vec(),
             volume: self.volume,
-            loop_mode: self.multi_queue.active_queue().loop_mode(),
+            loop_mode: self.queue.loop_mode(),
             listeners: self.listeners.clone(),
             current_added_by: self.current_added_by.clone(),
-            active_slot: self.multi_queue.active_slot(),
-            queue_slots: self.multi_queue.snapshot_slots(),
         }
     }
 
@@ -595,12 +498,10 @@ impl PlayerActor {
                         listened_ms,
                         completed: false,
                     });
-                    self.multi_queue
-                        .active_queue_mut()
-                        .push_to_history(entry.clone());
+                    self.queue.push_to_history(entry.clone());
                 }
 
-                if let Some(next) = self.multi_queue.active_queue_mut().advance() {
+                if let Some(next) = self.queue.advance() {
                     self.current_added_by = Some(next.added_by.clone());
                     let added_by = next.added_by;
                     let track = next.track;
@@ -617,11 +518,10 @@ impl PlayerActor {
                     });
                     self.broadcast(PlayerEvent::VolumeChanged { volume: self.volume });
                     self.broadcast(PlayerEvent::QueueUpdated {
-                        queue: self.multi_queue.active_queue().items(),
-                        slot_id: self.multi_queue.active_slot(),
+                        queue: self.queue.items(),
                     });
                     self.broadcast(PlayerEvent::HistoryUpdated {
-                        history: self.multi_queue.active_queue().history().to_vec(),
+                        history: self.queue.history().to_vec(),
                     });
                     let _ = reply.send(Ok(Some(track)));
                 } else {
@@ -645,10 +545,9 @@ impl PlayerActor {
                 }
                 self.state = PlayState::Idle;
                 self.current_added_by = None;
-                self.multi_queue.active_queue_mut().clear();
+                self.queue.clear();
                 self.broadcast(PlayerEvent::QueueUpdated {
                     queue: Vec::new(),
-                    slot_id: self.multi_queue.active_slot(),
                 });
                 let _ = reply.send(Ok(()));
             }
@@ -695,7 +594,7 @@ impl PlayerActor {
             }
 
             PlayerCommand::SetLoop { mode, reply } => {
-                self.multi_queue.active_queue_mut().set_loop_mode(mode);
+                self.queue.set_loop_mode(mode);
                 self.broadcast(PlayerEvent::LoopModeChanged { mode });
                 let _ = reply.send(Ok(()));
             }
@@ -705,11 +604,6 @@ impl PlayerActor {
                 user_info,
                 reply,
             } => {
-                // Block enqueue on playlist queues
-                if matches!(self.multi_queue.active_kind(), QueueKind::Playlist { .. }) {
-                    let _ = reply.send(Err(PlayerError::PlaylistQueueReadOnly));
-                    return;
-                }
                 let now_playing = match &self.state {
                     PlayState::Playing { track: t, .. }
                     | PlayState::Paused { track: t, .. }
@@ -718,17 +612,12 @@ impl PlayerActor {
                     PlayState::Idle => None,
                 };
                 let is_duplicate = now_playing == Some(track.id.as_str())
-                    || self.multi_queue.active_queue().contains(&track.id);
+                    || self.queue.contains(&track.id);
                 if is_duplicate {
                     let _ = reply.send(Err(PlayerError::Duplicate));
-                } else if self
-                    .multi_queue
-                    .active_queue_mut()
-                    .enqueue(track, user_info)
-                {
+                } else if self.queue.enqueue(track, user_info) {
                     self.broadcast(PlayerEvent::QueueUpdated {
-                        queue: self.multi_queue.active_queue().items(),
-                        slot_id: self.multi_queue.active_slot(),
+                        queue: self.queue.items(),
                     });
                     let _ = reply.send(Ok(()));
                 } else {
@@ -757,7 +646,7 @@ impl PlayerActor {
                 }
 
                 // LoopMode::One or position > threshold → seek to 0
-                let should_restart = self.multi_queue.active_queue().loop_mode() == LoopMode::One
+                let should_restart = self.queue.loop_mode() == LoopMode::One
                     || current_pos > RESTART_THRESHOLD_MS;
 
                 if should_restart {
@@ -792,8 +681,8 @@ impl PlayerActor {
                 }
 
                 // LoopMode::All and position <= threshold → rotate queue backward
-                if self.multi_queue.active_queue().loop_mode() == LoopMode::All {
-                    let prev = self.multi_queue.active_queue_mut().pop_back();
+                if self.queue.loop_mode() == LoopMode::All {
+                    let prev = self.queue.pop_back();
                     if let Some(prev_entry) = prev {
                         let current_track = match &self.state {
                             PlayState::Playing { track, .. }
@@ -802,7 +691,7 @@ impl PlayerActor {
                         };
                         let current_id = current_track.id.clone();
                         let listened_ms = self.current_position_ms();
-                        self.multi_queue.active_queue_mut().push_front(QueueEntry {
+                        self.queue.push_front(QueueEntry {
                             track: current_track,
                             added_by: self
                                 .current_added_by
@@ -830,8 +719,7 @@ impl PlayerActor {
                         });
                         self.broadcast(PlayerEvent::VolumeChanged { volume: self.volume });
                         self.broadcast(PlayerEvent::QueueUpdated {
-                            queue: self.multi_queue.active_queue().items(),
-                            slot_id: self.multi_queue.active_slot(),
+                            queue: self.queue.items(),
                         });
                     } else {
                         // Empty queue in All mode, just seek to 0
@@ -867,7 +755,7 @@ impl PlayerActor {
                 }
 
                 // LoopMode::Off and position <= threshold → go to history
-                if let Some(prev_entry) = self.multi_queue.active_queue_mut().go_previous() {
+                if let Some(prev_entry) = self.queue.go_previous() {
                     let current_track = match &self.state {
                         PlayState::Playing { track, .. }
                         | PlayState::Paused { track, .. } => track.clone(),
@@ -875,7 +763,7 @@ impl PlayerActor {
                     };
                     let current_id = current_track.id.clone();
                     let listened_ms = self.current_position_ms();
-                    self.multi_queue.active_queue_mut().push_front(QueueEntry {
+                    self.queue.push_front(QueueEntry {
                         track: current_track,
                         added_by: self
                             .current_added_by
@@ -903,11 +791,10 @@ impl PlayerActor {
                     });
                     self.broadcast(PlayerEvent::VolumeChanged { volume: self.volume });
                     self.broadcast(PlayerEvent::QueueUpdated {
-                        queue: self.multi_queue.active_queue().items(),
-                        slot_id: self.multi_queue.active_slot(),
+                        queue: self.queue.items(),
                     });
                     self.broadcast(PlayerEvent::HistoryUpdated {
-                        history: self.multi_queue.active_queue().history().to_vec(),
+                        history: self.queue.history().to_vec(),
                     });
                 } else {
                     // No history, seek to 0
@@ -942,7 +829,7 @@ impl PlayerActor {
             }
 
             PlayerCommand::PlayAt { position, reply } => {
-                if let Some(entry) = self.multi_queue.active_queue_mut().remove(position) {
+                if let Some(entry) = self.queue.remove(position) {
                     let current_entry = match &self.state {
                         PlayState::Playing { track, .. }
                         | PlayState::Paused { track, .. }
@@ -964,9 +851,7 @@ impl PlayerActor {
                             listened_ms,
                             completed: false,
                         });
-                        self.multi_queue
-                            .active_queue_mut()
-                            .push_to_history(cur.clone());
+                        self.queue.push_to_history(cur.clone());
                     }
 
                     self.current_added_by = Some(entry.added_by.clone());
@@ -985,11 +870,10 @@ impl PlayerActor {
                     });
                     self.broadcast(PlayerEvent::VolumeChanged { volume: self.volume });
                     self.broadcast(PlayerEvent::QueueUpdated {
-                        queue: self.multi_queue.active_queue().items(),
-                        slot_id: self.multi_queue.active_slot(),
+                        queue: self.queue.items(),
                     });
                     self.broadcast(PlayerEvent::HistoryUpdated {
-                        history: self.multi_queue.active_queue().history().to_vec(),
+                        history: self.queue.history().to_vec(),
                     });
                     let _ = reply.send(Ok(()));
                 } else {
@@ -998,15 +882,9 @@ impl PlayerActor {
             }
 
             PlayerCommand::Remove { position, reply } => {
-                if self
-                    .multi_queue
-                    .active_queue_mut()
-                    .remove(position)
-                    .is_some()
-                {
+                if self.queue.remove(position).is_some() {
                     self.broadcast(PlayerEvent::QueueUpdated {
-                        queue: self.multi_queue.active_queue().items(),
-                        slot_id: self.multi_queue.active_slot(),
+                        queue: self.queue.items(),
                     });
                     let _ = reply.send(Ok(()));
                 } else {
@@ -1015,10 +893,9 @@ impl PlayerActor {
             }
 
             PlayerCommand::MoveInQueue { from, to, reply } => {
-                if self.multi_queue.active_queue_mut().move_item(from, to) {
+                if self.queue.move_item(from, to) {
                     self.broadcast(PlayerEvent::QueueUpdated {
-                        queue: self.multi_queue.active_queue().items(),
-                        slot_id: self.multi_queue.active_slot(),
+                        queue: self.queue.items(),
                     });
                     let _ = reply.send(Ok(()));
                 } else {
@@ -1074,34 +951,24 @@ impl PlayerActor {
                         Ok(PlayAction::PlayedNow)
                     }
                     _ => {
-                        // Block enqueue on playlist queues
-                        if matches!(self.multi_queue.active_kind(), QueueKind::Playlist { .. }) {
-                            Err(PlayerError::PlaylistQueueReadOnly)
+                        let now_playing = match &self.state {
+                            PlayState::Playing { track: t, .. }
+                            | PlayState::Paused { track: t, .. }
+                            | PlayState::Loading { track: t }
+                            | PlayState::Error { track: t, .. } => Some(t.id.as_str()),
+                            PlayState::Idle => None,
+                        };
+                        let is_duplicate = now_playing == Some(track.id.as_str())
+                            || self.queue.contains(&track.id);
+                        if is_duplicate {
+                            Err(PlayerError::Duplicate)
+                        } else if self.queue.enqueue(track, user_info) {
+                            self.broadcast(PlayerEvent::QueueUpdated {
+                                queue: self.queue.items(),
+                            });
+                            Ok(PlayAction::Enqueued)
                         } else {
-                            let now_playing = match &self.state {
-                                PlayState::Playing { track: t, .. }
-                                | PlayState::Paused { track: t, .. }
-                                | PlayState::Loading { track: t }
-                                | PlayState::Error { track: t, .. } => Some(t.id.as_str()),
-                                PlayState::Idle => None,
-                            };
-                            let is_duplicate = now_playing == Some(track.id.as_str())
-                                || self.multi_queue.active_queue().contains(&track.id);
-                            if is_duplicate {
-                                Err(PlayerError::Duplicate)
-                            } else if self
-                                .multi_queue
-                                .active_queue_mut()
-                                .enqueue(track, user_info)
-                            {
-                                self.broadcast(PlayerEvent::QueueUpdated {
-                                    queue: self.multi_queue.active_queue().items(),
-                                    slot_id: self.multi_queue.active_slot(),
-                                });
-                                Ok(PlayAction::Enqueued)
-                            } else {
-                                Err(PlayerError::QueueFull)
-                            }
+                            Err(PlayerError::QueueFull)
                         }
                     }
                 };
@@ -1144,15 +1011,13 @@ impl PlayerActor {
                     _ => None,
                 };
                 if let Some(ref track) = current_track {
-                    self.multi_queue
-                        .active_queue_mut()
-                        .push_to_history(QueueEntry {
-                            track: track.clone(),
-                            added_by: self
-                                .current_added_by
-                                .clone()
-                                .unwrap_or_else(UserInfo::unknown),
-                        });
+                    self.queue.push_to_history(QueueEntry {
+                        track: track.clone(),
+                        added_by: self
+                            .current_added_by
+                            .clone()
+                            .unwrap_or_else(UserInfo::unknown),
+                    });
                 }
 
                 let completed = matches!(reason, TrackEndReason::Finished);
@@ -1161,7 +1026,7 @@ impl PlayerActor {
                 });
 
                 // Auto-advance
-                if let Some(next) = self.multi_queue.active_queue_mut().advance() {
+                if let Some(next) = self.queue.advance() {
                     self.broadcast(PlayerEvent::TrackEnded {
                         track_id,
                         listened_ms,
@@ -1183,216 +1048,24 @@ impl PlayerActor {
                     });
                     self.broadcast(PlayerEvent::VolumeChanged { volume: self.volume });
                     self.broadcast(PlayerEvent::QueueUpdated {
-                        queue: self.multi_queue.active_queue().items(),
-                        slot_id: self.multi_queue.active_slot(),
+                        queue: self.queue.items(),
                     });
                     self.broadcast(PlayerEvent::HistoryUpdated {
-                        history: self.multi_queue.active_queue().history().to_vec(),
+                        history: self.queue.history().to_vec(),
                     });
-
-                    // Check for overflow refill
-                    let refilled = self.multi_queue.refill_from_overflow();
-                    if !refilled.is_empty() {
-                        let tracks: Vec<TrackInfo> =
-                            refilled.iter().map(|e| e.track.clone()).collect();
-                        self.broadcast(PlayerEvent::PreDownloadNeeded { tracks });
-                        self.broadcast(PlayerEvent::QueueUpdated {
-                            queue: self.multi_queue.active_queue().items(),
-                            slot_id: self.multi_queue.active_slot(),
-                        });
-                    }
                 } else {
-                    // No next track: go idle and notify frontend
                     self.broadcast(PlayerEvent::TrackEnded {
                         track_id,
                         listened_ms,
                         completed,
                     });
 
-                    // Check if playlist slot exhausted — auto-delete and switch back
-                    if self.multi_queue.is_active_exhausted() {
-                        let exhausted_slot = self.multi_queue.active_slot();
-                        if exhausted_slot != 0 {
-                            self.multi_queue.delete_slot(exhausted_slot);
-                            self.broadcast(PlayerEvent::QueueSlotExhausted {
-                                slot_id: exhausted_slot,
-                            });
-                            self.broadcast(PlayerEvent::QueueSlotDeleted {
-                                slot_id: exhausted_slot,
-                            });
-                            let _ = self.multi_queue.switch_to(0, None);
-                            self.broadcast(PlayerEvent::QueueSwitched {
-                                slot_id: 0,
-                                previous_slot: exhausted_slot,
-                            });
-                        }
-                    }
-
                     self.state = PlayState::Idle;
                     self.current_added_by = None;
                     self.broadcast(PlayerEvent::HistoryUpdated {
-                        history: self.multi_queue.active_queue().history().to_vec(),
+                        history: self.queue.history().to_vec(),
                     });
                 }
-            }
-
-            PlayerCommand::MultiQueue(cmd) => self.handle_multi_queue(cmd),
-        }
-    }
-
-    fn handle_multi_queue(&mut self, cmd: MultiQueueCommand) {
-        match cmd {
-            MultiQueueCommand::PlayPlaylist {
-                playlist_id,
-                entries,
-                overflow_entries,
-                total_tracks,
-                imported_by: _,
-                reply,
-            } => {
-                let overflow = if overflow_entries.is_empty() {
-                    None
-                } else {
-                    Some(PlaylistOverflow {
-                        playlist_id,
-                        remaining: VecDeque::from(overflow_entries),
-                        total_tracks,
-                        loaded_count: entries.len(),
-                    })
-                };
-
-                match self
-                    .multi_queue
-                    .create_playlist_slot(playlist_id, entries, overflow)
-                {
-                    Some(slot_id) => {
-                        let kind = QueueKind::Playlist { playlist_id };
-                        self.broadcast(PlayerEvent::QueueSlotCreated { slot_id, kind });
-
-                        let current_track_id = self.current_track_id();
-                        let previous_slot = self.multi_queue.active_slot();
-                        if let Err(e) = self.multi_queue.switch_to(slot_id, current_track_id) {
-                            let _ = reply.send(Err(e));
-                            return;
-                        }
-
-                        self.broadcast(PlayerEvent::QueueSwitched {
-                            slot_id,
-                            previous_slot,
-                        });
-
-                        // Start playing the first track from the new slot
-                        if let Some(next) = self.multi_queue.active_queue_mut().advance() {
-                            self.current_added_by = Some(next.added_by.clone());
-                            self.volume = next.track.volume;
-                            let added_by = next.added_by;
-                            let track = next.track;
-                            self.state = PlayState::Playing {
-                                track: track.clone(),
-                                started_at: Instant::now(),
-                                position_ms: 0,
-                            };
-                            self.broadcast(PlayerEvent::TrackStarted {
-                                track,
-                                position_ms: 0,
-                                added_by,
-                            });
-                            self.broadcast(PlayerEvent::VolumeChanged { volume: self.volume });
-                        }
-
-                        self.broadcast(PlayerEvent::QueueUpdated {
-                            queue: self.multi_queue.active_queue().items(),
-                            slot_id: self.multi_queue.active_slot(),
-                        });
-
-                        let _ = reply.send(Ok(slot_id));
-                    }
-                    None => {
-                        let _ = reply.send(Err(PlayerError::SlotLimitReached));
-                    }
-                }
-            }
-
-            MultiQueueCommand::SwitchQueue { slot_id, reply } => {
-                let previous = self.multi_queue.active_slot();
-                let current_track_id = self.current_track_id();
-
-                match self.multi_queue.switch_to(slot_id, current_track_id) {
-                    Ok(()) => {
-                        self.broadcast(PlayerEvent::QueueSwitched {
-                            slot_id,
-                            previous_slot: previous,
-                        });
-
-                        // Try to play first track in new slot
-                        if let Some(next) = self.multi_queue.active_queue_mut().advance() {
-                            self.current_added_by = Some(next.added_by.clone());
-                            self.volume = next.track.volume;
-                            let added_by = next.added_by;
-                            let track = next.track;
-                            self.state = PlayState::Playing {
-                                track: track.clone(),
-                                started_at: Instant::now(),
-                                position_ms: 0,
-                            };
-                            self.broadcast(PlayerEvent::TrackStarted {
-                                track,
-                                position_ms: 0,
-                                added_by,
-                            });
-                            self.broadcast(PlayerEvent::VolumeChanged { volume: self.volume });
-                        } else if slot_id == 0 {
-                            self.state = PlayState::Idle;
-                            self.current_added_by = None;
-                        }
-
-                        self.broadcast(PlayerEvent::QueueUpdated {
-                            queue: self.multi_queue.active_queue().items(),
-                            slot_id: self.multi_queue.active_slot(),
-                        });
-
-                        let _ = reply.send(Ok(()));
-                    }
-                    Err(e) => {
-                        let _ = reply.send(Err(e));
-                    }
-                }
-            }
-
-            MultiQueueCommand::DeleteSlot { slot_id, reply } => {
-                if slot_id == 0 {
-                    let _ = reply.send(Err(PlayerError::InvalidState(
-                        "cannot delete default queue".to_string(),
-                    )));
-                    return;
-                }
-
-                let was_active = self.multi_queue.active_slot() == slot_id;
-
-                if self.multi_queue.delete_slot(slot_id) {
-                    self.broadcast(PlayerEvent::QueueSlotDeleted { slot_id });
-
-                    if was_active {
-                        let current_track_id = self.current_track_id();
-                        let _ = self.multi_queue.switch_to(0, current_track_id);
-                        self.broadcast(PlayerEvent::QueueSwitched {
-                            slot_id: 0,
-                            previous_slot: slot_id,
-                        });
-                        self.state = PlayState::Idle;
-                        self.current_added_by = None;
-                    }
-
-                    let _ = reply.send(Ok(()));
-                } else {
-                    let _ = reply.send(Err(PlayerError::InvalidState(format!(
-                        "slot {slot_id} not found"
-                    ))));
-                }
-            }
-
-            MultiQueueCommand::GetMultiQueueState { reply } => {
-                let _ = reply.send(self.multi_queue.snapshot_slots());
             }
         }
     }

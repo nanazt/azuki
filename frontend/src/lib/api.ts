@@ -2,10 +2,7 @@ import type {
   ArtistStat,
   CursorResponse,
   OEmbedResponse,
-  Playlist,
-  PlaylistTrack,
   QueueEntry,
-  QueueSlotInfo,
   Stats,
   TrackInfo,
   UploadResponse,
@@ -88,17 +85,6 @@ export const api = {
     );
   },
 
-  // Playlists
-  getPlaylists: () => get<{ playlists: Playlist[] }>("/api/playlists"),
-  createPlaylist: (name: string) => post<Playlist>("/api/playlists", { name }),
-  renamePlaylist: (id: number, name: string) => put<void>(`/api/playlists/${id}`, { name }),
-  deletePlaylist: (id: number) => del<void>(`/api/playlists/${id}`),
-  getPlaylistTracks: (id: number) => get<{ tracks: PlaylistTrack[] }>(`/api/playlists/${id}/tracks`),
-  addPlaylistTrack: (id: number, track_id: string, position?: number) =>
-    post<void>(`/api/playlists/${id}/tracks`, { track_id, position }),
-  removePlaylistTrack: (id: number, position: number) =>
-    del<void>(`/api/playlists/${id}/tracks/${position}`),
-
   // Stats
   getStats: () => get<Stats>("/api/stats"),
   getTopTracks: (cursor?: string, limit = 20) =>
@@ -162,14 +148,6 @@ export const api = {
     put<TrackInfo>(`/api/tracks/${trackId}`, data),
   fetchOEmbed: (url: string) =>
     get<OEmbedResponse>(`/api/oembed?url=${encodeURIComponent(url)}`),
-
-  // Multi-queue
-  importPlaylist: (url: string) => post<Playlist>("/api/playlists/import", { url }),
-  playPlaylist: (id: number) => post<{ slot_id: number }>(`/api/playlists/${id}/play`),
-  getQueues: () => get<{ slots: QueueSlotInfo[] }>("/api/queues"),
-  getQueueItems: (slotId: number) => get<{ queue: QueueEntry[] }>(`/api/queues/${slotId}/items`),
-  switchQueue: (slotId: number) => post<void>(`/api/queues/${slotId}/switch`),
-  deleteQueueSlot: (slotId: number) => del<void>(`/api/queues/${slotId}`),
 
   // Auth
   logout: () => post<void>("/auth/logout"),

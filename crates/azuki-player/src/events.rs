@@ -1,7 +1,5 @@
 use serde::{Deserialize, Serialize};
 
-use crate::multi_queue::{QueueKind, QueueSlotInfo};
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TrackInfo {
     pub id: String,
@@ -57,8 +55,6 @@ pub struct PlayerSnapshot {
     pub loop_mode: LoopMode,
     pub listeners: Vec<UserInfo>,
     pub current_added_by: Option<UserInfo>,
-    pub active_slot: u8,
-    pub queue_slots: Vec<QueueSlotInfo>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -112,7 +108,6 @@ pub enum PlayerEvent {
     },
     QueueUpdated {
         queue: Vec<QueueEntry>,
-        slot_id: u8,
     },
     LoopModeChanged {
         mode: LoopMode,
@@ -131,23 +126,5 @@ pub enum PlayerEvent {
     },
     StateSnapshot {
         state: PlayerSnapshot,
-    },
-    // Multi-queue events
-    PreDownloadNeeded {
-        tracks: Vec<TrackInfo>,
-    },
-    QueueSlotCreated {
-        slot_id: u8,
-        kind: QueueKind,
-    },
-    QueueSlotDeleted {
-        slot_id: u8,
-    },
-    QueueSwitched {
-        slot_id: u8,
-        previous_slot: u8,
-    },
-    QueueSlotExhausted {
-        slot_id: u8,
     },
 }
