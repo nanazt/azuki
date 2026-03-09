@@ -57,7 +57,7 @@ pub async fn search(
 
     match source {
         "youtube" => {
-            let limit = params.limit.unwrap_or(10).clamp(1, 25) as u32;
+            let limit = params.limit.unwrap_or(25).clamp(1, 50) as u32;
             let page_token = params.cursor.as_deref();
 
             let youtube = state.youtube.read().unwrap().clone()
