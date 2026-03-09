@@ -35,7 +35,19 @@ Discord music bot with web dashboard. Rust workspace backend (6 crates) + React 
 ### Testing Requirements
 
 - `SQLX_OFFLINE=true cargo clippy --workspace --all-targets -- -D warnings` must pass clean
+- `SQLX_OFFLINE=true cargo test --workspace` — all tests must pass
 - Frontend: `cd frontend && npx tsc --noEmit && npm run build` (type-check first, then build)
+
+### API Integration Testing
+
+- API tests live in `crates/azuki-web/tests/` — test HTTP contracts + DB side effects, NOT player logic
+- Use `tower::ServiceExt::oneshot` pattern — no live servers, tests hit the Router directly
+- Each test creates a fresh in-memory SQLite via `TestApp::new()` — parallel-safe, no `#[serial]` needed
+- Auth: `azuki_web::auth::create_jwt()` for JWT cookies, `azuki_db::queries::users::upsert_user()` for seeding users
+- Test negative paths (401/403/400) for each endpoint category
+- Admin endpoints: test non-admin 403 for EVERY admin endpoint individually (prevent privilege escalation regression)
+- Success responses: assert response body shape, not just status code
+- WebSocket: `WebSocketUpgrade` extractor requires real upgradeable connections, so oneshot can only verify non-WS requests are rejected
 
 ### Architecture Overview
 

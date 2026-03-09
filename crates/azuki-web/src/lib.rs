@@ -133,11 +133,7 @@ pub mod util {
     }
 }
 
-pub async fn start_web(
-    state: WebState,
-    port: u16,
-    cancel: CancellationToken,
-) -> anyhow::Result<()> {
+pub fn build_router(state: WebState) -> axum::Router {
     let origins: Vec<HeaderValue> = state
         .allowed_origins
         .iter()
@@ -154,8 +150,6 @@ pub async fn start_web(
         ])
         .allow_credentials(true);
 
-    let static_dir = state.static_dir.clone();
-
     // API routes with CSRF protection
     let api_routes = axum::Router::new()
         .merge(routes::player::player_routes())
@@ -166,7 +160,7 @@ pub async fn start_web(
         .merge(routes::queues::queue_routes())
         .layer(middleware::from_fn(csrf_check));
 
-    let mut app = axum::Router::new()
+    let app = axum::Router::new()
         .merge(auth::auth_routes())
         .merge(api_routes)
         .merge(ws::ws_routes())
@@ -186,7 +180,16 @@ pub async fn start_web(
         .with_state(state);
 
     // Serve thumbnails
-    app = app.nest_service("/media/thumbnails", ServeDir::new("media/thumbnails"));
+    app.nest_service("/media/thumbnails", ServeDir::new("media/thumbnails"))
+}
+
+pub async fn start_web(
+    state: WebState,
+    port: u16,
+    cancel: CancellationToken,
+) -> anyhow::Result<()> {
+    let static_dir = state.static_dir.clone();
+    let mut app = build_router(state);
 
     // SPA serving: serve static files with fallback to index.html
     if let Some(dir) = static_dir {
