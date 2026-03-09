@@ -2,11 +2,14 @@ import { usePlayerStore } from "../../stores/playerStore";
 
 export function ConnectionStatus() {
   const connected = usePlayerStore((s) => s.connected);
+  const hasConnected = usePlayerStore((s) => s.hasConnected);
+
+  const show = hasConnected && !connected;
 
   return (
     <div
       className="overflow-hidden transition-all duration-300 ease-in-out"
-      style={{ maxHeight: connected ? "0px" : "48px" }}
+      style={{ maxHeight: show ? "48px" : "0px" }}
       aria-live="polite"
       role="status"
     >

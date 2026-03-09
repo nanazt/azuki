@@ -18,6 +18,7 @@ interface PlayerState {
   listeners: UserInfo[];
   lastSeq: number;
   connected: boolean;
+  hasConnected: boolean;
   boostMode: boolean;
 
   currentTrack: () => TrackInfo | null;
@@ -46,6 +47,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   listeners: [],
   lastSeq: 0,
   connected: false,
+  hasConnected: false,
   boostMode: false,
 
   currentTrack: () => {
@@ -76,6 +78,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   setLoopMode: (m) => set({ loopMode: m }),
   setListeners: (l) => set({ listeners: l }),
   setLastSeq: (s) => set({ lastSeq: s }),
-  setConnected: (c) => set({ connected: c }),
+  setConnected: (c) =>
+    set((prev) => ({ connected: c, hasConnected: prev.hasConnected || c })),
   setBoostMode: (v) => set({ boostMode: v }),
 }));

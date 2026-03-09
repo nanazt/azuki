@@ -6,6 +6,9 @@ import {
   BarChart3,
   Play,
   ClipboardPaste,
+  Home,
+  Settings,
+  FileAudio,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -29,18 +32,21 @@ const commandClusters: CommandCluster[] = [
         args: "<query or URL>",
         description: "대기 중이면 즉시 재생, 재생 중이면 대기열에 추가",
       },
-      { name: "pause" },
-      { name: "resume" },
-      { name: "skip" },
+      { name: "pause", description: "일시 정지" },
+      { name: "resume", description: "재생 재개" },
+      { name: "skip", description: "다음 곡으로 건너뛰기" },
+      { name: "now", description: "현재 재생 중인 곡 표시" },
     ],
   },
   {
-    label: "Queue & Settings",
+    label: "Settings",
     commands: [
-      { name: "queue" },
-      { name: "now" },
-      { name: "volume", args: "<0–100>" },
-      { name: "loop", args: "<off | one | all>" },
+      { name: "volume", args: "<0–100>", description: "볼륨 조절" },
+      {
+        name: "loop",
+        args: "<off | one | all>",
+        description: "반복 모드 설정",
+      },
     ],
   },
 ];
@@ -53,34 +59,49 @@ interface WebFeature {
 
 const webFeatures: WebFeature[] = [
   {
+    icon: Home,
+    label: "Home",
+    description: "최근 재생 기록과 빠른 접근",
+  },
+  {
     icon: Search,
     label: "Search",
-    description: "Search YouTube or history and add to queue",
-  },
-  {
-    icon: Clock,
-    label: "History",
-    description: "View play history, re-add tracks to queue",
-  },
-  {
-    icon: Upload,
-    label: "Uploads",
-    description: "Drag & drop audio files, edit metadata",
-  },
-  {
-    icon: BarChart3,
-    label: "Stats",
-    description: "Heatmap, trends, top tracks & artists",
+    description: "YouTube 검색 또는 재생 기록에서 곡 추가",
   },
   {
     icon: Play,
     label: "Player",
-    description: "Play/pause, skip, seek, volume, loop modes",
+    description: "재생/일시정지, 건너뛰기, 탐색, 볼륨, 반복 모드",
+  },
+  {
+    icon: Clock,
+    label: "History",
+    description: "재생 기록 확인, 다시 대기열에 추가",
+  },
+  {
+    icon: Upload,
+    label: "Uploads",
+    description: "오디오 파일 업로드, 메타데이터 편집",
+  },
+  {
+    icon: FileAudio,
+    label: "Drag & Drop",
+    description: "오디오 파일을 드래그 앤 드롭으로 업로드",
   },
   {
     icon: ClipboardPaste,
     label: "Paste to Play",
-    description: "Paste a link anywhere to add it to the queue",
+    description: "링크를 붙여넣기하면 대기열에 추가",
+  },
+  {
+    icon: BarChart3,
+    label: "Stats",
+    description: "히트맵, 트렌드, 인기 곡 & 아티스트",
+  },
+  {
+    icon: Settings,
+    label: "Settings",
+    description: "테마, 언어 등 환경 설정",
   },
 ];
 
@@ -90,11 +111,11 @@ interface Shortcut {
 }
 
 const shortcuts: Shortcut[] = [
-  { keys: ["Space"], description: "Play / Pause" },
-  { keys: ["\u2190", "\u2192"], description: "Seek backward / forward" },
-  { keys: ["\u2191", "\u2193"], description: "Volume up / down" },
-  { keys: ["M"], description: "Mute / Unmute" },
-  { keys: ["/"], description: "Go to Search" },
+  { keys: ["Space"], description: "재생 / 일시정지" },
+  { keys: ["\u2190", "\u2192"], description: "5초 뒤로 / 앞으로 탐색" },
+  { keys: ["\u2191", "\u2193"], description: "볼륨 올리기 / 내리기" },
+  { keys: ["M"], description: "음소거 / 해제" },
+  { keys: ["/"], description: "검색으로 이동" },
 ];
 
 function CommandsCard() {
@@ -104,7 +125,7 @@ function CommandsCard() {
       style={{ animationDelay: "0ms", animationFillMode: "both" }}
     >
       <h2 className="text-sm font-semibold text-[var(--color-text)] mb-3">
-        Discord Commands
+        디스코드 명령어
       </h2>
       <div className="flex flex-col">
         {commandClusters.map((cluster, ci) => (
@@ -154,7 +175,7 @@ function WebFeaturesCard() {
       style={{ animationDelay: "60ms", animationFillMode: "both" }}
     >
       <h2 className="text-sm font-semibold text-[var(--color-text)] mb-3">
-        Web Features
+        웹 기능
       </h2>
       <div className="flex flex-col gap-3">
         {webFeatures.map((feature) => (
@@ -187,7 +208,7 @@ function ShortcutsCard() {
       style={{ animationDelay: "120ms", animationFillMode: "both" }}
     >
       <h2 className="text-sm font-semibold text-[var(--color-text)] mb-3">
-        Keyboard Shortcuts
+        키보드 단축키
       </h2>
       <div className="flex flex-col gap-2.5">
         {shortcuts.map((shortcut) => (
@@ -217,7 +238,7 @@ export function Help() {
     <div className="p-4 md:p-6 max-w-3xl mx-auto flex flex-col gap-4 pb-32 md:pb-6">
       <h1 className="text-lg font-semibold text-[var(--color-text)] flex items-center gap-2">
         <HelpCircle size={20} className="text-[var(--color-text-secondary)]" />
-        Help
+        도움말
       </h1>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
