@@ -18,7 +18,7 @@ export function SearchResult({ track, onAdd, adding = false }: SearchResultProps
         "hover:bg-[var(--color-bg-hover)] transition-colors duration-100 group"
       )}
     >
-      <TrackThumbnail track={track} sizeClass="w-12 h-12" iconSize={18} className="rounded" />
+      <TrackThumbnail track={track} sizeClass="w-12 h-12" iconSize={18} className="rounded" preferExternal />
       <div className="min-w-0 flex-1">
         <div className="text-sm font-medium text-[var(--color-text)] truncate">
           {track.title}

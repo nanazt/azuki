@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Music } from "lucide-react";
 import clsx from "clsx";
 
@@ -7,25 +7,69 @@ interface TrackThumbnailProps {
   sizeClass: string;
   iconSize: number;
   className?: string;
+  preferExternal?: boolean;
 }
 
 type Stage = "local" | "external" | "icon";
 
-export function TrackThumbnail({ track, sizeClass, iconSize, className }: TrackThumbnailProps) {
-  const localUrl = track.id && track.thumbnail_url ? `/media/thumbnails/${track.id}.jpg` : null;
+export function TrackThumbnail({
+  track,
+  sizeClass,
+  iconSize,
+  className,
+  preferExternal,
+}: TrackThumbnailProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [visible, setVisible] = useState(false);
+
+  const localUrl =
+    track.id && track.thumbnail_url
+      ? `/media/thumbnails/${track.id}.jpg`
+      : null;
   const externalUrl = track.thumbnail_url ?? null;
-  const initialStage: Stage = localUrl ? "local" : externalUrl ? "external" : "icon";
+  const initialStage: Stage = preferExternal
+    ? externalUrl
+      ? "external"
+      : localUrl
+        ? "local"
+        : "icon"
+    : localUrl
+      ? "local"
+      : externalUrl
+        ? "external"
+        : "icon";
 
   const [stage, setStage] = useState<Stage>(initialStage);
 
-  const src =
-    stage === "local" ? localUrl :
-    stage === "external" ? externalUrl :
-    null;
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setVisible(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "200px" },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
-  if (!src || stage === "icon") {
+  const src =
+    stage === "local" ? localUrl : stage === "external" ? externalUrl : null;
+
+  if (!visible || !src || stage === "icon") {
     return (
-      <div className={clsx(sizeClass, "bg-[var(--color-bg-tertiary)] flex items-center justify-center flex-shrink-0", className)}>
+      <div
+        ref={containerRef}
+        className={clsx(
+          sizeClass,
+          "bg-[var(--color-bg-tertiary)] flex items-center justify-center flex-shrink-0",
+          className,
+        )}
+      >
         <Music size={iconSize} className="text-[var(--color-text-tertiary)]" />
       </div>
     );
@@ -39,6 +83,8 @@ export function TrackThumbnail({ track, sizeClass, iconSize, className }: TrackT
       onError={() => {
         if (stage === "local" && externalUrl) {
           setStage("external");
+        } else if (stage === "external" && localUrl && preferExternal) {
+          setStage("local");
         } else {
           setStage("icon");
         }
