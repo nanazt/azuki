@@ -4,6 +4,7 @@ use axum::http::StatusCode;
 use axum_extra::extract::CookieJar;
 use serde::Deserialize;
 
+use azuki_media::extract_video_id;
 use azuki_player::LoopMode;
 
 use crate::auth::{extract_admin_id, extract_user_id};
@@ -202,6 +203,22 @@ pub async fn queue_add(
                     "status": "already_downloading",
                 })),
             ));
+        }
+    }
+
+    // Pre-check: if YouTube URL, check if track is already playing or in queue
+    if let Some(video_id) = extract_video_id(&body.query_or_url) {
+        let canonical_url = format!("https://www.youtube.com/watch?v={video_id}");
+        let track_id = crate::util::sha_id(&canonical_url);
+        let snapshot = state.player.get_state().await;
+        let now_playing_id = match &snapshot.state {
+            azuki_player::PlayStateInfo::Playing { track, .. }
+            | azuki_player::PlayStateInfo::Paused { track, .. } => Some(track.id.as_str()),
+            _ => None,
+        };
+        let in_queue = snapshot.queue.iter().any(|e| e.track.id == track_id);
+        if now_playing_id == Some(&track_id) || in_queue {
+            return Err(ApiError::BadRequest("duplicate".into()));
         }
     }
 
