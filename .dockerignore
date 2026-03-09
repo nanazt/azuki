@@ -1,0 +1,13 @@
+target/
+frontend/node_modules/
+frontend/dist/
+.git/
+.claude/
+.omc/
+.omx/
+.playwright-mcp/
+*.db
+*.db-wal
+*.db-shm
+media/
+data/

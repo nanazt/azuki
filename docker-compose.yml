@@ -1,0 +1,24 @@
+services:
+  azuki:
+    build: .
+    container_name: azuki
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - azuki-data:/app/data
+      - azuki-media:/app/media
+    environment:
+      - DATABASE_URL=sqlite:/app/data/azuki.db
+      - WEB_PORT=3000
+      - WEB_ORIGIN=${WEB_ORIGIN:-http://localhost:3000}
+      - MEDIA_DIR=/app/media
+      - DATA_DIR=/app/data
+      - STATIC_DIR=/app/frontend/dist
+      - MAX_UPLOAD_SIZE_MB=${MAX_UPLOAD_SIZE_MB:-300}
+      - MAX_CACHE_SIZE_GB=${MAX_CACHE_SIZE_GB:-10}
+      - RUST_LOG=${RUST_LOG:-azuki=info,azuki_bot=info,azuki_web=info,azuki_media=info,sqlx=warn}
+
+volumes:
+  azuki-data:
+  azuki-media:
