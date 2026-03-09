@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
-import { ListMusic, Search, Loader2 } from "lucide-react";
+import clsx from "clsx";
+import { ListMusic, Search, Loader2, X } from "lucide-react";
 import {
   DndContext,
   closestCenter,
@@ -36,7 +37,7 @@ interface QueuePanelProps {
 
 export function QueuePanel({ onOpenSearch }: QueuePanelProps) {
   const { showToast } = useToast();
-  const { moveInQueue, playAt } = usePlayer();
+  const { moveInQueue, playAt, skip } = usePlayer();
   const playState = usePlayerStore((s) => s.playState);
   const queue = usePlayerStore((s) => s.queue);
   const currentAddedBy = usePlayerStore((s) => s.currentAddedBy);
@@ -107,6 +108,15 @@ export function QueuePanel({ onOpenSearch }: QueuePanelProps) {
     [playAt, showToast],
   );
 
+  const handleSkipCurrent = useCallback(async () => {
+    try {
+      await skip();
+    } catch (err) {
+      console.error("Failed to skip track", err);
+      showToast("Failed to skip track", "error");
+    }
+  }, [skip, showToast]);
+
   return (
     <div className="flex flex-col h-full bg-[var(--color-bg-secondary)]">
       <div className="flex items-center gap-2 px-4 py-3 border-b border-[var(--color-border)]">
@@ -125,7 +135,7 @@ export function QueuePanel({ onOpenSearch }: QueuePanelProps) {
                 Now Playing
               </span>
             </div>
-            <div className="flex items-center gap-3 px-3 py-2 mx-1 rounded-lg bg-[var(--color-bg-tertiary)]">
+            <div className="flex items-center gap-3 px-3 py-2 mx-1 rounded-lg bg-[var(--color-bg-tertiary)] group">
               <TrackThumbnail track={currentTrack} sizeClass="w-9 h-9" iconSize={14} className="rounded" />
               <div className="min-w-0 flex-1">
                 <div className="text-sm font-medium text-[var(--color-text)] truncate">
@@ -144,6 +154,17 @@ export function QueuePanel({ onOpenSearch }: QueuePanelProps) {
                   )}
                 </div>
               </div>
+              <button
+                onClick={handleSkipCurrent}
+                className={clsx(
+                  "flex-shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center rounded text-[var(--color-text-tertiary)]",
+                  "hover:text-[var(--color-danger)] hover:bg-[var(--color-bg-tertiary)]",
+                  "transition-all duration-100 cursor-pointer touch-manipulation",
+                )}
+                aria-label={`Skip ${currentTrack.title}`}
+              >
+                <X size={14} />
+              </button>
             </div>
           </div>
         )}

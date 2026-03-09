@@ -477,6 +477,8 @@ impl PlayerActor {
             },
 
             PlayerCommand::Skip { reply } => {
+                let was_paused = matches!(&self.state, PlayState::Paused { .. });
+
                 let current_entry = match &self.state {
                     PlayState::Playing { track, .. }
                     | PlayState::Paused { track, .. }
@@ -506,10 +508,17 @@ impl PlayerActor {
                     let added_by = next.added_by;
                     let track = next.track;
                     self.volume = track.volume;
-                    self.state = PlayState::Playing {
-                        track: track.clone(),
-                        started_at: Instant::now(),
-                        position_ms: 0,
+                    self.state = if was_paused {
+                        PlayState::Paused {
+                            track: track.clone(),
+                            position_ms: 0,
+                        }
+                    } else {
+                        PlayState::Playing {
+                            track: track.clone(),
+                            started_at: Instant::now(),
+                            position_ms: 0,
+                        }
                     };
                     self.broadcast(PlayerEvent::TrackStarted {
                         track: track.clone(),
