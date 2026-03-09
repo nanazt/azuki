@@ -1,6 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { Music } from "lucide-react";
 import { Modal } from "../../ui/Modal";
+import { useLocale, t } from "../../../hooks/useLocale";
 
 interface WelcomeModalProps {
   open: boolean;
@@ -8,6 +9,8 @@ interface WelcomeModalProps {
 }
 
 export function WelcomeModal({ open, onClose }: WelcomeModalProps) {
+  useLocale();
+  const s = t();
   const navigate = useNavigate();
 
   const dismiss = () => {
@@ -26,7 +29,7 @@ export function WelcomeModal({ open, onClose }: WelcomeModalProps) {
             azuki
           </h2>
           <p className="text-sm text-[var(--color-text-secondary)] mt-1">
-            Your Discord music bot, now in the browser.
+            {s.welcome.subtitle}
           </p>
         </div>
         <div className="flex flex-col gap-2 w-full mt-2">
@@ -37,13 +40,13 @@ export function WelcomeModal({ open, onClose }: WelcomeModalProps) {
             }}
             className="min-h-[44px] w-full px-4 py-2.5 rounded-lg text-sm font-medium bg-[var(--color-accent)] text-[#1a1a1a] hover:opacity-90 transition-opacity cursor-pointer"
           >
-            View Help
+            {s.welcome.viewHelp}
           </button>
           <button
             onClick={dismiss}
             className="min-h-[44px] w-full px-4 py-2.5 rounded-lg text-sm font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-bg-hover)] transition-colors cursor-pointer"
           >
-            Get started
+            {s.welcome.getStarted}
           </button>
         </div>
       </div>

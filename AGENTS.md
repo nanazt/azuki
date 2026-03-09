@@ -50,6 +50,7 @@ Discord music bot with web dashboard. Rust workspace backend (6 crates) + React 
 
 - **Supported locales**: `"ko"` (default) and `"en"` only. Always validate with allowlist.
 - **No frameworks** — pure TS/Rust constant objects. No react-i18next, no rust-i18n.
+- **Korean is the source of truth**: Write Korean strings first, then translate to English. Key structure and wording are designed around Korean.
 
 **Frontend:**
 - Translation files: `frontend/src/locales/ko.ts` (source-of-truth type), `en.ts`, `index.ts`

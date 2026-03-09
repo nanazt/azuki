@@ -3,6 +3,7 @@ import { Loader2, X, Upload } from "lucide-react";
 import clsx from "clsx";
 import { api } from "../../../lib/api";
 import { useToast } from "../../../hooks/useToast";
+import { useLocale, t } from "../../../hooks/useLocale";
 import type { DroppedFileUpload } from "../../../hooks/useFileDrop";
 import type { UploadResponse } from "../../../lib/types";
 
@@ -21,7 +22,10 @@ function uploadViaFilePicker(file: File): Promise<UploadResponse> {
     headers: { "X-Requested-With": "XMLHttpRequest" },
   }).then(async (res) => {
     if (res.status === 401) {
-      window.location.href = "/auth/login";
+      const path = window.location.pathname;
+      if (!path.startsWith("/login") && !path.startsWith("/auth")) {
+        window.location.href = "/auth/login";
+      }
       throw new Error("unauthorized");
     }
     if (!res.ok) {
@@ -33,6 +37,8 @@ function uploadViaFilePicker(file: File): Promise<UploadResponse> {
 }
 
 export function UploadMetadataModal({ file, onClose }: Props) {
+  useLocale();
+  const s = t();
   const { showToast } = useToast();
   const [title, setTitle] = useState("");
   const [artist, setArtist] = useState("");
@@ -53,11 +59,14 @@ export function UploadMetadataModal({ file, onClose }: Props) {
       if (result.artist) setArtist(result.artist);
 
       if (result.duplicate) {
-        showToast("File already uploaded", "info");
+        showToast(t().uploadModal.fileAlreadyUploaded, "info");
         api.addTrackToQueue(result.track_id).then(
-          () => showToast("Added to queue", "success"),
+          () => showToast(t().toast.addedToQueue, "success"),
           (err) =>
-            showToast(err instanceof Error ? err.message : "Failed", "error"),
+            showToast(
+              err instanceof Error ? err.message : t().toast.failed,
+              "error",
+            ),
         );
         onClose();
       }
@@ -116,7 +125,7 @@ export function UploadMetadataModal({ file, onClose }: Props) {
           setUploading(false);
           setUploadFailed(true);
           showToast(
-            err instanceof Error ? err.message : "Upload failed",
+            err instanceof Error ? err.message : t().toast.failed,
             "error",
           );
         },
@@ -132,7 +141,7 @@ export function UploadMetadataModal({ file, onClose }: Props) {
     try {
       const result = uploadResultRef.current;
       if (!result) {
-        showToast("Upload not complete", "error");
+        showToast(s.uploadModal.uploadNotComplete, "error");
         setSubmitting(false);
         return;
       }
@@ -154,10 +163,10 @@ export function UploadMetadataModal({ file, onClose }: Props) {
 
       // Add to queue
       await api.addTrackToQueue(result.track_id);
-      showToast("Added to queue", "success");
+      showToast(s.toast.addedToQueue, "success");
     } catch (err) {
       showToast(
-        err instanceof Error ? err.message : "Failed to add to queue",
+        err instanceof Error ? err.message : s.toast.failedToAddToQueue,
         "error",
       );
     } finally {
@@ -179,12 +188,12 @@ export function UploadMetadataModal({ file, onClose }: Props) {
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--color-border)]">
           <h2 className="text-base font-semibold text-[var(--color-text)]">
-            Upload to Queue
+            {s.uploadModal.title}
           </h2>
           <button
             onClick={onClose}
             className="p-1.5 text-[var(--color-text-tertiary)] hover:text-[var(--color-text)] transition-colors touch-manipulation"
-            aria-label="Close"
+            aria-label={s.uploadModal.close}
           >
             <X size={18} />
           </button>
@@ -194,7 +203,7 @@ export function UploadMetadataModal({ file, onClose }: Props) {
         <div className="px-5 py-4 space-y-4" onKeyDown={handleKeyDown}>
           <div>
             <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1.5">
-              Title
+              {s.uploadModal.titleLabel}
             </label>
             <input
               ref={titleRef}
@@ -207,13 +216,13 @@ export function UploadMetadataModal({ file, onClose }: Props) {
                 "text-[var(--color-text)] placeholder:text-[var(--color-text-tertiary)]",
                 "outline-none focus:border-[var(--color-accent)] transition-colors",
               )}
-              placeholder="Track title"
+              placeholder={s.uploadModal.titlePlaceholder}
             />
           </div>
 
           <div>
             <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1.5">
-              Artist
+              {s.uploadModal.artistLabel}
             </label>
             <input
               type="text"
@@ -225,7 +234,7 @@ export function UploadMetadataModal({ file, onClose }: Props) {
                 "text-[var(--color-text)] placeholder:text-[var(--color-text-tertiary)]",
                 "outline-none focus:border-[var(--color-accent)] transition-colors",
               )}
-              placeholder="Artist name"
+              placeholder={s.uploadModal.artistPlaceholder}
             />
           </div>
 
@@ -237,14 +246,14 @@ export function UploadMetadataModal({ file, onClose }: Props) {
           {uploadFailed && (
             <div className="flex items-center gap-3 p-3 rounded-lg bg-[var(--color-bg-tertiary)] border border-[var(--color-border)]">
               <p className="text-xs text-[var(--color-text-secondary)] flex-1">
-                Drag-and-drop upload failed. Select the file manually to retry.
+                {s.uploadModal.retryMessage}
               </p>
               <button
                 onClick={handleRetryClick}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md bg-[var(--color-accent)] text-[#1a1a1a] hover:opacity-90 transition-colors touch-manipulation shrink-0"
               >
                 <Upload size={12} />
-                Select File
+                {s.uploadModal.selectFile}
               </button>
               <input
                 ref={retryInputRef}
@@ -263,7 +272,7 @@ export function UploadMetadataModal({ file, onClose }: Props) {
             onClick={onClose}
             className="px-4 py-2 text-sm text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors touch-manipulation min-h-[44px] sm:min-h-0"
           >
-            Cancel
+            {s.common.cancel}
           </button>
           <button
             onClick={handleSubmit}
@@ -279,10 +288,10 @@ export function UploadMetadataModal({ file, onClose }: Props) {
             {uploading || submitting ? (
               <span className="flex items-center gap-2">
                 <Loader2 size={14} className="animate-spin" />
-                {uploading ? "Uploading..." : "Adding..."}
+                {uploading ? s.uploadModal.uploading : s.uploadModal.adding}
               </span>
             ) : (
-              "Add to Queue"
+              s.uploadModal.addToQueue
             )}
           </button>
         </div>

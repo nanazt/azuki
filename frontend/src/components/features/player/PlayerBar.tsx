@@ -383,7 +383,7 @@ export function PlayerBar({ onToggleQueue, queueDrawerOpen }: PlayerBarProps) {
               ? "text-[var(--color-text)] cursor-pointer"
               : "text-[var(--color-text-tertiary)] opacity-50 cursor-default",
           )}
-          aria-label={isPlaying ? "Pause" : "Play"}
+          aria-label={isPlaying ? s.player.pause : s.player.play}
         >
           {isPlaying ? <Pause size={22} /> : <Play size={22} />}
         </button>
@@ -396,7 +396,7 @@ export function PlayerBar({ onToggleQueue, queueDrawerOpen }: PlayerBarProps) {
               ? "text-[var(--color-text-secondary)] cursor-pointer"
               : "text-[var(--color-text-tertiary)] opacity-50 cursor-default",
           )}
-          aria-label="Skip"
+          aria-label={s.player.skip}
         >
           <SkipForward size={20} />
         </button>

@@ -6,6 +6,7 @@ import { CSS } from "@dnd-kit/utilities";
 import type { QueueEntry } from "../../../lib/types";
 import { Avatar } from "../../ui/Avatar";
 import { TrackThumbnail } from "../../ui/TrackThumbnail";
+import { t } from "../../../hooks/useLocale";
 
 interface QueueItemProps {
   entry: QueueEntry;
@@ -115,7 +116,9 @@ export const QueueItemContent = forwardRef<
             {track.title}
           </div>
           <div className="flex items-center gap-1 text-xs text-[var(--color-text-secondary)] min-w-0">
-            <span className="truncate">{track.artist ?? "Unknown artist"}</span>
+            <span className="truncate">
+              {track.artist ?? t().common.unknownArtist}
+            </span>
             {added_by?.username && (
               <>
                 <span className="text-[var(--color-text-tertiary)] flex-shrink-0">
@@ -145,7 +148,7 @@ export const QueueItemContent = forwardRef<
                 "hover:text-[var(--color-text)] hover:bg-[var(--color-bg-tertiary)]",
                 "transition-all duration-100 cursor-pointer touch-manipulation",
               )}
-              aria-label={`Play ${track.title} now`}
+              aria-label={t().queue.playNow.replace("{title}", track.title)}
             >
               <Play size={14} fill="currentColor" />
             </button>
@@ -157,7 +160,10 @@ export const QueueItemContent = forwardRef<
               "hover:text-[var(--color-danger)] hover:bg-[var(--color-bg-tertiary)]",
               "transition-all duration-100 cursor-pointer touch-manipulation",
             )}
-            aria-label={`Remove ${track.title} from queue`}
+            aria-label={t().queue.removeFromQueue.replace(
+              "{title}",
+              track.title,
+            )}
           >
             <X size={14} />
           </button>

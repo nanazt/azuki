@@ -1,4 +1,5 @@
 import { usePlayerStore } from "../../../stores/playerStore";
+import { t } from "../../../hooks/useLocale";
 
 export function VideoPlayer() {
   const playState = usePlayerStore((s) => s.playState);
@@ -11,7 +12,7 @@ export function VideoPlayer() {
   if (!youtubeId || !YOUTUBE_ID_RE.test(youtubeId)) {
     return (
       <div className="flex items-center justify-center w-full aspect-video bg-[var(--color-bg-secondary)] rounded-lg text-[var(--color-text-tertiary)] text-sm">
-        No video available
+        {t().video.noVideoAvailable}
       </div>
     );
   }
@@ -22,7 +23,7 @@ export function VideoPlayer() {
     <div className="w-full aspect-video rounded-lg overflow-hidden bg-black">
       <iframe
         src={embedUrl}
-        title="YouTube video player"
+        title={t().video.youtubePlayer}
         sandbox="allow-scripts allow-same-origin allow-presentation"
         allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture"
         referrerPolicy="no-referrer"

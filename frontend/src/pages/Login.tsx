@@ -16,7 +16,7 @@ export function Login() {
             azuki
           </h1>
           <p className="text-sm text-[var(--color-text-tertiary)] text-center">
-            {s.login.tagline}
+            {s.welcome.subtitle}
           </p>
         </div>
 
