@@ -14,18 +14,17 @@ export const en: Translations = {
 
   home: {
     nowPlaying: "Now Playing",
-    nothingPlaying: "Nothing playing right now",
-    nothingPlayingDescription:
-      "Search for a track or pick from your history below.",
+    nothingPlaying: "Nothing is playing",
+    nothingPlayingDescription: "Search or pick a track from the history below",
     recentlyPlayed: "Recently Played",
-    noHistory: "No history yet.",
+    noHistory: "No history yet",
   },
 
   search: {
-    placeholder: "Search for music\u2026",
-    searchForMusic: "Search for music",
+    placeholder: "Search music\u2026",
+    searchForMusic: "Search Music",
     searchPrompt: "Search for songs, artists, or URLs",
-    noResults: "No results found",
+    noResults: "No results",
     noResultsHint: "Try a different search term or source",
     youtube: "YouTube",
     historySource: "History",
@@ -41,7 +40,9 @@ export const en: Translations = {
     upNext: "Up Next",
     empty: "Queue is empty",
     downloading: "Downloading",
-    searchForMusic: "Search for music",
+    searchForMusic: "Search Music",
+    playNow: "Play {title} now",
+    removeFromQueue: "Remove {title} from queue",
   },
 
   player: {
@@ -57,15 +58,15 @@ export const en: Translations = {
     toggleQueue: "Toggle queue",
     enableVolumeBoost: "Enable volume boost",
     disableVolumeBoost: "Disable volume boost",
-    volumeBoostOn: "Volume boost on (0-100%)",
-    volumeBoostOff: "Volume boost off (0-10%)",
-    defaultVolume: "Default Volume",
+    volumeBoostOn: "Volume boost on (0\u2013100%)",
+    volumeBoostOff: "Volume boost off (0\u201310%)",
+    defaultVolume: "Default volume",
   },
 
   settings: {
     title: "Settings",
     account: "Account",
-    discordConnected: "Discord connected",
+    discordConnected: "Connected to Discord",
     logOut: "Log out",
     appearance: "Appearance",
     theme: "Theme",
@@ -74,44 +75,44 @@ export const en: Translations = {
     system: "System",
     server: "Server",
     defaultVolume: "Default Volume",
-    defaultVolumeDescription: "Applied to new tracks without a saved volume.",
+    defaultVolumeDescription: "Applied to new tracks without a saved volume",
     volume: "Volume",
     saving: "Saving",
     saved: "Saved",
     defaultVoiceChannel: "Default Voice Channel",
     defaultVoiceChannelDescription:
-      "Bot will auto-join this channel when playing from the web.",
+      "The bot will auto-join this channel when playing from the web",
     noneManualJoinOnly: "None \u2014 manual join only",
     available: "{n} available",
     noVoiceChannels:
-      "No voice channels available \u2014 bot may not be connected yet.",
+      "No voice channels available \u2014 the bot may not be connected yet",
     ytdlp: "yt-dlp",
     currentVersion: "Current version",
-    notInstalled: "not installed",
+    notInstalled: "Not installed",
     usingSystemYtdlp: "Using system yt-dlp from PATH",
     checkForUpdates: "Check for updates",
     latestVersion: "Latest version",
-    updateTo: "Update to {version}",
+    updateTo: "Update to {version}?",
     upToDate: "Up to date",
     youtubeApi: "YouTube API",
     apiKey: "API Key",
-    notSet: "not set",
+    notSet: "Not set",
     enterNewApiKey: "Enter new API key",
     save: "Save",
-    apiKeySaved: "API key saved successfully",
+    apiKeySaved: "API key saved",
     historyChannel: "History Channel",
     historyChannelDescription:
-      "Track history embeds will be posted to this channel.",
+      "Track history embeds will be posted to this channel",
     noneDisabled: "None \u2014 disabled",
     noTextChannels:
-      "No text channels available \u2014 bot may not be connected yet.",
+      "No text channels available \u2014 the bot may not be connected yet",
     timezone: "Timezone",
-    timezoneDescription: "Used for stats heatmap and trend date grouping.",
+    timezoneDescription: "Used for stats heatmap and trend date grouping",
     comingSoon: "Coming soon",
     help: "Help",
     language: "Language",
     botLanguage: "Bot Language",
-    botLanguageDescription: "Language used for Discord bot responses.",
+    botLanguageDescription: "Language used for Discord bot responses",
   },
 
   help: {
@@ -124,24 +125,24 @@ export const en: Translations = {
       settings: "Settings",
     },
     commands: {
-      play: "Play immediately if idle, add to queue if playing",
-      pause: "Pause",
-      resume: "Resume playback",
-      skip: "Skip to next track",
-      now: "Show currently playing track",
-      volume: "Adjust volume",
-      loop: "Set loop mode",
+      play: "Plays immediately if idle, adds to queue if playing",
+      pause: "Pauses playback",
+      resume: "Resumes playback",
+      skip: "Skips to the next track",
+      now: "Shows the currently playing track",
+      volume: "Adjusts the volume",
+      loop: "Sets the loop mode",
     },
     features: {
       home: "Recent play history and quick access",
-      search: "Add tracks from YouTube search or play history",
-      player: "Play/pause, skip, seek, volume, loop mode",
-      history: "View play history, re-add to queue",
-      uploads: "Upload audio files, edit metadata",
+      search: "Find tracks from YouTube or play history",
+      player: "Control music playback",
+      history: "View play history and re-add to queue",
+      uploads: "View uploaded files and edit metadata",
       dragAndDrop: "Upload audio files via drag and drop",
       pasteToPlay: "Paste a link to add to queue",
       stats: "Heatmap, trends, top tracks & artists",
-      settings: "Theme, language, and other preferences",
+      settings: "Theme, language, and more",
     },
     featureLabels: {
       home: "Home",
@@ -164,19 +165,18 @@ export const en: Translations = {
   },
 
   login: {
-    tagline: "Your Discord music bot, now on the web.",
     continueWithDiscord: "Continue with Discord",
-    serverMembersOnly: "Only members of the server can log in.",
+    serverMembersOnly: "Only server members can log in",
   },
 
   history: {
     title: "History",
-    empty: "No play history yet.",
+    empty: "No play history",
     emptyAction: "Start listening!",
     newTrackPlayed: "New track played \u2014 click to refresh",
     unknownArtist: "Unknown artist",
     add: "Add",
-    adding: "Adding\u2026",
+    adding: "Adding",
     tracksCount: "{n} tracks",
     loadMore: "Load more",
     loadingMoreTracks: "Loading more tracks",
@@ -186,7 +186,7 @@ export const en: Translations = {
   uploads: {
     title: "Uploads",
     uploadedTracks: "{n} uploaded tracks",
-    empty: "No uploaded files yet",
+    empty: "No uploaded files",
     emptyHint: "Drag and drop audio files to upload",
     unknownArtist: "Unknown artist",
     addToQueue: "Add to queue",
@@ -201,7 +201,7 @@ export const en: Translations = {
 
   stats: {
     title: "Stats",
-    empty: "No listening history yet.",
+    empty: "No listening history yet",
     emptyAction: "Start listening!",
     failedToLoad: "Failed to load stats",
     retry: "Retry",
@@ -262,14 +262,14 @@ export const en: Translations = {
     updateFailed: "Update failed",
     failed: "Failed",
     addToQueue: "Add to queue",
-    apiKeySaved: "API key saved successfully",
+    apiKeySaved: "API key saved",
     failedToSave: "Failed to save",
     failedToCheckForUpdates: "Failed to check for updates",
   },
 
   status: {
-    reconnecting: "Reconnecting\u2026",
-    loading: "Loading...",
+    reconnecting: "Reconnecting",
+    loading: "Loading",
   },
 
   error: {
@@ -281,6 +281,31 @@ export const en: Translations = {
 
   upload: {
     dropToUpload: "Drop to upload",
+    dropFileHere: "Drop file here",
+    supportedFormats: "MP3, FLAC, OGG, WAV, AAC, M4A, MP4, WebM",
+    orSelectFile: "Or select file",
+  },
+
+  uploadModal: {
+    title: "Upload to Queue",
+    titleLabel: "Title",
+    artistLabel: "Artist",
+    titlePlaceholder: "Track title",
+    artistPlaceholder: "Artist name",
+    addToQueue: "Add to Queue",
+    uploading: "Uploading\u2026",
+    adding: "Adding\u2026",
+    close: "Close",
+    fileAlreadyUploaded: "File already uploaded",
+    uploadNotComplete: "Upload not complete",
+    retryMessage: "Upload failed \u2014 please select the file manually",
+    selectFile: "Select File",
+  },
+
+  welcome: {
+    subtitle: "A subtitle is a subtitle",
+    viewHelp: "View Help",
+    getStarted: "Get Started",
   },
 
   time: {
@@ -288,6 +313,11 @@ export const en: Translations = {
     minutesAgo: "{n}m ago",
     hoursAgo: "{n}h ago",
     daysAgo: "{n}d ago",
+  },
+
+  video: {
+    noVideoAvailable: "No video available",
+    youtubePlayer: "YouTube video player",
   },
 
   common: {
