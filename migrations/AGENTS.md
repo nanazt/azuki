@@ -10,7 +10,7 @@ SQLite database migration files managed by sqlx. Applied automatically at startu
 
 | File | Description |
 |------|-------------|
-| `001_initial.sql` | Core schema: users, tracks, play_history, playlists, playlist_tracks, favorites, lyrics_cache |
+| `001_initial.sql` | Core schema: users, tracks, play_history, playlists, playlist_tracks, favorites |
 | `002_app_config.sql` | App configuration KV table for setup wizard |
 | `003_user_preferences.sql` | User preferences table (theme, volume) |
 | `004_volume_refactor.sql` | Volume column refactoring |

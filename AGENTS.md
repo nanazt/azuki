@@ -4,7 +4,7 @@
 
 ## Purpose
 
-Discord music bot with web dashboard. Rust workspace backend (6 crates) + React frontend. Supports YouTube playback, queue management, lyrics, file uploads, and real-time WebSocket sync. Bilingual UI (Korean/English).
+Discord music bot with web dashboard. Rust workspace backend (6 crates) + React frontend. Supports YouTube playback, queue management, file uploads, and real-time WebSocket sync. Bilingual UI (Korean/English).
 
 ## Key Files
 

@@ -4,14 +4,14 @@
 # azuki-media
 
 ## Purpose
-Media services: yt-dlp subprocess wrapper for YouTube downloads, URL detection and resolution, metadata extraction, file-based media store with cache management, file upload handling, and lrclib lyrics fetching.
+Media services: yt-dlp subprocess wrapper for YouTube downloads, URL detection and resolution, metadata extraction, file-based media store with cache management, and file upload handling.
 
 ## Key Files
 
 | File | Description |
 |------|-------------|
 | `Cargo.toml` | Media dependencies (reqwest, tokio, sha2) |
-| `src/lib.rs` | Re-exports: `MediaStore`, `YtDlp`, `LyricsService`, `UrlDetector`, etc. |
+| `src/lib.rs` | Re-exports: `MediaStore`, `YtDlp`, `UrlDetector`, etc. |
 | `src/ytdlp.rs` | yt-dlp subprocess wrapper for audio extraction |
 | `src/ytdlp_updater.rs` | Automatic yt-dlp binary self-update |
 | `src/youtube.rs` | YouTube URL resolution and playlist expansion |

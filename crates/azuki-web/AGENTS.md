@@ -29,7 +29,7 @@ Axum web server providing REST API, Discord OAuth2 authentication, WebSocket hub
 |------|-------------|
 | `mod.rs` | Router assembly, route registration |
 | `player.rs` | Player control endpoints (play, pause, skip, seek, volume, loop mode) |
-| `content.rs` | Track search, YouTube resolve, file upload, lyrics |
+| `content.rs` | Track search, YouTube resolve, file upload |
 | `queues.rs` | Queue management endpoints (add, remove, reorder, clear) |
 | `stats.rs` | Play statistics, charts, top tracks/artists |
 | `preferences.rs` | User preferences CRUD (theme, locale, volume) |

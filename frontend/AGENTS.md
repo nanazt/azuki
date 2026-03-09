@@ -5,7 +5,7 @@
 
 ## Purpose
 
-React SPA web dashboard for azuki. Spotify-style player UI with queue, search, file uploads, lyrics, stats, and bilingual support (Korean/English).
+React SPA web dashboard for azuki. Spotify-style player UI with queue, search, file uploads, stats, and bilingual support (Korean/English).
 
 ## Key Files
 

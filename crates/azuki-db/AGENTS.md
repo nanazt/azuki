@@ -13,7 +13,7 @@ Database layer for SQLite via sqlx. Provides connection pool, migrations, models
 | `Cargo.toml` | DB dependencies (sqlx, serde, chrono) |
 | `src/lib.rs` | `create_pool()`, `run_migrations()`, `DbError`/`DbResult` types |
 | `src/config.rs` | App config CRUD: `load_config`, `save_config`, `is_configured`, `REQUIRED_KEYS` |
-| `src/models.rs` | Data models (User, Track, PlayHistory, LyricsCache, UserPreferences, QueueItem) |
+| `src/models.rs` | Data models (User, Track, PlayHistory, UserPreferences, QueueItem) |
 
 ## Subdirectories
 
