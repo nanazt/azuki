@@ -31,6 +31,7 @@ import { api } from "../../../lib/api";
 import { QueueItem, QueueItemContent } from "./QueueItem";
 import { usePlayer } from "../../../hooks/usePlayer";
 import { useToast } from "../../../hooks/useToast";
+import { useLocale, t } from "../../../hooks/useLocale";
 import { Avatar } from "../../ui/Avatar";
 import { TrackThumbnail } from "../../ui/TrackThumbnail";
 
@@ -39,6 +40,8 @@ interface QueuePanelProps {
 }
 
 export function QueuePanel({ onOpenSearch }: QueuePanelProps) {
+  useLocale();
+  const s = t();
   const { showToast } = useToast();
   const { moveInQueue, playAt, skip } = usePlayer();
   const playState = usePlayerStore((s) => s.playState);
@@ -93,10 +96,10 @@ export function QueuePanel({ onOpenSearch }: QueuePanelProps) {
     async (position: number) => {
       try {
         await api.removeFromQueue(position);
-        showToast("Removed from queue", "success");
+        showToast(t().toast.removedFromQueue, "success");
       } catch (err) {
         console.error("Failed to remove from queue", err);
-        showToast("Failed to remove from queue", "error");
+        showToast(t().toast.failedToRemoveFromQueue, "error");
       }
     },
     [showToast],
@@ -108,7 +111,7 @@ export function QueuePanel({ onOpenSearch }: QueuePanelProps) {
         await playAt(position);
       } catch (err) {
         console.error("Failed to play from queue", err);
-        showToast("Failed to play track", "error");
+        showToast(t().toast.failedToPlayTrack, "error");
       }
     },
     [playAt, showToast],
@@ -119,7 +122,7 @@ export function QueuePanel({ onOpenSearch }: QueuePanelProps) {
       await skip();
     } catch (err) {
       console.error("Failed to skip track", err);
-      showToast("Failed to skip track", "error");
+      showToast(t().toast.failedToSkipTrack, "error");
     }
   }, [skip, showToast]);
 
@@ -128,7 +131,7 @@ export function QueuePanel({ onOpenSearch }: QueuePanelProps) {
       <div className="flex items-center gap-2 px-4 py-3 border-b border-[var(--color-border)]">
         <ListMusic size={16} className="text-[var(--color-text-secondary)]" />
         <span className="text-sm font-semibold text-[var(--color-text)]">
-          Queue
+          {s.queue.title}
         </span>
       </div>
 
@@ -138,7 +141,7 @@ export function QueuePanel({ onOpenSearch }: QueuePanelProps) {
           <div className="mb-3">
             <div className="px-4 py-1">
               <span className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">
-                Now Playing
+                {s.queue.nowPlaying}
               </span>
             </div>
             <div className="flex items-center gap-3 px-3 py-2 mx-1 rounded-lg bg-[var(--color-bg-tertiary)] group">
@@ -196,7 +199,7 @@ export function QueuePanel({ onOpenSearch }: QueuePanelProps) {
           <div className="mb-3">
             <div className="px-4 py-1">
               <span className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-tertiary)]">
-                Downloading
+                {s.queue.downloading}
               </span>
             </div>
             <div className="px-3 space-y-1">
@@ -212,7 +215,7 @@ export function QueuePanel({ onOpenSearch }: QueuePanelProps) {
           <div>
             <div className="px-4 py-1 flex items-center gap-2">
               <span className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-tertiary)]">
-                Up Next
+                {s.queue.upNext}
               </span>
             </div>
             <DndContext
@@ -257,7 +260,7 @@ export function QueuePanel({ onOpenSearch }: QueuePanelProps) {
               className="text-[var(--color-text-tertiary)]"
             />
             <p className="text-sm text-[var(--color-text-secondary)]">
-              Queue is empty
+              {s.queue.empty}
             </p>
             {onOpenSearch && (
               <button
@@ -265,7 +268,7 @@ export function QueuePanel({ onOpenSearch }: QueuePanelProps) {
                 className="flex items-center gap-1.5 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors cursor-pointer"
               >
                 <Search size={12} />
-                Search for music
+                {s.queue.searchForMusic}
               </button>
             )}
           </div>

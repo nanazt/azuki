@@ -1,8 +1,11 @@
 import { usePlayerStore } from "../../stores/playerStore";
+import { useLocale, t } from "../../hooks/useLocale";
 
 export function ConnectionStatus() {
-  const connected = usePlayerStore((s) => s.connected);
-  const hasConnected = usePlayerStore((s) => s.hasConnected);
+  useLocale();
+  const s = t();
+  const connected = usePlayerStore((st) => st.connected);
+  const hasConnected = usePlayerStore((st) => st.hasConnected);
 
   const show = hasConnected && !connected;
 
@@ -18,7 +21,9 @@ export function ConnectionStatus() {
           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-warning opacity-75" />
           <span className="relative inline-flex rounded-full h-2 w-2 bg-warning" />
         </span>
-        <span className="text-xs font-medium text-warning">Reconnecting…</span>
+        <span className="text-xs font-medium text-warning">
+          {s.status.reconnecting}
+        </span>
       </div>
     </div>
   );

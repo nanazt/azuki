@@ -18,6 +18,7 @@ import { Slider } from "../../ui/Slider";
 import { TrackThumbnail } from "../../ui/TrackThumbnail";
 import { Skeleton } from "../../ui/Skeleton";
 import { formatTime } from "../../../lib/utils";
+import { useLocale, t } from "../../../hooks/useLocale";
 
 interface PlayerBarProps {
   onToggleQueue?: () => void;
@@ -25,6 +26,8 @@ interface PlayerBarProps {
 }
 
 export function PlayerBar({ onToggleQueue, queueDrawerOpen }: PlayerBarProps) {
+  useLocale();
+  const s = t();
   const {
     playState,
     volume,
@@ -178,7 +181,7 @@ export function PlayerBar({ onToggleQueue, queueDrawerOpen }: PlayerBarProps) {
                   ? "text-[var(--color-text-secondary)] hover:text-[var(--color-text)] cursor-pointer hover:bg-[var(--color-bg-hover)]"
                   : "text-[var(--color-text-tertiary)] opacity-30 cursor-default",
               )}
-              aria-label="Previous"
+              aria-label={s.player.previous}
             >
               <SkipBack size={18} />
             </button>
@@ -191,7 +194,7 @@ export function PlayerBar({ onToggleQueue, queueDrawerOpen }: PlayerBarProps) {
                   ? "bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] cursor-pointer"
                   : "bg-[var(--color-accent)] opacity-40 cursor-default",
               )}
-              aria-label={isPlaying ? "Pause" : "Play"}
+              aria-label={isPlaying ? s.player.pause : s.player.play}
             >
               {isPlaying ? (
                 <Pause size={20} fill="currentColor" />
@@ -208,7 +211,7 @@ export function PlayerBar({ onToggleQueue, queueDrawerOpen }: PlayerBarProps) {
                   ? "text-[var(--color-text-secondary)] hover:text-[var(--color-text)] cursor-pointer hover:bg-[var(--color-bg-hover)]"
                   : "text-[var(--color-text-tertiary)] opacity-30 cursor-default",
               )}
-              aria-label="Skip"
+              aria-label={s.player.skip}
             >
               <SkipForward size={18} />
             </button>
@@ -223,7 +226,7 @@ export function PlayerBar({ onToggleQueue, queueDrawerOpen }: PlayerBarProps) {
                     ? "bg-[var(--color-accent)]/20 text-[var(--color-text)] hover:bg-[var(--color-bg-hover)] cursor-pointer"
                     : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-bg-hover)] cursor-pointer",
               )}
-              aria-label={`Loop: ${loopMode}`}
+              aria-label={s.player.loop.replace("{mode}", loopMode)}
             >
               {loopIcon()}
             </button>
@@ -247,7 +250,7 @@ export function PlayerBar({ onToggleQueue, queueDrawerOpen }: PlayerBarProps) {
                   }
                 }}
                 className="text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors cursor-pointer"
-                aria-label={volume === 0 ? "Unmute" : "Mute"}
+                aria-label={volume === 0 ? s.player.unmute : s.player.mute}
               >
                 {volume === 0 ? <VolumeX size={16} /> : <Volume2 size={16} />}
               </button>
@@ -257,7 +260,7 @@ export function PlayerBar({ onToggleQueue, queueDrawerOpen }: PlayerBarProps) {
                 max={volumeSliderMax}
                 onChange={handleVolumeChange}
                 className="w-24"
-                aria-label="Volume"
+                aria-label={s.player.volume}
               />
               <span
                 className={clsx(
@@ -284,13 +287,13 @@ export function PlayerBar({ onToggleQueue, queueDrawerOpen }: PlayerBarProps) {
                 )}
                 aria-label={
                   effectiveBoost
-                    ? "Disable volume boost"
-                    : "Enable volume boost"
+                    ? s.player.disableVolumeBoost
+                    : s.player.enableVolumeBoost
                 }
                 title={
                   effectiveBoost
-                    ? "Volume boost on (0-100%)"
-                    : "Volume boost off (0-10%)"
+                    ? s.player.volumeBoostOn
+                    : s.player.volumeBoostOff
                 }
               >
                 <ChevronUp size={14} />
@@ -305,7 +308,7 @@ export function PlayerBar({ onToggleQueue, queueDrawerOpen }: PlayerBarProps) {
                     ? "bg-[var(--color-accent)]/20 text-[var(--color-text)] hover:bg-[var(--color-bg-hover)]"
                     : "text-[var(--color-text-tertiary)] hover:text-[var(--color-text)] hover:bg-[var(--color-bg-hover)]",
                 )}
-                aria-label="Toggle queue"
+                aria-label={s.player.toggleQueue}
               >
                 <ListMusic size={18} />
               </button>
@@ -333,7 +336,7 @@ export function PlayerBar({ onToggleQueue, queueDrawerOpen }: PlayerBarProps) {
             }}
             onChangeEnd={handleSeekEnd}
             className="flex-1"
-            aria-label="Seek"
+            aria-label={s.player.seek}
           />
           <span className="text-xs text-[var(--color-text-tertiary)] w-10 tabular-nums">
             {track ? formatTime(duration) : "--:--"}

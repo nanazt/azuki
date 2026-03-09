@@ -2,6 +2,7 @@ import { useEffect, useRef, useCallback } from "react";
 import { usePlayerStore } from "../stores/playerStore";
 import { useDownloadStore } from "../stores/downloadStore";
 import { useToast } from "./useToast";
+import { t } from "./useLocale";
 import type { SeqEvent } from "../lib/types";
 
 export function useWebSocket() {
@@ -225,7 +226,7 @@ export function useWebSocket() {
         break;
       case "download_failed":
         useDownloadStore.getState().failDownload(ev.download_id, ev.error);
-        showToastRef.current(ev.error ?? "Failed to add to queue", "error");
+        showToastRef.current(ev.error ?? t().toast.failedToAddToQueue, "error");
         setTimeout(
           () => useDownloadStore.getState().removeDownload(ev.download_id),
           3000,

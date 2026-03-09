@@ -1,3 +1,5 @@
+use std::sync::atomic::AtomicU8;
+
 use serenity::all::{
     ButtonStyle, Colour, CreateActionRow, CreateButton, CreateEmbed, CreateEmbedAuthor,
     CreateEmbedFooter, CreateSelectMenu, CreateSelectMenuKind, CreateSelectMenuOption, Timestamp,
@@ -8,17 +10,19 @@ use azuki_player::TrackInfo;
 use crate::commands::format_duration;
 
 pub fn build_track_embed(
+    locale: &AtomicU8,
     track: &TrackInfo,
     volume: u8,
     display_name: &str,
     thumbnail_url: Option<&str>,
 ) -> CreateEmbed {
+    let m = crate::messages::get(locale);
     let mut embed = CreateEmbed::new()
         .title(&track.title)
         .url(&track.source_url)
         .color(embed_color(&track.source_type))
-        .field("⏱️ 재생 시간", format_duration(track.duration_ms), true)
-        .field("🔊 소리 크기", format!("{volume} / 100"), true)
+        .field(m.embed_duration, format_duration(track.duration_ms), true)
+        .field(m.embed_volume, format!("{volume} / 100"), true)
         .footer(CreateEmbedFooter::new(format!(
             "{} • {}",
             source_label(&track.source_type),
@@ -37,15 +41,20 @@ pub fn build_track_embed(
     embed
 }
 
-pub fn build_play_button(track_id: &str) -> CreateActionRow {
+pub fn build_play_button(locale: &AtomicU8, track_id: &str) -> CreateActionRow {
+    let m = crate::messages::get(locale);
     CreateActionRow::Buttons(vec![
         CreateButton::new(format!("play:{track_id}"))
-            .label("재생하기")
+            .label(m.embed_play_button)
             .style(ButtonStyle::Success),
     ])
 }
 
-pub fn build_search_select(results: &[(String, String, String, String)]) -> CreateActionRow {
+pub fn build_search_select(
+    locale: &AtomicU8,
+    results: &[(String, String, String, String)],
+) -> CreateActionRow {
+    let m = crate::messages::get(locale);
     // results: Vec of (youtube_id, title, artist, duration_str)
     let options: Vec<CreateSelectMenuOption> = results
         .iter()
@@ -59,7 +68,7 @@ pub fn build_search_select(results: &[(String, String, String, String)]) -> Crea
 
     CreateActionRow::SelectMenu(
         CreateSelectMenu::new("ss:search", CreateSelectMenuKind::String { options })
-            .placeholder("Select a track to play"),
+            .placeholder(m.select_track),
     )
 }
 

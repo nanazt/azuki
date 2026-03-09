@@ -9,11 +9,13 @@ use crate::{ApiError, WebState};
 #[derive(Serialize)]
 pub struct PreferencesResponse {
     pub theme: String,
+    pub locale: String,
 }
 
 #[derive(Deserialize)]
 pub struct UpdatePreferences {
     pub theme: Option<String>,
+    pub locale: Option<String>,
 }
 
 async fn get_preferences(
@@ -23,7 +25,10 @@ async fn get_preferences(
     let user_id = extract_user_id(&jar, &state).await?;
     let prefs = azuki_db::queries::preferences::get_user_preferences(&state.db, &user_id).await?;
 
-    Ok(Json(PreferencesResponse { theme: prefs.theme }))
+    Ok(Json(PreferencesResponse {
+        theme: prefs.theme,
+        locale: prefs.locale,
+    }))
 }
 
 async fn update_preferences(
@@ -36,6 +41,7 @@ async fn update_preferences(
     let current = azuki_db::queries::preferences::get_user_preferences(&state.db, &user_id).await?;
 
     let theme = body.theme.as_deref().unwrap_or(&current.theme);
+    let locale = body.locale.as_deref().unwrap_or(&current.locale);
 
     if !matches!(theme, "dark" | "light" | "system") {
         return Err(ApiError::BadRequest(
@@ -43,10 +49,18 @@ async fn update_preferences(
         ));
     }
 
-    let prefs =
-        azuki_db::queries::preferences::upsert_user_preferences(&state.db, &user_id, theme).await?;
+    if !matches!(locale, "ko" | "en") {
+        return Err(ApiError::BadRequest("locale must be ko or en".into()));
+    }
 
-    Ok(Json(PreferencesResponse { theme: prefs.theme }))
+    let prefs =
+        azuki_db::queries::preferences::upsert_user_preferences(&state.db, &user_id, theme, locale)
+            .await?;
+
+    Ok(Json(PreferencesResponse {
+        theme: prefs.theme,
+        locale: prefs.locale,
+    }))
 }
 
 #[derive(Serialize)]

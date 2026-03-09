@@ -247,6 +247,15 @@ async fn run_normal(config: Config, pool: SqlitePool) -> anyhow::Result<()> {
         .unwrap_or(0);
     let history_channel_id = Arc::new(AtomicU64::new(history_channel_id));
 
+    // Bot locale cache
+    let bot_locale_val = azuki_db::config::get_config(&pool, "bot_locale")
+        .await
+        .ok()
+        .flatten()
+        .map(|v| azuki_bot::messages::locale_to_u8(&v))
+        .unwrap_or(0); // default: ko
+    let bot_locale = Arc::new(std::sync::atomic::AtomicU8::new(bot_locale_val));
+
     // WebEvent broadcast channel
     let (web_tx, _) = broadcast::channel::<azuki_web::events::WebSeqEvent>(128);
     let active_downloads: Arc<DashMap<String, azuki_web::events::DownloadStatus>> =
@@ -279,9 +288,10 @@ async fn run_normal(config: Config, pool: SqlitePool) -> anyhow::Result<()> {
         active_downloads: Arc::clone(&active_downloads),
         download_tx,
         history_channel_id: Arc::clone(&history_channel_id),
+        bot_locale: Arc::clone(&bot_locale),
     };
 
-    // Http watch channel for embed sending
+    // Http watch channel for embed sending for embed sending
     let (http_tx, http_rx) = tokio::sync::watch::channel::<Option<Arc<serenity::all::Http>>>(None);
 
     // Bot state
@@ -296,6 +306,7 @@ async fn run_normal(config: Config, pool: SqlitePool) -> anyhow::Result<()> {
         text_channels: Arc::clone(&text_channels),
         http_tx,
         history_channel_id: Arc::clone(&history_channel_id),
+        locale: Arc::clone(&bot_locale),
     });
 
     // Spawn services
@@ -349,6 +360,7 @@ async fn run_normal(config: Config, pool: SqlitePool) -> anyhow::Result<()> {
     let bridge_db = pool.clone();
     let bridge_guild_id = serenity::all::GuildId::new(config.discord_guild_id);
     let bridge_http_rx = http_rx;
+    let bridge_locale = Arc::clone(&bot_locale);
     let seq_counter = Arc::new(AtomicU64::new(0));
     tokio::spawn({
         let seq = Arc::clone(&seq_counter);
@@ -434,9 +446,9 @@ async fn run_normal(config: Config, pool: SqlitePool) -> anyhow::Result<()> {
                                                     });
 
                                                     let embed = azuki_bot::embed::build_track_embed(
-                                                        track, track.volume, &display_name, thumbnail_url.as_deref(),
+                                                        &bridge_locale, track, track.volume, &display_name, thumbnail_url.as_deref(),
                                                     );
-                                                    let button = azuki_bot::embed::build_play_button(&track.id);
+                                                    let button = azuki_bot::embed::build_play_button(&bridge_locale, &track.id);
                                                     let msg = serenity::all::CreateMessage::new()
                                                         .embed(embed)
                                                         .components(vec![button]);
@@ -500,8 +512,8 @@ async fn run_normal(config: Config, pool: SqlitePool) -> anyhow::Result<()> {
                                             let thumbnail_url = web_base_url.as_ref().map(|base| {
                                                 format!("{base}/media/thumbnails/{}.jpg", track.id)
                                             });
-                                            let embed = azuki_bot::embed::build_track_embed(track, volume, display_name, thumbnail_url.as_deref());
-                                            let button = azuki_bot::embed::build_play_button(&track.id);
+                                            let embed = azuki_bot::embed::build_track_embed(&bridge_locale, track, volume, display_name, thumbnail_url.as_deref());
+                                            let button = azuki_bot::embed::build_play_button(&bridge_locale, &track.id);
                                             let edit = serenity::all::EditMessage::new()
                                                 .embed(embed)
                                                 .components(vec![button]);
@@ -564,8 +576,8 @@ async fn run_normal(config: Config, pool: SqlitePool) -> anyhow::Result<()> {
                                 let thumbnail_url = web_base_url.as_ref().map(|base| {
                                     format!("{base}/media/thumbnails/{}.jpg", track.id)
                                 });
-                                let embed = azuki_bot::embed::build_track_embed(track, volume, display_name, thumbnail_url.as_deref());
-                                let button = azuki_bot::embed::build_play_button(&track.id);
+                                let embed = azuki_bot::embed::build_track_embed(&bridge_locale, track, volume, display_name, thumbnail_url.as_deref());
+                                let button = azuki_bot::embed::build_play_button(&bridge_locale, &track.id);
                                 let edit = serenity::all::EditMessage::new()
                                     .embed(embed)
                                     .components(vec![button]);

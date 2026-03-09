@@ -2,6 +2,8 @@ import { useEffect, useState, useRef } from "react";
 import { api } from "../lib/api";
 import { useAuthStore } from "../stores/authStore";
 import { useTheme } from "../hooks/useTheme";
+import { useLocale, setLocale, t } from "../hooks/useLocale";
+import type { Locale } from "../locales";
 import { Skeleton } from "../components/ui/Skeleton";
 import { Slider } from "../components/ui/Slider";
 import { Select } from "../components/ui";
@@ -35,6 +37,7 @@ function SegmentedControl({
   value: string;
   onChange: (value: string) => void;
 }) {
+  const s = t();
   return (
     <div className="flex rounded-lg overflow-hidden border border-[var(--color-border)]">
       {options.map((opt) => (
@@ -42,7 +45,7 @@ function SegmentedControl({
           key={opt.value}
           onClick={() => !opt.disabled && onChange(opt.value)}
           disabled={opt.disabled}
-          title={opt.disabled ? "Coming soon" : undefined}
+          title={opt.disabled ? s.settings.comingSoon : undefined}
           className={clsx(
             "flex-1 py-2.5 min-h-[44px] text-sm font-medium transition-colors",
             value === opt.value
@@ -61,6 +64,8 @@ function SegmentedControl({
 }
 
 export function Settings() {
+  const locale = useLocale();
+  const s = t();
   const logout = useAuthStore((s) => s.logout);
   const isAdmin = useAuthStore((s) => s.isAdmin);
   const { theme, setTheme } = useTheme();
@@ -120,6 +125,11 @@ export function Settings() {
   const [savingTz, setSavingTz] = useState(false);
   const [tzSaved, setTzSaved] = useState(false);
 
+  // Bot locale state
+  const [botLocale, setBotLocale] = useState("ko");
+  const [savingBotLocale, setSavingBotLocale] = useState(false);
+  const [botLocaleSaved, setBotLocaleSaved] = useState(false);
+
   const [me, setMe] = useState<{
     id: string;
     username: string;
@@ -163,6 +173,10 @@ export function Settings() {
       .getTimezone()
       .then((data) => setTimezone(data.timezone))
       .catch(() => {});
+    api
+      .getBotLocale()
+      .then((data) => setBotLocale(data.locale))
+      .catch(() => {});
   }, []);
 
   const handleCheck = async () => {
@@ -172,8 +186,9 @@ export function Settings() {
       const result = await api.checkYtdlpUpdate();
       setLatest(result);
     } catch (e) {
+      const s = t();
       setAdminError(
-        e instanceof Error ? e.message : "Failed to check for updates",
+        e instanceof Error ? e.message : s.toast.failedToCheckForUpdates,
       );
     } finally {
       setChecking(false);
@@ -190,7 +205,8 @@ export function Settings() {
       );
       setLatest(null);
     } catch (e) {
-      setAdminError(e instanceof Error ? e.message : "Update failed");
+      const s = t();
+      setAdminError(e instanceof Error ? e.message : s.toast.updateFailed);
     } finally {
       setUpdating(false);
     }
@@ -218,13 +234,13 @@ export function Settings() {
           size={20}
           className="text-[var(--color-text-secondary)]"
         />
-        Settings
+        {s.settings.title}
       </h1>
 
       {/* ACCOUNT */}
       <section className="flex flex-col gap-4">
         <h2 className="text-sm font-semibold text-[var(--color-text-secondary)] uppercase tracking-wide">
-          Account
+          {s.settings.account}
         </h2>
         <div className="rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border)] p-4 flex flex-col gap-4">
           {/* User info row */}
@@ -247,7 +263,7 @@ export function Settings() {
                 {me?.username ?? "Unknown"}
               </div>
               <div className="text-xs text-[var(--color-text-tertiary)]">
-                Discord connected
+                {s.settings.discordConnected}
               </div>
             </div>
             {/* Desktop logout button */}
@@ -261,7 +277,7 @@ export function Settings() {
               ) : (
                 <LogOut size={16} />
               )}
-              Log out
+              {s.settings.logOut}
             </button>
           </div>
           {/* Mobile logout button */}
@@ -275,7 +291,7 @@ export function Settings() {
             ) : (
               <LogOut size={16} />
             )}
-            Log out
+            {s.settings.logOut}
           </button>
           {/* Mobile help link */}
           <Link
@@ -283,7 +299,7 @@ export function Settings() {
             className="md:hidden flex items-center gap-3 min-h-[44px] px-3 py-2 rounded-lg text-sm text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover)] transition-colors"
           >
             <HelpCircle size={16} />
-            <span className="flex-1">Help</span>
+            <span className="flex-1">{s.settings.help}</span>
             <ChevronRight
               size={16}
               className="text-[var(--color-text-tertiary)]"
@@ -295,20 +311,34 @@ export function Settings() {
       {/* APPEARANCE */}
       <section className="flex flex-col gap-4">
         <h2 className="text-sm font-semibold text-[var(--color-text-secondary)] uppercase tracking-wide">
-          Appearance
+          {s.settings.appearance}
         </h2>
         <div className="rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border)] p-4 flex flex-col gap-3">
           <span className="text-sm text-[var(--color-text-secondary)]">
-            Theme
+            {s.settings.theme}
           </span>
           <SegmentedControl
             options={[
-              { value: "dark", label: "Dark" },
-              { value: "light", label: "Light" },
-              { value: "system", label: "System" },
+              { value: "dark", label: s.settings.dark },
+              { value: "light", label: s.settings.light },
+              { value: "system", label: s.settings.system },
             ]}
             value={theme}
             onChange={setTheme}
+          />
+        </div>
+        {/* Language */}
+        <div className="rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border)] p-4 flex flex-col gap-3">
+          <span className="text-sm text-[var(--color-text-secondary)]">
+            {s.settings.language}
+          </span>
+          <SegmentedControl
+            options={[
+              { value: "ko", label: "\ud55c\uad6d\uc5b4" },
+              { value: "en", label: "English" },
+            ]}
+            value={locale}
+            onChange={(v) => setLocale(v as Locale)}
           />
         </div>
       </section>
@@ -317,8 +347,67 @@ export function Settings() {
       {isAdmin && (
         <section className="flex flex-col gap-4">
           <h2 className="text-sm font-semibold text-[var(--color-text-secondary)] uppercase tracking-wide">
-            Server
+            {s.settings.server}
           </h2>
+
+          {/* Bot Language */}
+          <div className="rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border)] p-4 flex flex-col gap-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-medium text-[var(--color-text)] flex items-center gap-2">
+                <Globe
+                  size={16}
+                  className="text-[var(--color-text-secondary)]"
+                />
+                {s.settings.botLanguage}
+              </h3>
+              <span
+                className={clsx(
+                  "flex items-center gap-1.5 text-xs transition-opacity duration-300",
+                  savingBotLocale
+                    ? "opacity-100 text-[var(--color-text-tertiary)]"
+                    : botLocaleSaved
+                      ? "opacity-100 text-[var(--color-success)]"
+                      : "opacity-0 pointer-events-none",
+                )}
+                aria-live="polite"
+              >
+                {savingBotLocale ? (
+                  <>
+                    <Loader2 size={12} className="animate-spin" />
+                    {s.settings.saving}
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle size={12} />
+                    {s.settings.saved}
+                  </>
+                )}
+              </span>
+            </div>
+            <p className="text-xs text-[var(--color-text-tertiary)] -mt-1">
+              {s.settings.botLanguageDescription}
+            </p>
+            <SegmentedControl
+              options={[
+                { value: "ko", label: "\ud55c\uad6d\uc5b4" },
+                { value: "en", label: "English" },
+              ]}
+              value={botLocale}
+              onChange={async (v) => {
+                setBotLocale(v);
+                setSavingBotLocale(true);
+                setBotLocaleSaved(false);
+                try {
+                  await api.setBotLocale(v);
+                  setBotLocaleSaved(true);
+                  setTimeout(() => setBotLocaleSaved(false), 2000);
+                } catch {
+                } finally {
+                  setSavingBotLocale(false);
+                }
+              }}
+            />
+          </div>
 
           {/* Default Volume */}
           <div className="rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border)] p-4 flex flex-col gap-4">
@@ -328,7 +417,7 @@ export function Settings() {
                   size={16}
                   className="text-[var(--color-text-secondary)]"
                 />
-                Default Volume
+                {s.settings.defaultVolume}
               </h3>
               <span
                 className={clsx(
@@ -344,23 +433,23 @@ export function Settings() {
                 {savingBotVolume ? (
                   <>
                     <Loader2 size={12} className="animate-spin" />
-                    Saving
+                    {s.settings.saving}
                   </>
                 ) : (
                   <>
                     <CheckCircle size={12} />
-                    Saved
+                    {s.settings.saved}
                   </>
                 )}
               </span>
             </div>
             <p className="text-xs text-[var(--color-text-tertiary)] -mt-1">
-              Applied to new tracks without a saved volume.
+              {s.settings.defaultVolumeDescription}
             </p>
             <div className="flex flex-col gap-3">
               <div className="flex items-center justify-between">
                 <span className="text-sm text-[var(--color-text-secondary)]">
-                  Volume
+                  {s.settings.volume}
                 </span>
                 <span className="text-sm font-mono text-[var(--color-text)]">
                   {botDefaultVolume}
@@ -398,11 +487,14 @@ export function Settings() {
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-medium text-[var(--color-text)] flex items-center gap-2">
                 <Mic size={16} className="text-[var(--color-text-secondary)]" />
-                Default Voice Channel
+                {s.settings.defaultVoiceChannel}
                 {voiceChannels.length > 0 && (
                   <span className="flex items-center gap-1 text-xs font-normal text-[var(--color-text-tertiary)]">
                     <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-success)] inline-block" />
-                    {voiceChannels.length} available
+                    {s.settings.available.replace(
+                      "{n}",
+                      String(voiceChannels.length),
+                    )}
                   </span>
                 )}
               </h3>
@@ -421,19 +513,19 @@ export function Settings() {
                 {savingVoice ? (
                   <>
                     <Loader2 size={12} className="animate-spin" />
-                    Saving
+                    {s.settings.saving}
                   </>
                 ) : (
                   <>
                     <CheckCircle size={12} />
-                    Saved
+                    {s.settings.saved}
                   </>
                 )}
               </span>
             </div>
 
             <p className="text-xs text-[var(--color-text-tertiary)] -mt-1">
-              Bot will auto-join this channel when playing from the web.
+              {s.settings.defaultVoiceChannelDescription}
             </p>
 
             {voiceChannels.length > 0 ? (
@@ -453,19 +545,19 @@ export function Settings() {
                   }
                 }}
                 options={[
-                  { value: "", label: "None — manual join only" },
+                  { value: "", label: s.settings.noneManualJoinOnly },
                   ...voiceChannels.map((ch) => ({
                     value: ch.id,
                     label: ch.name,
                   })),
                 ]}
-                placeholder="None — manual join only"
+                placeholder={s.settings.noneManualJoinOnly}
               />
             ) : (
               <div className="flex items-center gap-2 py-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-text-tertiary)] inline-block flex-shrink-0" />
                 <p className="text-xs text-[var(--color-text-tertiary)]">
-                  No voice channels available — bot may not be connected yet.
+                  {s.settings.noVoiceChannels}
                 </p>
               </div>
             )}
@@ -474,21 +566,21 @@ export function Settings() {
           {/* yt-dlp */}
           <div className="rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border)] p-4 flex flex-col gap-4">
             <h3 className="text-sm font-medium text-[var(--color-text)]">
-              yt-dlp
+              {s.settings.ytdlp}
             </h3>
 
             <div className="flex items-center justify-between">
               <span className="text-sm text-[var(--color-text-secondary)]">
-                Current version
+                {s.settings.currentVersion}
               </span>
               <span className="font-mono text-sm text-[var(--color-text)]">
-                {info?.current_version ?? "not installed"}
+                {info?.current_version ?? s.settings.notInstalled}
               </span>
             </div>
 
             {info && !info.managed && info.current_version && (
               <p className="text-xs text-[var(--color-text-tertiary)]">
-                Using system yt-dlp from PATH
+                {s.settings.usingSystemYtdlp}
               </p>
             )}
 
@@ -498,13 +590,13 @@ export function Settings() {
               className="min-h-[44px] px-4 py-2 rounded-lg text-sm font-medium border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-bg-hover)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer"
             >
               {checking && <Loader2 size={16} className="animate-spin" />}
-              Check for updates
+              {s.settings.checkForUpdates}
             </button>
 
             {latest && (
               <div className="flex items-center justify-between">
                 <span className="text-sm text-[var(--color-text-secondary)]">
-                  Latest version
+                  {s.settings.latestVersion}
                 </span>
                 <span className="font-mono text-sm text-[var(--color-text)]">
                   {latest.latest_version}
@@ -520,12 +612,15 @@ export function Settings() {
                   className="min-h-[44px] px-4 py-2 rounded-lg text-sm font-medium bg-[var(--color-accent)] text-[#1a1a1a] hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer"
                 >
                   {updating && <Loader2 size={16} className="animate-spin" />}
-                  Update to {latest.latest_version}
+                  {s.settings.updateTo.replace(
+                    "{version}",
+                    latest.latest_version,
+                  )}
                 </button>
               ) : (
                 <div className="flex items-center gap-2 text-sm text-[var(--color-success)]">
                   <CheckCircle size={16} />
-                  Up to date
+                  {s.settings.upToDate}
                 </div>
               ))}
 
@@ -540,15 +635,15 @@ export function Settings() {
           {/* YouTube API */}
           <div className="rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border)] p-4 flex flex-col gap-4">
             <h3 className="text-sm font-medium text-[var(--color-text)]">
-              YouTube API
+              {s.settings.youtubeApi}
             </h3>
 
             <div className="flex items-center justify-between">
               <span className="text-sm text-[var(--color-text-secondary)]">
-                API Key
+                {s.settings.apiKey}
               </span>
               <span className="font-mono text-sm text-[var(--color-text)]">
-                {ytInfo?.has_key ? ytInfo.key_masked : "not set"}
+                {ytInfo?.has_key ? ytInfo.key_masked : s.settings.notSet}
               </span>
             </div>
 
@@ -561,7 +656,7 @@ export function Settings() {
                   setKeySaved(false);
                   setYtError(null);
                 }}
-                placeholder="Enter new API key"
+                placeholder={s.settings.enterNewApiKey}
                 className="flex-1 min-h-[44px] px-3 py-2 rounded-lg text-sm bg-[var(--color-bg)] border border-[var(--color-border)] text-[var(--color-text)] placeholder:text-[var(--color-text-tertiary)] outline-none focus:border-[var(--color-accent)]"
               />
               <button
@@ -576,8 +671,9 @@ export function Settings() {
                     const info = await api.getYoutubeInfo();
                     setYtInfo(info);
                   } catch (e) {
+                    const s = t();
                     setYtError(
-                      e instanceof Error ? e.message : "Failed to save",
+                      e instanceof Error ? e.message : s.toast.failedToSave,
                     );
                   } finally {
                     setSavingKey(false);
@@ -587,14 +683,14 @@ export function Settings() {
                 className="min-h-[44px] px-4 py-2 rounded-lg text-sm font-medium bg-[var(--color-accent)] text-[#1a1a1a] hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 cursor-pointer"
               >
                 {savingKey && <Loader2 size={16} className="animate-spin" />}
-                Save
+                {s.settings.save}
               </button>
             </div>
 
             {keySaved && (
               <div className="flex items-center gap-2 text-sm text-[var(--color-success)]">
                 <CheckCircle size={16} className="flex-shrink-0" />
-                API key saved successfully
+                {s.settings.apiKeySaved}
               </div>
             )}
 
@@ -614,11 +710,14 @@ export function Settings() {
                   size={16}
                   className="text-[var(--color-text-secondary)]"
                 />
-                History Channel
+                {s.settings.historyChannel}
                 {textChannels.length > 0 && (
                   <span className="flex items-center gap-1 text-xs font-normal text-[var(--color-text-tertiary)]">
                     <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-success)] inline-block" />
-                    {textChannels.length} available
+                    {s.settings.available.replace(
+                      "{n}",
+                      String(textChannels.length),
+                    )}
                   </span>
                 )}
               </h3>
@@ -636,19 +735,19 @@ export function Settings() {
                 {savingHistory ? (
                   <>
                     <Loader2 size={12} className="animate-spin" />
-                    Saving
+                    {s.settings.saving}
                   </>
                 ) : (
                   <>
                     <CheckCircle size={12} />
-                    Saved
+                    {s.settings.saved}
                   </>
                 )}
               </span>
             </div>
 
             <p className="text-xs text-[var(--color-text-tertiary)] -mt-1">
-              Track history embeds will be posted to this channel.
+              {s.settings.historyChannelDescription}
             </p>
 
             {textChannels.length > 0 ? (
@@ -668,20 +767,20 @@ export function Settings() {
                   }
                 }}
                 options={[
-                  { value: "", label: "None — disabled" },
+                  { value: "", label: s.settings.noneDisabled },
                   ...textChannels.map((ch) => ({
                     value: ch.id,
                     label: ch.name,
                     prefix: "#",
                   })),
                 ]}
-                placeholder="None — disabled"
+                placeholder={s.settings.noneDisabled}
               />
             ) : (
               <div className="flex items-center gap-2 py-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-text-tertiary)] inline-block flex-shrink-0" />
                 <p className="text-xs text-[var(--color-text-tertiary)]">
-                  No text channels available — bot may not be connected yet.
+                  {s.settings.noTextChannels}
                 </p>
               </div>
             )}
@@ -695,7 +794,7 @@ export function Settings() {
                   size={16}
                   className="text-[var(--color-text-secondary)]"
                 />
-                Timezone
+                {s.settings.timezone}
               </h3>
               <span
                 className={clsx(
@@ -711,19 +810,19 @@ export function Settings() {
                 {savingTz ? (
                   <>
                     <Loader2 size={12} className="animate-spin" />
-                    Saving
+                    {s.settings.saving}
                   </>
                 ) : (
                   <>
                     <CheckCircle size={12} />
-                    Saved
+                    {s.settings.saved}
                   </>
                 )}
               </span>
             </div>
 
             <p className="text-xs text-[var(--color-text-tertiary)] -mt-1">
-              Used for stats heatmap and trend date grouping.
+              {s.settings.timezoneDescription}
             </p>
 
             <Select

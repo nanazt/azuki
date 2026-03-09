@@ -44,6 +44,7 @@ pub struct PlayHistory {
 pub struct UserPreferences {
     pub user_id: String,
     pub theme: String,
+    pub locale: String,
     pub updated_at: String,
 }
 

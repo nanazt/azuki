@@ -312,6 +312,48 @@ pub async fn timezone_set(
     Ok(Json(serde_json::json!({ "success": true })))
 }
 
+pub async fn bot_locale_get(
+    jar: CookieJar,
+    State(state): State<WebState>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    extract_admin_id(&jar, &state).await?;
+
+    let locale = match state.bot_locale.load(std::sync::atomic::Ordering::Relaxed) {
+        1 => "en",
+        _ => "ko",
+    };
+
+    Ok(Json(serde_json::json!({ "locale": locale })))
+}
+
+#[derive(serde::Deserialize)]
+pub struct BotLocaleRequest {
+    locale: String,
+}
+
+pub async fn bot_locale_set(
+    jar: CookieJar,
+    State(state): State<WebState>,
+    Json(body): Json<BotLocaleRequest>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    extract_admin_id(&jar, &state).await?;
+
+    if !matches!(body.locale.as_str(), "ko" | "en") {
+        return Err(ApiError::BadRequest("locale must be ko or en".to_string()));
+    }
+
+    azuki_db::config::save_config(&state.db, &[("bot_locale", &body.locale)])
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    let val: u8 = if body.locale == "en" { 1 } else { 0 };
+    state
+        .bot_locale
+        .store(val, std::sync::atomic::Ordering::Relaxed);
+
+    Ok(Json(serde_json::json!({ "success": true })))
+}
+
 pub fn admin_routes() -> axum::Router<WebState> {
     axum::Router::new()
         .route("/api/admin/ytdlp", axum::routing::get(ytdlp_info))
@@ -336,5 +378,9 @@ pub fn admin_routes() -> axum::Router<WebState> {
         .route(
             "/api/admin/timezone",
             axum::routing::get(timezone_get).put(timezone_set),
+        )
+        .route(
+            "/api/admin/bot-locale",
+            axum::routing::get(bot_locale_get).put(bot_locale_set),
         )
 }

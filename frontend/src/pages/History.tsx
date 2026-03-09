@@ -8,6 +8,7 @@ import { formatTime } from "../lib/utils";
 import { useToast } from "../components/ui/Toast";
 import { useInfiniteScroll } from "../hooks/useInfiniteScroll";
 import clsx from "clsx";
+import { useLocale, t } from "../hooks/useLocale";
 
 interface HistoryEntry {
   track: TrackInfo;
@@ -26,14 +27,17 @@ function formatDate(iso: string): string {
   const diffHours = Math.floor(diffMins / 60);
   const diffDays = Math.floor(diffHours / 24);
 
-  if (diffMins < 1) return "just now";
-  if (diffMins < 60) return `${diffMins}m ago`;
-  if (diffHours < 24) return `${diffHours}h ago`;
-  if (diffDays < 7) return `${diffDays}d ago`;
+  const s = t();
+  if (diffMins < 1) return s.time.justNow;
+  if (diffMins < 60) return s.time.minutesAgo.replace("{n}", String(diffMins));
+  if (diffHours < 24) return s.time.hoursAgo.replace("{n}", String(diffHours));
+  if (diffDays < 7) return s.time.daysAgo.replace("{n}", String(diffDays));
   return date.toLocaleDateString();
 }
 
 export function History() {
+  useLocale();
+  const s = t();
   const [hasNewTrack, setHasNewTrack] = useState(false);
   const [isFirstPage, setIsFirstPage] = useState(true);
 
@@ -102,7 +106,7 @@ export function History() {
     try {
       await api.addToQueue(track.source_url);
     } catch {
-      showToast("Failed to add to queue", "error");
+      showToast(t().toast.failedToAddToQueue, "error");
     } finally {
       setAddingIds((prev) => {
         const next = new Set(prev);
@@ -115,7 +119,9 @@ export function History() {
   return (
     <div className="p-4 md:p-6 max-w-3xl mx-auto flex flex-col gap-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-[var(--color-text)]">History</h1>
+        <h1 className="text-xl font-bold text-[var(--color-text)]">
+          {s.history.title}
+        </h1>
       </div>
 
       {loading ? (
@@ -134,10 +140,10 @@ export function History() {
         <div className="flex flex-col items-center gap-3 py-16 text-center">
           <Clock size={40} className="text-[var(--color-text-tertiary)]" />
           <p className="text-[var(--color-text-secondary)]">
-            No play history yet.
+            {s.history.empty}
           </p>
           <p className="text-sm text-[var(--color-text-tertiary)]">
-            Start listening!
+            {s.history.emptyAction}
           </p>
         </div>
       ) : (
@@ -147,7 +153,7 @@ export function History() {
               onClick={handleReload}
               className="w-full py-2 text-sm text-[var(--color-text)] bg-[var(--color-accent)]/10 rounded-lg hover:bg-[var(--color-accent)]/20 transition-colors"
             >
-              New track played — click to refresh
+              {s.history.newTrackPlayed}
             </button>
           )}
           <ul className="flex flex-col">
@@ -167,7 +173,7 @@ export function History() {
                     {entry.track.title}
                   </div>
                   <div className="text-xs text-[var(--color-text-secondary)] truncate">
-                    {entry.track.artist ?? "Unknown artist"}
+                    {entry.track.artist ?? s.history.unknownArtist}
                     <span className="text-[var(--color-text-tertiary)] ml-2">
                       {formatDate(entry.played_at)}
                     </span>
@@ -195,7 +201,9 @@ export function History() {
                   ) : (
                     <Plus size={12} />
                   )}
-                  {addingIds.has(entry.track.id) ? "Adding…" : "Add"}
+                  {addingIds.has(entry.track.id)
+                    ? s.history.adding
+                    : s.history.add}
                 </button>
               </li>
             ))}
@@ -226,7 +234,7 @@ export function History() {
               onClick={loadMore}
               className="sr-only focus:not-sr-only focus:flex focus:justify-center focus:py-3 focus:text-sm focus:text-[var(--color-text-secondary)] focus:underline w-full"
             >
-              Load more
+              {s.history.loadMore}
             </button>
           )}
 
@@ -235,7 +243,7 @@ export function History() {
             <div className="flex items-center gap-3 px-3 py-6">
               <div className="flex-1 h-px bg-[var(--color-border)]" />
               <span className="text-xs text-[var(--color-text-tertiary)] px-2 shrink-0">
-                {items.length} tracks
+                {s.history.tracksCount.replace("{n}", String(items.length))}
               </span>
               <div className="flex-1 h-px bg-[var(--color-border)]" />
             </div>
@@ -243,9 +251,9 @@ export function History() {
 
           {/* Screen reader announcement */}
           <div aria-live="polite" aria-atomic="false" className="sr-only">
-            {loadingMore ? "Loading more tracks" : ""}
+            {loadingMore ? s.history.loadingMoreTracks : ""}
             {!hasMore && items.length > 0
-              ? `All ${items.length} tracks loaded`
+              ? s.history.allTracksLoaded.replace("{n}", String(items.length))
               : ""}
           </div>
         </>

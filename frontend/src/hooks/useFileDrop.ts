@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useToast } from "./useToast";
+import { t } from "./useLocale";
 import type { UploadResponse } from "../lib/types";
 
 const ALLOWED_TYPES = [
@@ -69,18 +70,24 @@ function validateFile(
   showToast: (msg: string, type: "error") => void,
 ): boolean {
   if (file.type && !ALLOWED_TYPES.includes(file.type)) {
-    showToast(`Unsupported file type: ${file.type}`, "error");
+    showToast(
+      t().error.unsupportedFileType.replace("{type}", file.type),
+      "error",
+    );
     return false;
   }
   if (!file.type) {
     const ext = file.name.split(".").pop()?.toLowerCase();
     if (!ext || !ALLOWED_EXTENSIONS.includes(ext)) {
-      showToast("Unsupported file type", "error");
+      showToast(t().error.unsupportedFileTypeGeneric, "error");
       return false;
     }
   }
   if (file.size > MAX_UPLOAD_SIZE_MB * 1024 * 1024) {
-    showToast(`File too large (max ${MAX_UPLOAD_SIZE_MB}MB)`, "error");
+    showToast(
+      t().error.fileTooLarge.replace("{max}", String(MAX_UPLOAD_SIZE_MB)),
+      "error",
+    );
     return false;
   }
   return true;

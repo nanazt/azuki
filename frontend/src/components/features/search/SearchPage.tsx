@@ -5,14 +5,10 @@ import { api } from "../../../lib/api";
 import type { TrackInfo } from "../../../lib/types";
 import { SearchResult } from "./SearchResult";
 import { useToast } from "../../../hooks/useToast";
+import { useLocale, t } from "../../../hooks/useLocale";
 import { useInfiniteScroll } from "../../../hooks/useInfiniteScroll";
 
 type SearchSource = "youtube" | "history";
-
-const SOURCES: { id: SearchSource; label: string }[] = [
-  { id: "youtube", label: "YouTube" },
-  { id: "history", label: "History" },
-];
 
 function SkeletonRow() {
   return (
@@ -27,6 +23,12 @@ function SkeletonRow() {
 }
 
 export function SearchPage() {
+  useLocale();
+  const s = t();
+  const SOURCES: { id: SearchSource; label: string }[] = [
+    { id: "youtube", label: s.search.youtube },
+    { id: "history", label: s.search.historySource },
+  ];
   const { showToast } = useToast();
   const [query, setQuery] = useState("");
   const [source, setSource] = useState<SearchSource>("youtube");
@@ -80,7 +82,7 @@ export function SearchPage() {
         await api.addToQueue(track.source_url);
       } catch (err) {
         console.error("Failed to add to queue", err);
-        showToast("Failed to add to queue", "error");
+        showToast(t().toast.failedToAddToQueue, "error");
       } finally {
         setAddingIds((prev) => {
           const next = new Set(prev);
@@ -108,7 +110,7 @@ export function SearchPage() {
             autoFocus
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search for music…"
+            placeholder={s.search.placeholder}
             className={clsx(
               "w-full pl-9 pr-4 py-2.5 md:py-2 rounded-lg text-base md:text-sm",
               "bg-[var(--color-bg-tertiary)] border border-[var(--color-border)]",
@@ -157,7 +159,7 @@ export function SearchPage() {
           <div className="flex flex-col items-center justify-center gap-2 py-10 text-center">
             <Search size={28} className="text-[var(--color-text-tertiary)]" />
             <p className="text-sm text-[var(--color-text-secondary)]">
-              Search for songs, artists, or URLs
+              {s.search.searchPrompt}
             </p>
           </div>
         )}
@@ -166,10 +168,10 @@ export function SearchPage() {
           <div className="flex flex-col items-center justify-center gap-2 py-10 text-center">
             <Search size={28} className="text-[var(--color-text-tertiary)]" />
             <p className="text-sm text-[var(--color-text-secondary)]">
-              No results found
+              {s.search.noResults}
             </p>
             <p className="text-xs text-[var(--color-text-tertiary)]">
-              Try a different search term or source
+              {s.search.noResultsHint}
             </p>
           </div>
         )}
@@ -204,7 +206,7 @@ export function SearchPage() {
                 onClick={loadMore}
                 className="sr-only focus:not-sr-only focus:flex focus:justify-center focus:py-3 focus:text-sm focus:text-[var(--color-text-secondary)] focus:underline w-full"
               >
-                Load more
+                {s.search.loadMore}
               </button>
             )}
 
@@ -213,7 +215,7 @@ export function SearchPage() {
               <div className="flex items-center gap-3 px-3 py-6">
                 <div className="flex-1 h-px bg-[var(--color-border)]" />
                 <span className="text-xs text-[var(--color-text-tertiary)] px-2 shrink-0">
-                  {results.length} results
+                  {s.search.resultsCount.replace("{n}", String(results.length))}
                 </span>
                 <div className="flex-1 h-px bg-[var(--color-border)]" />
               </div>
@@ -223,9 +225,9 @@ export function SearchPage() {
 
         {/* Screen reader announcement */}
         <div aria-live="polite" aria-atomic="false" className="sr-only">
-          {loadingMore ? "Loading more results" : ""}
+          {loadingMore ? s.search.loadingMoreResults : ""}
           {!hasMore && results.length > 0
-            ? `All ${results.length} results loaded`
+            ? s.search.allResultsLoaded.replace("{n}", String(results.length))
             : ""}
         </div>
       </div>

@@ -6,6 +6,7 @@ import { formatTime } from "../lib/utils";
 import { Skeleton } from "../components/ui/Skeleton";
 import { TrackThumbnail } from "../components/ui/TrackThumbnail";
 import { Music, Radio } from "lucide-react";
+import { useLocale, t } from "../hooks/useLocale";
 
 interface HistoryEntry {
   track: TrackInfo;
@@ -15,6 +16,8 @@ interface HistoryEntry {
 }
 
 export function Home() {
+  useLocale();
+  const s = t();
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const playState = usePlayerStore((s) => s.playState);
@@ -47,7 +50,7 @@ export function Home() {
           <div className="flex-1 min-w-0">
             <p className="text-xs text-[var(--color-text-secondary)] font-semibold uppercase tracking-wide mb-0.5 flex items-center gap-1.5">
               <Radio size={12} />
-              Now Playing
+              {s.home.nowPlaying}
             </p>
             <p className="text-[var(--color-text)] font-semibold truncate">
               {currentTrack.title}
@@ -69,10 +72,10 @@ export function Home() {
           </div>
           <div>
             <p className="font-semibold text-[var(--color-text)]">
-              Nothing playing right now
+              {s.home.nothingPlaying}
             </p>
             <p className="text-sm text-[var(--color-text-tertiary)] mt-1">
-              Search for a track or pick from your history below.
+              {s.home.nothingPlayingDescription}
             </p>
           </div>
         </div>
@@ -81,7 +84,7 @@ export function Home() {
       {/* Recently Played */}
       <section>
         <h2 className="text-lg font-semibold text-[var(--color-text)] mb-4">
-          Recently Played
+          {s.home.recentlyPlayed}
         </h2>
         {loading ? (
           <div className="flex flex-col gap-3">
@@ -97,7 +100,7 @@ export function Home() {
           </div>
         ) : history.length === 0 ? (
           <p className="text-sm text-[var(--color-text-tertiary)]">
-            No history yet.
+            {s.home.noHistory}
           </p>
         ) : (
           <ul className="flex flex-col gap-1">

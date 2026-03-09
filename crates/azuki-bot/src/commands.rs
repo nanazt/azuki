@@ -12,6 +12,12 @@ use tracing::info;
 use azuki_player::{LoopMode, PlayAction, PlayerError, TrackInfo, UserInfo};
 
 use crate::BotState;
+use crate::messages::{self, Messages};
+
+/// Get localized messages for this bot
+fn msg(state: &BotState) -> &'static Messages {
+    messages::get(&state.locale)
+}
 
 fn user_info_from(user: &serenity::all::User) -> UserInfo {
     UserInfo {
@@ -193,6 +199,7 @@ async fn handle_play_inner(
 ) -> Result<(), crate::BotError> {
     let query = get_string_option(cmd, "query").unwrap_or_default();
     let user_info = user_info_from(&cmd.user);
+    let m = msg(state);
 
     let is_url = query.starts_with("http://") || query.starts_with("https://");
 
@@ -256,13 +263,16 @@ async fn handle_play_inner(
             .play_or_enqueue(track_info, user_info)
             .await
             .map_err(crate::BotError::Player)?;
-        let content = play_action_message(action, &meta.title, &meta.source_url);
+        let content = play_action_message(m, action, &meta.title, &meta.source_url);
 
         cmd.edit_response(
             &ctx.http,
             serenity::all::EditInteractionResponse::new()
                 .content(&content)
-                .components(vec![crate::embed::build_play_button(&track_id)]),
+                .components(vec![crate::embed::build_play_button(
+                    &state.locale,
+                    &track_id,
+                )]),
         )
         .await
         .map_err(|e| crate::BotError::Serenity(e.to_string()))?;
@@ -298,8 +308,11 @@ async fn handle_play_inner(
         cmd.edit_response(
             &ctx.http,
             serenity::all::EditInteractionResponse::new()
-                .content("🔍 Select a track:")
-                .components(vec![crate::embed::build_search_select(&select_data)]),
+                .content(format!("🔍 {}", m.select_track))
+                .components(vec![crate::embed::build_search_select(
+                    &state.locale,
+                    &select_data,
+                )]),
         )
         .await
         .map_err(|e| crate::BotError::Serenity(e.to_string()))?;
@@ -323,7 +336,7 @@ async fn handle_pause(
         .pause()
         .await
         .map_err(crate::BotError::Player)?;
-    respond(ctx, cmd, "⏸️ Paused", is_history).await
+    respond(ctx, cmd, msg(state).paused, is_history).await
 }
 
 async fn handle_resume(
@@ -337,7 +350,7 @@ async fn handle_resume(
         .resume()
         .await
         .map_err(crate::BotError::Player)?;
-    respond(ctx, cmd, "▶️ Resumed", is_history).await
+    respond(ctx, cmd, msg(state).resumed, is_history).await
 }
 
 async fn handle_skip(
@@ -346,18 +359,19 @@ async fn handle_skip(
     state: &Arc<BotState>,
     is_history: bool,
 ) -> Result<(), crate::BotError> {
+    let m = msg(state);
     let next = state.player.skip().await.map_err(crate::BotError::Player)?;
     match next {
         Some(track) => {
             respond(
                 ctx,
                 cmd,
-                &format!("⏭️ Skipped → **{}**", track.title),
+                &format!("{} **{}**", m.skipped_to, track.title),
                 is_history,
             )
             .await
         }
-        None => respond(ctx, cmd, "⏭️ Skipped — queue empty", is_history).await,
+        None => respond(ctx, cmd, m.skipped_empty, is_history).await,
     }
 }
 
@@ -384,6 +398,7 @@ async fn handle_now(
     state: &Arc<BotState>,
     is_history: bool,
 ) -> Result<(), crate::BotError> {
+    let m = msg(state);
     let snapshot = state.player.get_state().await;
     match snapshot.state {
         azuki_player::PlayStateInfo::Playing { track, position_ms } => {
@@ -416,7 +431,7 @@ async fn handle_now(
             )
             .await
         }
-        _ => respond(ctx, cmd, "Nothing playing", is_history).await,
+        _ => respond(ctx, cmd, m.nothing_playing, is_history).await,
     }
 }
 
@@ -453,6 +468,7 @@ async fn handle_loop(
     state: &Arc<BotState>,
     is_history: bool,
 ) -> Result<(), crate::BotError> {
+    let m = msg(state);
     let mode_str = get_string_option(cmd, "mode").unwrap_or_default();
     let mode = match mode_str.as_str() {
         "one" => LoopMode::One,
@@ -464,12 +480,12 @@ async fn handle_loop(
         .set_loop(mode)
         .await
         .map_err(crate::BotError::Player)?;
-    let emoji = match mode {
-        LoopMode::Off => "➡️ Loop off",
-        LoopMode::One => "🔂 Loop one",
-        LoopMode::All => "🔁 Loop all",
+    let text = match mode {
+        LoopMode::Off => m.loop_off,
+        LoopMode::One => m.loop_one,
+        LoopMode::All => m.loop_all,
     };
-    respond(ctx, cmd, emoji, is_history).await
+    respond(ctx, cmd, text, is_history).await
 }
 
 // ---------------------------------------------------------------------------
@@ -517,21 +533,21 @@ fn is_history_channel(state: &BotState, channel_id: u64) -> bool {
 }
 
 /// smart play 결과를 메시지로 변환
-fn play_action_message(action: PlayAction, title: &str, url: &str) -> String {
+fn play_action_message(m: &Messages, action: PlayAction, title: &str, url: &str) -> String {
     match action {
-        PlayAction::PlayedNow => format!("[{}]({})\n재생 시작", title, url),
-        PlayAction::Enqueued => format!("[{}]({})\n대기열에 추가됨", title, url),
+        PlayAction::PlayedNow => format!("[{}]({})\n{}", title, url, m.playing_now),
+        PlayAction::Enqueued => format!("[{}]({})\n{}", title, url, m.enqueued),
     }
 }
 
-/// PlayerError → 한국어 메시지
-fn player_error_message(err: &PlayerError) -> &'static str {
+/// PlayerError → localized message
+fn player_error_message(m: &Messages, err: &PlayerError) -> &'static str {
     match err {
-        PlayerError::NoTrack => "재생 중인 곡이 없습니다",
-        PlayerError::InvalidState(_) => "현재 상태에서 실행할 수 없습니다",
-        PlayerError::InvalidPosition => "잘못된 위치입니다",
-        PlayerError::QueueFull => "대기열이 가득 찼습니다",
-        PlayerError::Duplicate => "이미 대기열에 있는 곡입니다",
+        PlayerError::NoTrack => m.no_track,
+        PlayerError::InvalidState(_) => m.invalid_state,
+        PlayerError::InvalidPosition => m.invalid_position,
+        PlayerError::QueueFull => m.queue_full,
+        PlayerError::Duplicate => m.duplicate,
     }
 }
 
@@ -546,13 +562,15 @@ pub async fn handle_smart_play_button(
     state: &Arc<BotState>,
     track_id: &str,
 ) {
+    let m = msg(state);
+
     if track_id.len() != 16 || !track_id.chars().all(|c| c.is_ascii_hexdigit()) {
         let _ = component
             .create_response(
                 &ctx.http,
                 CreateInteractionResponse::Message(
                     CreateInteractionResponseMessage::new()
-                        .content("잘못된 트랙 ID입니다")
+                        .content(m.invalid_track_id)
                         .ephemeral(true),
                 ),
             )
@@ -574,7 +592,7 @@ pub async fn handle_smart_play_button(
                 &ctx.http,
                 CreateInteractionResponse::Message(
                     CreateInteractionResponseMessage::new()
-                        .content("음성 채널에 먼저 접속해주세요")
+                        .content(m.join_voice_first)
                         .ephemeral(true),
                 ),
             )
@@ -590,7 +608,7 @@ pub async fn handle_smart_play_button(
                     &ctx.http,
                     CreateInteractionResponse::Message(
                         CreateInteractionResponseMessage::new()
-                            .content("트랙을 찾을 수 없습니다")
+                            .content(m.track_not_found)
                             .ephemeral(true),
                     ),
                 )
@@ -611,10 +629,8 @@ pub async fn handle_smart_play_button(
             .create_response(
                 &ctx.http,
                 CreateInteractionResponse::Message(
-                    CreateInteractionResponseMessage::new().content(format!(
-                        "🔄 **{}** 다시 다운로드합니다...",
-                        track_info.title
-                    )),
+                    CreateInteractionResponseMessage::new()
+                        .content(format!("{} **{}**", m.re_downloading, track_info.title)),
                 ),
             )
             .await;
@@ -658,16 +674,16 @@ pub async fn handle_smart_play_button(
 
     match action {
         Ok(act) if in_history => {
-            let msg = match act {
-                PlayAction::PlayedNow => "재생 시작",
-                PlayAction::Enqueued => "대기열에 추가됨",
+            let msg_text = match act {
+                PlayAction::PlayedNow => m.playing_now,
+                PlayAction::Enqueued => m.enqueued,
             };
             let _ = component
                 .create_response(
                     &ctx.http,
                     CreateInteractionResponse::Message(
                         CreateInteractionResponseMessage::new()
-                            .content(msg)
+                            .content(msg_text)
                             .ephemeral(true),
                     ),
                 )
@@ -680,11 +696,15 @@ pub async fn handle_smart_play_button(
                     CreateInteractionResponse::Message(
                         CreateInteractionResponseMessage::new()
                             .content(play_action_message(
+                                m,
                                 act,
                                 &track_info.title,
                                 &track_info.source_url,
                             ))
-                            .components(vec![crate::embed::build_play_button(&track_info.id)]),
+                            .components(vec![crate::embed::build_play_button(
+                                &state.locale,
+                                &track_info.id,
+                            )]),
                     ),
                 )
                 .await;
@@ -700,7 +720,7 @@ pub async fn handle_smart_play_button(
                     &ctx.http,
                     CreateInteractionResponse::Message(
                         CreateInteractionResponseMessage::new()
-                            .content(player_error_message(&e))
+                            .content(player_error_message(m, &e))
                             .ephemeral(true),
                     ),
                 )
@@ -715,6 +735,8 @@ pub async fn handle_search_select(
     component: &ComponentInteraction,
     state: &Arc<BotState>,
 ) {
+    let m = msg(state);
+
     let youtube_id = match &component.data.kind {
         ComponentInteractionDataKind::StringSelect { values } => {
             values.first().cloned().unwrap_or_default()
@@ -740,7 +762,7 @@ pub async fn handle_search_select(
                 &ctx.http,
                 CreateInteractionResponse::Message(
                     CreateInteractionResponseMessage::new()
-                        .content("음성 채널에 먼저 접속해주세요")
+                        .content(m.join_voice_first)
                         .ephemeral(true),
                 ),
             )
@@ -769,7 +791,7 @@ pub async fn handle_search_select(
                 &ctx.http,
                 CreateInteractionResponse::Message(
                     CreateInteractionResponseMessage::new()
-                        .content(player_error_message(&PlayerError::Duplicate))
+                        .content(player_error_message(m, &PlayerError::Duplicate))
                         .ephemeral(true),
                 ),
             )
@@ -796,13 +818,16 @@ pub async fn handle_search_select(
 
         match action {
             Ok(act) => {
-                let content = play_action_message(act, &existing.title, &existing.source_url);
+                let content = play_action_message(m, act, &existing.title, &existing.source_url);
                 let _ = component
                     .edit_response(
                         &ctx.http,
                         serenity::all::EditInteractionResponse::new()
                             .content(&content)
-                            .components(vec![crate::embed::build_play_button(&track_id)]),
+                            .components(vec![crate::embed::build_play_button(
+                                &state.locale,
+                                &track_id,
+                            )]),
                     )
                     .await;
             }
@@ -812,7 +837,7 @@ pub async fn handle_search_select(
                     .create_followup(
                         &ctx.http,
                         CreateInteractionResponseFollowup::new()
-                            .content(player_error_message(&e))
+                            .content(player_error_message(m, &e))
                             .ephemeral(true),
                     )
                     .await;
@@ -829,7 +854,7 @@ pub async fn handle_search_select(
         .edit_response(
             &ctx.http,
             serenity::all::EditInteractionResponse::new()
-                .content("재생하는 중...")
+                .content(m.loading)
                 .components(vec![]),
         )
         .await;
@@ -844,7 +869,7 @@ pub async fn handle_search_select(
                 .create_followup(
                     &ctx.http,
                     CreateInteractionResponseFollowup::new()
-                        .content(format!("다운로드 실패: {e}"))
+                        .content(format!("{}: {e}", m.download_failed))
                         .ephemeral(true),
                 )
                 .await;
@@ -903,13 +928,16 @@ pub async fn handle_search_select(
 
     match action {
         Ok(act) => {
-            let content = play_action_message(act, &meta.title, &meta.source_url);
+            let content = play_action_message(m, act, &meta.title, &meta.source_url);
             let _ = component
                 .edit_response(
                     &ctx.http,
                     serenity::all::EditInteractionResponse::new()
                         .content(&content)
-                        .components(vec![crate::embed::build_play_button(&track_id)]),
+                        .components(vec![crate::embed::build_play_button(
+                            &state.locale,
+                            &track_id,
+                        )]),
                 )
                 .await;
         }
@@ -919,7 +947,7 @@ pub async fn handle_search_select(
                 .create_followup(
                     &ctx.http,
                     CreateInteractionResponseFollowup::new()
-                        .content(player_error_message(&e))
+                        .content(player_error_message(m, &e))
                         .ephemeral(true),
                 )
                 .await;
@@ -933,6 +961,8 @@ pub async fn handle_legacy_play(
     state: &Arc<BotState>,
     url: &str,
 ) {
+    let m = msg(state);
+
     // URL validation
     let parsed = match url::Url::parse(url) {
         Ok(u) => u,
@@ -942,7 +972,7 @@ pub async fn handle_legacy_play(
                     &ctx.http,
                     CreateInteractionResponse::Message(
                         CreateInteractionResponseMessage::new()
-                            .content("잘못된 URL입니다")
+                            .content(m.invalid_url)
                             .ephemeral(true),
                     ),
                 )
@@ -959,7 +989,7 @@ pub async fn handle_legacy_play(
                     &ctx.http,
                     CreateInteractionResponse::Message(
                         CreateInteractionResponseMessage::new()
-                            .content("잘못된 URL 형식입니다")
+                            .content(m.invalid_url_scheme)
                             .ephemeral(true),
                     ),
                 )
@@ -982,7 +1012,7 @@ pub async fn handle_legacy_play(
                 &ctx.http,
                 CreateInteractionResponse::Message(
                     CreateInteractionResponseMessage::new()
-                        .content("음성 채널에 먼저 접속해주세요")
+                        .content(m.join_voice_first)
                         .ephemeral(true),
                 ),
             )
@@ -995,7 +1025,7 @@ pub async fn handle_legacy_play(
             &ctx.http,
             CreateInteractionResponse::Message(
                 CreateInteractionResponseMessage::new()
-                    .content("🔄 다운로드 중...")
+                    .content(m.downloading)
                     .ephemeral(true),
             ),
         )

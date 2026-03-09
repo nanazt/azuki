@@ -1,0 +1,124 @@
+use std::sync::atomic::{AtomicU8, Ordering};
+
+pub struct Messages {
+    // play actions
+    pub playing_now: &'static str,
+    pub enqueued: &'static str,
+    pub paused: &'static str,
+    pub resumed: &'static str,
+    pub skipped_to: &'static str,
+    pub skipped_empty: &'static str,
+    pub nothing_playing: &'static str,
+    // player errors
+    pub no_track: &'static str,
+    pub invalid_state: &'static str,
+    pub invalid_position: &'static str,
+    pub queue_full: &'static str,
+    pub duplicate: &'static str,
+    pub join_voice_first: &'static str,
+    pub track_not_found: &'static str,
+    pub invalid_track_id: &'static str,
+    // download/URL
+    pub downloading: &'static str,
+    pub re_downloading: &'static str,
+    pub download_failed: &'static str,
+    pub invalid_url: &'static str,
+    pub invalid_url_scheme: &'static str,
+    pub loading: &'static str,
+    // embed labels
+    pub embed_duration: &'static str,
+    pub embed_volume: &'static str,
+    pub embed_play_button: &'static str,
+    // select menu
+    pub select_track: &'static str,
+    // loop modes
+    pub loop_off: &'static str,
+    pub loop_one: &'static str,
+    pub loop_all: &'static str,
+}
+
+pub static KO: Messages = Messages {
+    playing_now: "재생 시작",
+    enqueued: "대기열에 추가됨",
+    paused: "⏸️ 일시정지",
+    resumed: "▶️ 재생",
+    skipped_to: "⏭️ 건너뛰기 →",
+    skipped_empty: "⏭️ 건너뛰기 — 대기열 비어있음",
+    nothing_playing: "재생 중인 곡이 없습니다",
+    no_track: "재생 중인 곡이 없습니다",
+    invalid_state: "현재 상태에서 실행할 수 없습니다",
+    invalid_position: "잘못된 위치입니다",
+    queue_full: "대기열이 가득 찼습니다",
+    duplicate: "이미 대기열에 있는 곡입니다",
+    join_voice_first: "음성 채널에 먼저 접속해주세요",
+    track_not_found: "트랙을 찾을 수 없습니다",
+    invalid_track_id: "잘못된 트랙 ID입니다",
+    downloading: "🔄 다운로드 중...",
+    re_downloading: "🔄 다시 다운로드합니다...",
+    download_failed: "다운로드 실패",
+    invalid_url: "잘못된 URL입니다",
+    invalid_url_scheme: "잘못된 URL 형식입니다",
+    loading: "재생하는 중...",
+    embed_duration: "⏱️ 재생 시간",
+    embed_volume: "🔊 소리 크기",
+    embed_play_button: "재생하기",
+    select_track: "Select a track to play",
+    loop_off: "➡️ Loop off",
+    loop_one: "🔂 Loop one",
+    loop_all: "🔁 Loop all",
+};
+
+pub static EN: Messages = Messages {
+    playing_now: "Now playing",
+    enqueued: "Added to queue",
+    paused: "⏸️ Paused",
+    resumed: "▶️ Resumed",
+    skipped_to: "⏭️ Skipped →",
+    skipped_empty: "⏭️ Skipped — queue empty",
+    nothing_playing: "Nothing playing",
+    no_track: "Nothing is playing",
+    invalid_state: "Cannot perform this action in current state",
+    invalid_position: "Invalid position",
+    queue_full: "Queue is full",
+    duplicate: "Already in queue",
+    join_voice_first: "Join a voice channel first",
+    track_not_found: "Track not found",
+    invalid_track_id: "Invalid track ID",
+    downloading: "🔄 Downloading...",
+    re_downloading: "🔄 Re-downloading...",
+    download_failed: "Download failed",
+    invalid_url: "Invalid URL",
+    invalid_url_scheme: "Invalid URL scheme",
+    loading: "Loading...",
+    embed_duration: "⏱️ Duration",
+    embed_volume: "🔊 Volume",
+    embed_play_button: "Play",
+    select_track: "Select a track to play",
+    loop_off: "➡️ Loop off",
+    loop_one: "🔂 Loop one",
+    loop_all: "🔁 Loop all",
+};
+
+/// 0 = ko (default), 1 = en
+pub fn get(locale: &AtomicU8) -> &'static Messages {
+    match locale.load(Ordering::Relaxed) {
+        1 => &EN,
+        _ => &KO,
+    }
+}
+
+/// Parse locale string to u8 value
+pub fn locale_to_u8(locale: &str) -> u8 {
+    match locale {
+        "en" => 1,
+        _ => 0, // "ko" or default
+    }
+}
+
+/// Convert u8 locale value to string
+pub fn u8_to_locale(val: u8) -> &'static str {
+    match val {
+        1 => "en",
+        _ => "ko",
+    }
+}

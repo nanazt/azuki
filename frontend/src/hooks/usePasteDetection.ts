@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { useToast } from "./useToast";
+import { t } from "./useLocale";
 import { api } from "../lib/api";
 import { fetchOEmbed, isSupportedOEmbedUrl } from "../lib/oembed";
 
@@ -35,10 +36,10 @@ export function usePasteDetection() {
         removeToast(toastId);
         try {
           await api.addToQueue(text);
-          showToast("Added to queue", "success");
+          showToast(t().toast.addedToQueue, "success");
         } catch (err) {
           showToast(
-            err instanceof Error ? err.message : "Failed to add to queue",
+            err instanceof Error ? err.message : t().toast.failedToAddToQueue,
             "error",
           );
         }
@@ -46,7 +47,7 @@ export function usePasteDetection() {
 
       const toastId = showToast(text, "info", {
         duration: 0,
-        action: { label: "Add to queue", onClick: handleAdd },
+        action: { label: t().toast.addToQueue, onClick: handleAdd },
         richPreview: isOEmbed
           ? { thumbnailUrl: "", title: "", metadata: "", loading: true }
           : undefined,

@@ -5,6 +5,7 @@ import { Skeleton } from "../components/ui/Skeleton";
 import { BarChart2, Disc, Flame, Trophy, Music, Users } from "lucide-react";
 import { TrackThumbnail } from "../components/ui/TrackThumbnail";
 import { useInfiniteScroll } from "../hooks/useInfiniteScroll";
+import { useLocale, t } from "../hooks/useLocale";
 
 // ─── Helpers ───
 
@@ -63,27 +64,44 @@ const HEATMAP_COLORS = {
     "#FF6B8A",
   ],
 };
-const DOW_LABELS = ["Mon", "", "Wed", "", "Fri", "", "Sun"];
-const MONTH_LABELS = [
-  "Jan",
-  "Feb",
-  "Mar",
-  "Apr",
-  "May",
-  "Jun",
-  "Jul",
-  "Aug",
-  "Sep",
-  "Oct",
-  "Nov",
-  "Dec",
-];
+
+function getDowLabels() {
+  const s = t();
+  return [
+    s.stats.dowShort.mon,
+    "",
+    s.stats.dowShort.wed,
+    "",
+    s.stats.dowShort.fri,
+    "",
+    s.stats.dowShort.sun,
+  ];
+}
+
+function getMonthLabels() {
+  const s = t();
+  return [
+    s.stats.months.jan,
+    s.stats.months.feb,
+    s.stats.months.mar,
+    s.stats.months.apr,
+    s.stats.months.may,
+    s.stats.months.jun,
+    s.stats.months.jul,
+    s.stats.months.aug,
+    s.stats.months.sep,
+    s.stats.months.oct,
+    s.stats.months.nov,
+    s.stats.months.dec,
+  ];
+}
 
 function ContributionHeatmap({
   data,
 }: {
   data: { date: string; listened_ms: number }[];
 }) {
+  const s = t();
   const heatmap = HEATMAP_COLORS;
   const containerRef = useRef<HTMLDivElement>(null);
   const [tooltip, setTooltip] = useState<{
@@ -92,6 +110,9 @@ function ContributionHeatmap({
     text: string;
   } | null>(null);
   const [cellSize, setCellSize] = useState(11);
+
+  const DOW_LABELS = getDowLabels();
+  const MONTH_LABELS = getMonthLabels();
 
   // Build 26-week × 7-day grid
   const today = new Date();
@@ -170,7 +191,7 @@ function ContributionHeatmap({
   return (
     <div className="p-5 rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border)] flex flex-col gap-4">
       <h3 className="text-sm font-semibold text-[var(--color-text)]">
-        Listening Activity
+        {s.stats.listeningActivity}
       </h3>
       <div className="relative">
         <div ref={containerRef} className="overflow-hidden">
@@ -269,7 +290,7 @@ function ContributionHeatmap({
         {/* Legend */}
         <div className="flex items-center gap-1.5 justify-end mt-1">
           <span className="text-[10px] text-[var(--color-text-tertiary)]">
-            Less
+            {s.stats.less}
           </span>
           {heatmap.colors.map((c, i) => (
             <div
@@ -283,7 +304,7 @@ function ContributionHeatmap({
             />
           ))}
           <span className="text-[10px] text-[var(--color-text-tertiary)]">
-            More
+            {s.stats.more}
           </span>
         </div>
         {/* Tooltip */}
@@ -311,6 +332,7 @@ function TrendChart({
 }: {
   data: { date: string; play_count: number }[];
 }) {
+  const s = t();
   if (data.length === 0) return null;
 
   const accent = "#FFB7C9";
@@ -342,7 +364,7 @@ function TrendChart({
   return (
     <div className="flex-1 p-5 rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border)] flex flex-col gap-4">
       <h3 className="text-sm font-semibold text-[var(--color-text)]">
-        Last 30 Days
+        {s.stats.last30Days}
       </h3>
       <svg viewBox={`0 0 ${w} ${h + 12}`} className="w-full h-40">
         <defs>
@@ -356,7 +378,7 @@ function TrendChart({
         {points.map((p, i) => (
           <g key={i}>
             <circle cx={p.x} cy={p.y} r="0.8" fill={accent} opacity={0.6} />
-            <title>{`${p.date}: ${p.play_count} plays`}</title>
+            <title>{`${p.date}: ${s.stats.playsCount.replace("{n}", String(p.play_count))}`}</title>
             <rect
               x={p.x - 1.5}
               y={padding}
@@ -364,7 +386,7 @@ function TrendChart({
               height={effectiveH}
               fill="transparent"
             >
-              <title>{`${p.date}: ${p.play_count} plays`}</title>
+              <title>{`${p.date}: ${s.stats.playsCount.replace("{n}", String(p.play_count))}`}</title>
             </rect>
           </g>
         ))}
@@ -388,15 +410,27 @@ function TrendChart({
 
 // ─── DowChart (day-of-week horizontal bars) ───
 
-const DOW_FULL_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+function getDowFullLabels() {
+  const s = t();
+  return [
+    s.stats.dow.mon,
+    s.stats.dow.tue,
+    s.stats.dow.wed,
+    s.stats.dow.thu,
+    s.stats.dow.fri,
+    s.stats.dow.sat,
+    s.stats.dow.sun,
+  ];
+}
 
 function DowChart({ data }: { data: number[] }) {
+  const DOW_FULL_LABELS = getDowFullLabels();
   const max = Math.max(...data, 1);
 
   return (
     <div className="flex-1 p-5 rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border)] flex flex-col gap-4">
       <h3 className="text-sm font-semibold text-[var(--color-text)]">
-        Activity by Day
+        {t().stats.activityByDay}
       </h3>
       <div className="flex flex-col gap-1.5">
         {DOW_FULL_LABELS.map((label, i) => {
@@ -434,6 +468,7 @@ function TrackRow({
   count: number;
   rank: number;
 }) {
+  const s = t();
   return (
     <div className="flex items-center gap-3 py-2">
       <span className="text-xs text-[var(--color-text-secondary)] w-5 text-right flex-shrink-0">
@@ -456,7 +491,7 @@ function TrackRow({
         )}
       </div>
       <span className="text-xs text-[var(--color-text-secondary)] flex-shrink-0">
-        {count} plays
+        {s.stats.playsCount.replace("{n}", String(count))}
       </span>
     </div>
   );
@@ -465,6 +500,7 @@ function TrackRow({
 // ─── ArtistRow ───
 
 function ArtistRow({ artist, rank }: { artist: ArtistStat; rank: number }) {
+  const s = t();
   return (
     <div className="flex items-center gap-3 py-2">
       <span className="text-xs text-[var(--color-text-secondary)] w-5 text-right flex-shrink-0">
@@ -478,12 +514,12 @@ function ArtistRow({ artist, rank }: { artist: ArtistStat; rank: number }) {
           {artist.artist}
         </p>
         <p className="text-xs text-[var(--color-text-secondary)]">
-          {artist.track_count} tracks ·{" "}
+          {s.stats.tracksCount.replace("{n}", String(artist.track_count))} ·{" "}
           {formatDuration(artist.total_listened_ms)}
         </p>
       </div>
       <span className="text-xs text-[var(--color-text-secondary)] flex-shrink-0">
-        {artist.play_count} plays
+        {s.stats.playsCount.replace("{n}", String(artist.play_count))}
       </span>
     </div>
   );
@@ -492,6 +528,8 @@ function ArtistRow({ artist, rank }: { artist: ArtistStat; rank: number }) {
 // ─── Main Stats Page ───
 
 export function Stats() {
+  useLocale();
+  const s = t();
   const [stats, setStats] = useState<StatsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -557,13 +595,13 @@ export function Stats() {
     return (
       <div className="p-6 max-w-3xl mx-auto flex flex-col items-center gap-4 mt-20">
         <p className="text-[var(--color-text-secondary)]">
-          Failed to load stats
+          {s.stats.failedToLoad}
         </p>
         <button
           onClick={fetchStats}
           className="px-4 py-2 rounded-lg bg-[var(--color-accent)] text-[#1a1a1a] text-sm hover:opacity-90 transition-opacity"
         >
-          Retry
+          {s.stats.retry}
         </button>
       </div>
     );
@@ -573,15 +611,15 @@ export function Stats() {
     return (
       <div className="p-4 md:p-6 max-w-3xl mx-auto flex flex-col gap-6">
         <div className="flex items-center justify-between">
-          <h1 className="text-xl font-bold text-[var(--color-text)]">Stats</h1>
+          <h1 className="text-xl font-bold text-[var(--color-text)]">
+            {s.stats.title}
+          </h1>
         </div>
         <div className="flex flex-col items-center gap-3 py-16 text-center">
           <Music size={40} className="text-[var(--color-text-tertiary)]" />
-          <p className="text-[var(--color-text-secondary)]">
-            No listening history yet.
-          </p>
+          <p className="text-[var(--color-text-secondary)]">{s.stats.empty}</p>
           <p className="text-sm text-[var(--color-text-tertiary)]">
-            Start listening!
+            {s.stats.emptyAction}
           </p>
         </div>
       </div>
@@ -592,34 +630,36 @@ export function Stats() {
     <div className="p-4 md:p-6 max-w-3xl mx-auto flex flex-col gap-6 pb-32">
       {/* Title */}
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-[var(--color-text)]">Stats</h1>
+        <h1 className="text-xl font-bold text-[var(--color-text)]">
+          {s.stats.title}
+        </h1>
       </div>
 
       {/* Stat Chips */}
       <div className="flex flex-wrap justify-center gap-3">
         <StatChip
-          label="plays"
+          label={s.stats.plays}
           value={stats.total_plays.toLocaleString()}
           icon={<BarChart2 size={12} />}
         />
         <StatChip
-          label="listened"
+          label={s.stats.listened}
           value={formatListeningTime(stats.total_time_ms)}
           icon={<Music size={12} />}
         />
         <StatChip
-          label="tracks"
+          label={s.stats.tracks}
           value={stats.unique_tracks.toLocaleString()}
           icon={<Disc size={12} />}
         />
         <StatChip
-          label="streak"
+          label={s.stats.streak}
           value={`${stats.streak.current}d`}
           icon={<Flame size={12} />}
         />
         {stats.peak_day && (
           <StatChip
-            label="peak"
+            label={s.stats.peak}
             value={`${stats.peak_day.play_count}`}
             icon={<Trophy size={12} />}
           />
@@ -648,7 +688,7 @@ export function Stats() {
                   : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"
               }`}
             >
-              Top Tracks
+              {s.stats.topTracks}
             </button>
             <button
               onClick={() => setActiveTab("artists")}
@@ -658,7 +698,7 @@ export function Stats() {
                   : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"
               }`}
             >
-              Top Artists
+              {s.stats.topArtists}
             </button>
             {/* Sliding underline */}
             <div

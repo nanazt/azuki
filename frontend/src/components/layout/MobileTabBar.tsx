@@ -1,6 +1,7 @@
 import { NavLink } from "react-router-dom";
 import { Home, Search, ListMusic, Upload, Settings } from "lucide-react";
 import clsx from "clsx";
+import { useLocale, t } from "../../hooks/useLocale";
 
 interface TabItem {
   to: string;
@@ -8,15 +9,18 @@ interface TabItem {
   label: string;
 }
 
-const TABS: TabItem[] = [
-  { to: "/", icon: <Home size={20} />, label: "Home" },
-  { to: "/search", icon: <Search size={20} />, label: "Search" },
-  { to: "/queue", icon: <ListMusic size={20} />, label: "Queue" },
-  { to: "/uploads", icon: <Upload size={20} />, label: "Uploads" },
-  { to: "/settings", icon: <Settings size={20} />, label: "Settings" },
-];
-
 export function MobileTabBar() {
+  useLocale();
+  const s = t();
+
+  const TABS: TabItem[] = [
+    { to: "/", icon: <Home size={20} />, label: s.nav.home },
+    { to: "/search", icon: <Search size={20} />, label: s.nav.search },
+    { to: "/queue", icon: <ListMusic size={20} />, label: s.nav.queue },
+    { to: "/uploads", icon: <Upload size={20} />, label: s.nav.uploads },
+    { to: "/settings", icon: <Settings size={20} />, label: s.nav.settings },
+  ];
+
   return (
     <nav className="fixed bottom-0 left-0 right-0 h-16 z-30 flex items-center bg-[var(--color-bg-secondary)] border-t border-[var(--color-border)]">
       {TABS.map((tab) => (

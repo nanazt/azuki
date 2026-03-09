@@ -12,6 +12,7 @@ import {
 import clsx from "clsx";
 import { Avatar } from "../ui/Avatar";
 import { usePlayerStore } from "../../stores/playerStore";
+import { useLocale, t } from "../../hooks/useLocale";
 
 interface NavItemProps {
   to: string;
@@ -45,6 +46,8 @@ function NavItem({ to, icon, label, indent, end }: NavItemProps) {
 }
 
 export function Sidebar() {
+  useLocale();
+  const s = t();
   const listeners = usePlayerStore((s) => s.listeners);
 
   return (
@@ -58,24 +61,44 @@ export function Sidebar() {
 
       {/* Navigation */}
       <nav className="flex-1 px-2 space-y-1">
-        <NavItem to="/" icon={<Home size={16} />} label="Home" end />
-        <NavItem to="/search" icon={<Search size={16} />} label="Search" />
+        <NavItem to="/" icon={<Home size={16} />} label={s.nav.home} end />
+        <NavItem
+          to="/search"
+          icon={<Search size={16} />}
+          label={s.nav.search}
+        />
 
         {/* Library */}
         <div className="mt-4 space-y-0.5">
-          <NavItem to="/history" icon={<Clock size={16} />} label="History" />
-          <NavItem to="/uploads" icon={<Upload size={16} />} label="Uploads" />
-          <NavItem to="/stats" icon={<BarChart3 size={16} />} label="Stats" />
+          <NavItem
+            to="/history"
+            icon={<Clock size={16} />}
+            label={s.nav.history}
+          />
+          <NavItem
+            to="/uploads"
+            icon={<Upload size={16} />}
+            label={s.nav.uploads}
+          />
+          <NavItem
+            to="/stats"
+            icon={<BarChart3 size={16} />}
+            label={s.nav.stats}
+          />
         </div>
       </nav>
 
       {/* Help & Settings */}
       <div className="px-2 py-2 border-t border-[var(--color-border)] flex-shrink-0">
-        <NavItem to="/help" icon={<HelpCircle size={16} />} label="Help" />
+        <NavItem
+          to="/help"
+          icon={<HelpCircle size={16} />}
+          label={s.nav.help}
+        />
         <NavItem
           to="/settings"
           icon={<Settings size={16} />}
-          label="Settings"
+          label={s.nav.settings}
         />
       </div>
 
@@ -84,7 +107,9 @@ export function Sidebar() {
         <div className="px-4 py-3 border-t border-[var(--color-border)] flex-shrink-0">
           <div className="flex items-center gap-2 text-xs text-[var(--color-text-tertiary)] mb-2">
             <Users size={12} />
-            <span>{listeners.length} listening</span>
+            <span>
+              {s.common.listening.replace("{n}", String(listeners.length))}
+            </span>
           </div>
           <div className="flex items-center gap-1 flex-wrap">
             {listeners.slice(0, 6).map((user) => (

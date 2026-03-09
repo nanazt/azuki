@@ -52,6 +52,7 @@ pub struct WebState {
     pub active_downloads: Arc<DashMap<String, DownloadStatus>>,
     pub download_tx: mpsc::Sender<DownloadRequest>,
     pub history_channel_id: Arc<AtomicU64>,
+    pub bot_locale: Arc<std::sync::atomic::AtomicU8>,
 }
 
 #[derive(Debug, thiserror::Error)]

@@ -11,130 +11,92 @@ import {
   FileAudio,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { useLocale, t } from "../hooks/useLocale";
 
 interface Command {
   name: string;
   args?: string;
-  description?: string;
+  descriptionKey: keyof ReturnType<typeof t>["help"]["commands"];
 }
 
 interface CommandCluster {
-  label: string;
+  labelKey: keyof ReturnType<typeof t>["help"]["commandClusters"];
   commands: Command[];
 }
 
 const commandClusters: CommandCluster[] = [
   {
-    label: "Playback",
+    labelKey: "playback",
     commands: [
-      {
-        name: "play",
-        args: "<query or URL>",
-        description: "대기 중이면 즉시 재생, 재생 중이면 대기열에 추가",
-      },
-      { name: "pause", description: "일시 정지" },
-      { name: "resume", description: "재생 재개" },
-      { name: "skip", description: "다음 곡으로 건너뛰기" },
-      { name: "now", description: "현재 재생 중인 곡 표시" },
+      { name: "play", args: "<query or URL>", descriptionKey: "play" },
+      { name: "pause", descriptionKey: "pause" },
+      { name: "resume", descriptionKey: "resume" },
+      { name: "skip", descriptionKey: "skip" },
+      { name: "now", descriptionKey: "now" },
     ],
   },
   {
-    label: "Settings",
+    labelKey: "settings",
     commands: [
-      { name: "volume", args: "<0–100>", description: "볼륨 조절" },
-      {
-        name: "loop",
-        args: "<off | one | all>",
-        description: "반복 모드 설정",
-      },
+      { name: "volume", args: "<0\u2013100>", descriptionKey: "volume" },
+      { name: "loop", args: "<off | one | all>", descriptionKey: "loop" },
     ],
   },
 ];
 
 interface WebFeature {
   icon: LucideIcon;
-  label: string;
-  description: string;
+  labelKey: keyof ReturnType<typeof t>["help"]["featureLabels"];
+  descriptionKey: keyof ReturnType<typeof t>["help"]["features"];
 }
 
 const webFeatures: WebFeature[] = [
-  {
-    icon: Home,
-    label: "Home",
-    description: "최근 재생 기록과 빠른 접근",
-  },
-  {
-    icon: Search,
-    label: "Search",
-    description: "YouTube 검색 또는 재생 기록에서 곡 추가",
-  },
-  {
-    icon: Play,
-    label: "Player",
-    description: "재생/일시정지, 건너뛰기, 탐색, 볼륨, 반복 모드",
-  },
-  {
-    icon: Clock,
-    label: "History",
-    description: "재생 기록 확인, 다시 대기열에 추가",
-  },
-  {
-    icon: Upload,
-    label: "Uploads",
-    description: "오디오 파일 업로드, 메타데이터 편집",
-  },
-  {
-    icon: FileAudio,
-    label: "Drag & Drop",
-    description: "오디오 파일을 드래그 앤 드롭으로 업로드",
-  },
+  { icon: Home, labelKey: "home", descriptionKey: "home" },
+  { icon: Search, labelKey: "search", descriptionKey: "search" },
+  { icon: Play, labelKey: "player", descriptionKey: "player" },
+  { icon: Clock, labelKey: "history", descriptionKey: "history" },
+  { icon: Upload, labelKey: "uploads", descriptionKey: "uploads" },
+  { icon: FileAudio, labelKey: "dragAndDrop", descriptionKey: "dragAndDrop" },
   {
     icon: ClipboardPaste,
-    label: "Paste to Play",
-    description: "링크를 붙여넣기하면 대기열에 추가",
+    labelKey: "pasteToPlay",
+    descriptionKey: "pasteToPlay",
   },
-  {
-    icon: BarChart3,
-    label: "Stats",
-    description: "히트맵, 트렌드, 인기 곡 & 아티스트",
-  },
-  {
-    icon: Settings,
-    label: "Settings",
-    description: "테마, 언어 등 환경 설정",
-  },
+  { icon: BarChart3, labelKey: "stats", descriptionKey: "stats" },
+  { icon: Settings, labelKey: "settings", descriptionKey: "settings" },
 ];
 
-interface Shortcut {
+interface ShortcutDef {
   keys: string[];
-  description: string;
+  descriptionKey: keyof ReturnType<typeof t>["help"]["shortcuts"];
 }
 
-const shortcuts: Shortcut[] = [
-  { keys: ["Space"], description: "재생 / 일시정지" },
-  { keys: ["\u2190", "\u2192"], description: "5초 뒤로 / 앞으로 탐색" },
-  { keys: ["\u2191", "\u2193"], description: "볼륨 올리기 / 내리기" },
-  { keys: ["M"], description: "음소거 / 해제" },
-  { keys: ["/"], description: "검색으로 이동" },
+const shortcutDefs: ShortcutDef[] = [
+  { keys: ["Space"], descriptionKey: "playPause" },
+  { keys: ["\u2190", "\u2192"], descriptionKey: "seekBackForward" },
+  { keys: ["\u2191", "\u2193"], descriptionKey: "volumeUpDown" },
+  { keys: ["M"], descriptionKey: "muteUnmute" },
+  { keys: ["/"], descriptionKey: "goToSearch" },
 ];
 
 function CommandsCard() {
+  const s = t();
   return (
     <div
       className="rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border)] p-4 animate-[fadeIn_0.3s_ease-out]"
       style={{ animationDelay: "0ms", animationFillMode: "both" }}
     >
       <h2 className="text-sm font-semibold text-[var(--color-text)] mb-3">
-        디스코드 명령어
+        {s.help.discordCommands}
       </h2>
       <div className="flex flex-col">
         {commandClusters.map((cluster, ci) => (
-          <div key={cluster.label}>
+          <div key={cluster.labelKey}>
             {ci > 0 && (
               <div className="border-t border-[var(--color-border)]/50 my-3" />
             )}
             <div className="text-xs font-semibold text-[var(--color-text-tertiary)] uppercase tracking-wide border-l-2 border-[var(--color-accent)]/40 pl-2 mb-2">
-              {cluster.label}
+              {s.help.commandClusters[cluster.labelKey]}
             </div>
             <div className="flex flex-col font-mono text-sm">
               {cluster.commands.map((cmd) => (
@@ -153,11 +115,9 @@ function CommandsCard() {
                       </span>
                     )}
                   </div>
-                  {cmd.description && (
-                    <div className="text-xs text-[var(--color-text-tertiary)] font-sans ml-5 mt-0.5">
-                      {cmd.description}
-                    </div>
-                  )}
+                  <div className="text-xs text-[var(--color-text-tertiary)] font-sans ml-5 mt-0.5">
+                    {s.help.commands[cmd.descriptionKey]}
+                  </div>
                 </div>
               ))}
             </div>
@@ -169,17 +129,18 @@ function CommandsCard() {
 }
 
 function WebFeaturesCard() {
+  const s = t();
   return (
     <div
       className="rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border)] p-4 animate-[fadeIn_0.3s_ease-out]"
       style={{ animationDelay: "60ms", animationFillMode: "both" }}
     >
       <h2 className="text-sm font-semibold text-[var(--color-text)] mb-3">
-        웹 기능
+        {s.help.webFeatures}
       </h2>
       <div className="flex flex-col gap-3">
         {webFeatures.map((feature) => (
-          <div key={feature.label} className="flex items-start gap-3">
+          <div key={feature.labelKey} className="flex items-start gap-3">
             <div className="w-7 h-7 rounded-md bg-[var(--color-bg-tertiary)] flex items-center justify-center flex-shrink-0">
               <feature.icon
                 size={14}
@@ -188,10 +149,10 @@ function WebFeaturesCard() {
             </div>
             <div className="min-w-0">
               <div className="text-sm font-medium text-[var(--color-text)]">
-                {feature.label}
+                {s.help.featureLabels[feature.labelKey]}
               </div>
               <div className="text-xs text-[var(--color-text-tertiary)]">
-                {feature.description}
+                {s.help.features[feature.descriptionKey]}
               </div>
             </div>
           </div>
@@ -202,17 +163,21 @@ function WebFeaturesCard() {
 }
 
 function ShortcutsCard() {
+  const s = t();
   return (
     <div
       className="rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border)] p-4 animate-[fadeIn_0.3s_ease-out]"
       style={{ animationDelay: "120ms", animationFillMode: "both" }}
     >
       <h2 className="text-sm font-semibold text-[var(--color-text)] mb-3">
-        키보드 단축키
+        {s.help.keyboardShortcuts}
       </h2>
       <div className="flex flex-col gap-2.5">
-        {shortcuts.map((shortcut) => (
-          <div key={shortcut.description} className="flex items-center gap-3">
+        {shortcutDefs.map((shortcut) => (
+          <div
+            key={shortcut.descriptionKey}
+            className="flex items-center gap-3"
+          >
             <div className="min-w-[80px] flex gap-1">
               {shortcut.keys.map((key) => (
                 <kbd
@@ -224,7 +189,7 @@ function ShortcutsCard() {
               ))}
             </div>
             <span className="text-xs text-[var(--color-text-secondary)]">
-              {shortcut.description}
+              {s.help.shortcuts[shortcut.descriptionKey]}
             </span>
           </div>
         ))}
@@ -234,11 +199,14 @@ function ShortcutsCard() {
 }
 
 export function Help() {
+  useLocale();
+  const s = t();
+
   return (
     <div className="p-4 md:p-6 max-w-3xl mx-auto flex flex-col gap-4 pb-32 md:pb-6">
       <h1 className="text-lg font-semibold text-[var(--color-text)] flex items-center gap-2">
         <HelpCircle size={20} className="text-[var(--color-text-secondary)]" />
-        도움말
+        {s.help.title}
       </h1>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

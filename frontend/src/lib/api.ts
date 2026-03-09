@@ -137,9 +137,10 @@ export const api = {
   deleteTrack: (trackId: string) => del<void>(`/api/tracks/${trackId}`),
 
   // Preferences
-  getPreferences: () => get<{ theme: string }>("/api/preferences"),
-  updatePreferences: (prefs: { theme?: string }) =>
-    put<{ theme: string }>("/api/preferences", prefs),
+  getPreferences: () =>
+    get<{ theme: string; locale: string }>("/api/preferences"),
+  updatePreferences: (prefs: { theme?: string; locale?: string }) =>
+    put<{ theme: string; locale: string }>("/api/preferences", prefs),
 
   // Bot Settings
   getBotSettings: () => get<{ default_volume: number }>("/api/settings/bot"),
@@ -212,4 +213,9 @@ export const api = {
   getTimezone: () => get<{ timezone: string }>("/api/admin/timezone"),
   setTimezone: (timezone: string) =>
     put<{ success: boolean }>("/api/admin/timezone", { timezone }),
+
+  // Admin - Bot Locale
+  getBotLocale: () => get<{ locale: string }>("/api/admin/bot-locale"),
+  setBotLocale: (locale: string) =>
+    put<{ success: boolean }>("/api/admin/bot-locale", { locale }),
 };

@@ -3,6 +3,7 @@ import { TrackThumbnail } from "../../ui/TrackThumbnail";
 import clsx from "clsx";
 import type { TrackInfo } from "../../../lib/types";
 import { formatTime } from "../../../lib/utils";
+import { useLocale, t } from "../../../hooks/useLocale";
 
 interface SearchResultProps {
   track: TrackInfo;
@@ -15,6 +16,8 @@ export function SearchResult({
   onAdd,
   adding = false,
 }: SearchResultProps) {
+  useLocale();
+  const s = t();
   return (
     <div
       className={clsx(
@@ -34,7 +37,7 @@ export function SearchResult({
           {track.title}
         </div>
         <div className="text-xs text-[var(--color-text-secondary)] truncate">
-          {track.artist ?? "Unknown artist"}
+          {track.artist ?? s.common.unknownArtist}
           {track.duration_ms > 0 && (
             <span className="text-[var(--color-text-tertiary)] ml-2">
               {formatTime(track.duration_ms)}
@@ -55,7 +58,7 @@ export function SearchResult({
         aria-label={`Add ${track.title} to queue`}
       >
         <Plus size={12} />
-        {adding ? "Adding…" : "Add"}
+        {adding ? s.history.adding : s.history.add}
       </button>
     </div>
   );

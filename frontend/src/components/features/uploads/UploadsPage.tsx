@@ -3,6 +3,7 @@ import { Upload, Plus, Loader2, Trash2 } from "lucide-react";
 import clsx from "clsx";
 import { api } from "../../../lib/api";
 import { useToast } from "../../../hooks/useToast";
+import { useLocale, t } from "../../../hooks/useLocale";
 import { useAuthStore } from "../../../stores/authStore";
 import type { TrackInfo, UploadsResponse } from "../../../lib/types";
 import { useInfiniteScroll } from "../../../hooks/useInfiniteScroll";
@@ -26,6 +27,8 @@ function UploadRow({
   onDelete: (id: string) => void;
 }) {
   const { showToast } = useToast();
+  useLocale();
+  const s = t();
   const [editing, setEditing] = useState<"title" | "artist" | null>(null);
   const [editValue, setEditValue] = useState("");
   const [adding, setAdding] = useState(false);
@@ -45,7 +48,10 @@ function UploadRow({
       });
       onUpdate();
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Update failed", "error");
+      showToast(
+        err instanceof Error ? err.message : t().toast.updateFailed,
+        "error",
+      );
     }
     setEditing(null);
   };
@@ -59,9 +65,9 @@ function UploadRow({
     setAdding(true);
     try {
       await api.addTrackToQueue(track.id);
-      showToast("Added to queue", "success");
+      showToast(t().toast.addedToQueue, "success");
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Failed", "error");
+      showToast(err instanceof Error ? err.message : t().toast.failed, "error");
     } finally {
       setAdding(false);
     }
@@ -72,9 +78,12 @@ function UploadRow({
     try {
       await api.deleteTrack(track.id);
       onDelete(track.id);
-      showToast("Deleted", "success");
+      showToast(t().toast.deleted, "success");
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Delete failed", "error");
+      showToast(
+        err instanceof Error ? err.message : t().toast.deleteFailed,
+        "error",
+      );
       setConfirmDelete(false);
     } finally {
       setDeleting(false);
@@ -123,7 +132,7 @@ function UploadRow({
               className="truncate cursor-pointer hover:underline"
               onClick={() => handleEdit("artist")}
             >
-              {track.artist || "Unknown artist"}
+              {track.artist || s.uploads.unknownArtist}
             </span>
           )}
           {track.duration_ms > 0 && (
@@ -152,7 +161,7 @@ function UploadRow({
               disabled={deleting}
               className="px-2 py-1.5 text-xs rounded-md transition-colors touch-manipulation min-h-[44px] text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-tertiary)]"
             >
-              Cancel
+              {s.uploads.cancel}
             </button>
             <button
               onClick={handleDelete}
@@ -162,7 +171,7 @@ function UploadRow({
               {deleting ? (
                 <Loader2 size={16} className="animate-spin" />
               ) : (
-                "Delete?"
+                s.uploads.deleteConfirm
               )}
             </button>
           </>
@@ -175,7 +184,7 @@ function UploadRow({
                 "p-2 rounded-md transition-colors touch-manipulation min-w-[44px] min-h-[44px] flex items-center justify-center",
                 "text-[var(--color-text-tertiary)] hover:text-[var(--color-text)] hover:bg-[var(--color-bg-tertiary)]",
               )}
-              aria-label="Add to queue"
+              aria-label={s.uploads.addToQueue}
             >
               {adding ? (
                 <Loader2 size={16} className="animate-spin" />
@@ -190,7 +199,7 @@ function UploadRow({
                   "p-2 rounded-md transition-colors touch-manipulation min-w-[44px] min-h-[44px] flex items-center justify-center",
                   "text-[var(--color-text-tertiary)] hover:text-[var(--color-danger)] hover:bg-[var(--color-bg-tertiary)]",
                 )}
-                aria-label="Delete track"
+                aria-label={s.uploads.deleteTrack}
               >
                 <Trash2 size={16} />
               </button>
@@ -203,8 +212,10 @@ function UploadRow({
 }
 
 export function UploadsPage() {
+  useLocale();
+  const s = t();
   const [total, setTotal] = useState(0);
-  const isAdmin = useAuthStore((s) => s.isAdmin);
+  const isAdmin = useAuthStore((st) => st.isAdmin);
 
   const {
     items: tracks,
@@ -231,10 +242,12 @@ export function UploadsPage() {
   return (
     <div className="p-4 md:p-6 max-w-3xl mx-auto flex flex-col gap-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-[var(--color-text)]">Uploads</h1>
+        <h1 className="text-xl font-bold text-[var(--color-text)]">
+          {s.uploads.title}
+        </h1>
         {total > 0 && (
           <p className="text-xs text-[var(--color-text-tertiary)]">
-            {total} uploaded tracks
+            {s.uploads.uploadedTracks.replace("{n}", String(total))}
           </p>
         )}
       </div>
@@ -252,10 +265,10 @@ export function UploadsPage() {
         <div className="flex flex-col items-center gap-3 py-16 text-center">
           <Upload size={40} className="text-[var(--color-text-tertiary)]" />
           <p className="text-[var(--color-text-secondary)]">
-            No uploaded files yet
+            {s.uploads.empty}
           </p>
           <p className="text-sm text-[var(--color-text-tertiary)]">
-            Drag and drop audio files to upload
+            {s.uploads.emptyHint}
           </p>
         </div>
       )}
@@ -299,7 +312,7 @@ export function UploadsPage() {
           onClick={loadMore}
           className="sr-only focus:not-sr-only focus:flex focus:justify-center focus:py-3 focus:text-sm focus:text-[var(--color-text-secondary)] focus:underline w-full"
         >
-          Load more
+          {s.uploads.loadMore}
         </button>
       )}
 
@@ -308,7 +321,7 @@ export function UploadsPage() {
         <div className="flex items-center gap-3 px-3 py-6">
           <div className="flex-1 h-px bg-[var(--color-border)]" />
           <span className="text-xs text-[var(--color-text-tertiary)] px-2 shrink-0">
-            {tracks.length} tracks
+            {s.uploads.tracksCount.replace("{n}", String(tracks.length))}
           </span>
           <div className="flex-1 h-px bg-[var(--color-border)]" />
         </div>
@@ -316,9 +329,9 @@ export function UploadsPage() {
 
       {/* Screen reader announcement */}
       <div aria-live="polite" aria-atomic="false" className="sr-only">
-        {loadingMore ? "Loading more tracks" : ""}
+        {loadingMore ? s.uploads.loadingMoreTracks : ""}
         {!hasMore && tracks.length > 0
-          ? `All ${tracks.length} tracks loaded`
+          ? s.uploads.allTracksLoaded.replace("{n}", String(tracks.length))
           : ""}
       </div>
     </div>
