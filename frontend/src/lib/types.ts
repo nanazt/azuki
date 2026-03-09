@@ -60,6 +60,7 @@ export type PlayerEvent =
       track: TrackInfo;
       position_ms: number;
       added_by: UserInfo;
+      paused: boolean;
     }
   | { type: "track_ended"; track_id: string }
   | { type: "track_loading"; track: TrackInfo }

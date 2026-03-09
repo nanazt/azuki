@@ -10,6 +10,7 @@ pub enum WebEvent {
         track: TrackInfo,
         position_ms: u64,
         added_by: azuki_player::UserInfo,
+        paused: bool,
     },
     TrackEnded {
         track_id: String,
@@ -119,10 +120,12 @@ impl From<PlayerEvent> for WebEvent {
                 track,
                 position_ms,
                 added_by,
+                paused,
             } => WebEvent::TrackStarted {
                 track,
                 position_ms,
                 added_by,
+                paused,
             },
             PlayerEvent::TrackEnded {
                 track_id,

@@ -436,6 +436,7 @@ impl PlayerActor {
                     track,
                     position_ms: 0,
                     added_by: user_info,
+                    paused: false,
                 });
                 self.broadcast(PlayerEvent::VolumeChanged {
                     volume: self.volume,
@@ -528,6 +529,7 @@ impl PlayerActor {
                         track: track.clone(),
                         position_ms: 0,
                         added_by,
+                        paused: was_paused,
                     });
                     self.broadcast(PlayerEvent::VolumeChanged {
                         volume: self.volume,
@@ -727,6 +729,7 @@ impl PlayerActor {
                             track,
                             position_ms: 0,
                             added_by,
+                            paused: false,
                         });
                         self.broadcast(PlayerEvent::VolumeChanged {
                             volume: self.volume,
@@ -802,6 +805,7 @@ impl PlayerActor {
                         track,
                         position_ms: 0,
                         added_by,
+                        paused: false,
                     });
                     self.broadcast(PlayerEvent::VolumeChanged {
                         volume: self.volume,
@@ -883,6 +887,7 @@ impl PlayerActor {
                         track,
                         position_ms: 0,
                         added_by,
+                        paused: false,
                     });
                     self.broadcast(PlayerEvent::VolumeChanged {
                         volume: self.volume,
@@ -942,6 +947,7 @@ impl PlayerActor {
                             track,
                             position_ms: 0,
                             added_by: user_info,
+                            paused: false,
                         });
                         self.broadcast(PlayerEvent::VolumeChanged {
                             volume: self.volume,
@@ -966,6 +972,7 @@ impl PlayerActor {
                             track,
                             position_ms: 0,
                             added_by: user_info,
+                            paused: false,
                         });
                         self.broadcast(PlayerEvent::VolumeChanged {
                             volume: self.volume,
@@ -1067,6 +1074,7 @@ impl PlayerActor {
                         track,
                         position_ms: 0,
                         added_by,
+                        paused: false,
                     });
                     self.broadcast(PlayerEvent::VolumeChanged {
                         volume: self.volume,

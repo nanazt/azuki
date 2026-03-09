@@ -107,7 +107,7 @@ export function useWebSocket() {
         break;
       case "track_started":
         state.setPlayState({
-          status: "playing",
+          status: ev.paused ? "paused" : "playing",
           track: ev.track,
           position_ms: ev.position_ms,
         });
