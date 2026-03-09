@@ -276,6 +276,40 @@ pub async fn get_peak_day(pool: &SqlitePool, tz_offset: &str) -> DbResult<Option
     .map_err(DbError::from)
 }
 
+/// Get message_ids of previous play_history records for the same track
+pub async fn get_previous_message_ids(
+    pool: &SqlitePool,
+    track_id: &str,
+    exclude_history_id: i64,
+) -> DbResult<Vec<String>> {
+    sqlx::query_scalar::<_, String>(
+        "SELECT message_id FROM play_history
+         WHERE track_id = ?1 AND id != ?2 AND message_id IS NOT NULL",
+    )
+    .bind(track_id)
+    .bind(exclude_history_id)
+    .fetch_all(pool)
+    .await
+    .map_err(DbError::from)
+}
+
+/// Clear old message_ids to prevent double-deletion
+pub async fn clear_old_message_ids(
+    pool: &SqlitePool,
+    track_id: &str,
+    exclude_history_id: i64,
+) -> DbResult<()> {
+    sqlx::query(
+        "UPDATE play_history SET message_id = NULL
+         WHERE track_id = ?1 AND id != ?2 AND message_id IS NOT NULL",
+    )
+    .bind(track_id)
+    .bind(exclude_history_id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
 pub async fn get_top_tracks_paginated(
     pool: &SqlitePool,
     limit: i64,

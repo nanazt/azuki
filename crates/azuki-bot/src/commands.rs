@@ -1,20 +1,26 @@
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 
 use serenity::all::{
-    ChannelId, CommandInteraction, CommandOptionType, ComponentInteraction, Context, CreateCommand,
-    CreateCommandOption, CreateInteractionResponse, CreateInteractionResponseMessage, GuildId,
-    UserId,
+    ButtonStyle, ChannelId, CommandInteraction, CommandOptionType, ComponentInteraction,
+    ComponentInteractionDataKind, Context, CreateActionRow, CreateButton, CreateCommand,
+    CreateCommandOption, CreateInteractionResponse, CreateInteractionResponseFollowup,
+    CreateInteractionResponseMessage, GuildId, UserId,
 };
 use tracing::info;
 
-use azuki_player::{LoopMode, TrackInfo, UserInfo};
+use azuki_player::{LoopMode, PlayAction, PlayerError, TrackInfo, UserInfo};
 
 use crate::BotState;
 
 fn user_info_from(user: &serenity::all::User) -> UserInfo {
     UserInfo {
         id: user.id.to_string(),
-        username: user.global_name.as_deref().unwrap_or(&user.name).to_string(),
+        username: user
+            .global_name
+            .as_deref()
+            .unwrap_or(&user.name)
+            .to_string(),
         avatar_url: user.avatar_url(),
     }
 }
@@ -30,18 +36,7 @@ pub async fn register_commands(ctx: &Context, guild_id: GuildId) -> Result<(), s
         CreateCommand::new("pause").description("Pause playback"),
         CreateCommand::new("resume").description("Resume playback"),
         CreateCommand::new("skip").description("Skip to next track"),
-        CreateCommand::new("stop").description("Stop playback and clear queue"),
         CreateCommand::new("queue").description("Show current queue"),
-        CreateCommand::new("remove")
-            .description("Remove track from queue")
-            .add_option(
-                CreateCommandOption::new(
-                    CommandOptionType::Integer,
-                    "position",
-                    "Queue position to remove",
-                )
-                .required(true),
-            ),
         CreateCommand::new("now").description("Show now playing"),
         CreateCommand::new("volume")
             .description("Set volume (0-100)")
@@ -50,16 +45,6 @@ pub async fn register_commands(ctx: &Context, guild_id: GuildId) -> Result<(), s
                     .required(true)
                     .min_int_value(0)
                     .max_int_value(100),
-            ),
-        CreateCommand::new("seek")
-            .description("Seek to position (e.g. 1:30)")
-            .add_option(
-                CreateCommandOption::new(
-                    CommandOptionType::String,
-                    "time",
-                    "Time position (e.g. 1:30)",
-                )
-                .required(true),
             ),
         CreateCommand::new("loop")
             .description("Set loop mode")
@@ -70,20 +55,10 @@ pub async fn register_commands(ctx: &Context, guild_id: GuildId) -> Result<(), s
                     .add_string_choice("one", "one")
                     .add_string_choice("all", "all"),
             ),
-        CreateCommand::new("playlist")
-            .description("Load a playlist into queue")
-            .add_option(
-                CreateCommandOption::new(
-                    CommandOptionType::String,
-                    "name",
-                    "Playlist name or YouTube URL",
-                )
-                .required(true),
-            ),
     ];
 
     guild_id.set_commands(&ctx.http, commands).await?;
-    info!("registered 12 slash commands");
+    info!("registered 8 slash commands");
     Ok(())
 }
 
@@ -92,19 +67,16 @@ pub async fn handle_command(
     cmd: &CommandInteraction,
     state: &Arc<BotState>,
 ) -> Result<(), crate::BotError> {
+    let is_history = is_history_channel(state, cmd.channel_id.get());
     match cmd.data.name.as_str() {
-        "play" => handle_play(ctx, cmd, state).await,
-        "pause" => handle_pause(ctx, cmd, state).await,
-        "resume" => handle_resume(ctx, cmd, state).await,
-        "skip" => handle_skip(ctx, cmd, state).await,
-        "stop" => handle_stop(ctx, cmd, state).await,
-        "queue" => handle_queue(ctx, cmd, state).await,
-        "remove" => handle_remove(ctx, cmd, state).await,
-        "now" => handle_now(ctx, cmd, state).await,
-        "volume" => handle_volume(ctx, cmd, state).await,
-        "seek" => handle_seek(ctx, cmd, state).await,
-        "loop" => handle_loop(ctx, cmd, state).await,
-        "playlist" => handle_playlist(ctx, cmd, state).await,
+        "play" => handle_play(ctx, cmd, state, is_history).await,
+        "pause" => handle_pause(ctx, cmd, state, is_history).await,
+        "resume" => handle_resume(ctx, cmd, state, is_history).await,
+        "skip" => handle_skip(ctx, cmd, state, is_history).await,
+        "queue" => handle_queue(ctx, cmd, state, is_history).await,
+        "now" => handle_now(ctx, cmd, state, is_history).await,
+        "volume" => handle_volume(ctx, cmd, state, is_history).await,
+        "loop" => handle_loop(ctx, cmd, state, is_history).await,
         _ => Ok(()),
     }
 }
@@ -129,18 +101,24 @@ async fn respond(
     ctx: &Context,
     cmd: &CommandInteraction,
     content: &str,
+    ephemeral: bool,
 ) -> Result<(), crate::BotError> {
-    let msg = CreateInteractionResponseMessage::new().content(content);
+    let msg = CreateInteractionResponseMessage::new()
+        .content(content)
+        .ephemeral(ephemeral);
     let response = CreateInteractionResponse::Message(msg);
     cmd.create_response(&ctx.http, response)
         .await
         .map_err(|e| crate::BotError::Serenity(e.to_string()))
 }
 
-async fn defer(ctx: &Context, cmd: &CommandInteraction) -> Result<(), crate::BotError> {
-    cmd.defer(&ctx.http)
-        .await
-        .map_err(|e| crate::BotError::Serenity(e.to_string()))
+async fn defer(ctx: &Context, cmd: &CommandInteraction, ephemeral: bool) -> Result<(), crate::BotError> {
+    if ephemeral {
+        cmd.defer_ephemeral(&ctx.http).await
+    } else {
+        cmd.defer(&ctx.http).await
+    }
+    .map_err(|e| crate::BotError::Serenity(e.to_string()))
 }
 
 pub async fn ensure_user_in_voice(
@@ -181,26 +159,114 @@ async fn ensure_voice(
     ensure_user_in_voice(ctx, guild_id, cmd.user.id, state).await
 }
 
+// ---------------------------------------------------------------------------
+// /play
+// ---------------------------------------------------------------------------
+
 async fn handle_play(
     ctx: &Context,
     cmd: &CommandInteraction,
     state: &Arc<BotState>,
+    is_history: bool,
 ) -> Result<(), crate::BotError> {
     ensure_voice(ctx, cmd, state).await?;
-    defer(ctx, cmd).await?;
+    defer(ctx, cmd, is_history).await?;
 
+    // Post-defer errors are handled via edit_response, not returned as BotError
+    if let Err(e) = handle_play_inner(ctx, cmd, state).await {
+        let _ = cmd
+            .edit_response(
+                &ctx.http,
+                serenity::all::EditInteractionResponse::new()
+                    .content(format!("Error: {e}")),
+            )
+            .await;
+    }
+    Ok(())
+}
+
+async fn handle_play_inner(
+    ctx: &Context,
+    cmd: &CommandInteraction,
+    state: &Arc<BotState>,
+) -> Result<(), crate::BotError> {
     let query = get_string_option(cmd, "query").unwrap_or_default();
     let user_info = user_info_from(&cmd.user);
 
-    // Search or download
     let is_url = query.starts_with("http://") || query.starts_with("https://");
-    let (file_path, meta) = if is_url {
-        state
+
+    if is_url {
+        // URL path: download and auto-play/enqueue
+        let (file_path, meta) = state
             .ytdlp
             .download(&query)
             .await
-            .map_err(crate::BotError::Media)?
+            .map_err(crate::BotError::Media)?;
+
+        let track_id = sha_id(&meta.source_url);
+        let file_path_str = file_path.to_string_lossy().to_string();
+
+        // Download thumbnail
+        if let Some(ref thumb_url) = meta.thumbnail_url {
+            let thumb_path =
+                std::path::Path::new("media/thumbnails").join(format!("{track_id}.jpg"));
+            if let Err(e) = azuki_media::YtDlp::download_thumbnail(thumb_url, &thumb_path).await {
+                tracing::warn!("thumbnail download failed: {e}");
+            }
+        }
+
+        // Save to DB
+        azuki_db::queries::tracks::upsert_track(
+            &state.db,
+            &track_id,
+            &meta.title,
+            meta.artist.as_deref(),
+            meta.duration_ms as i64,
+            meta.thumbnail_url.as_deref(),
+            &meta.source_url,
+            "youtube",
+            Some(&file_path_str),
+            meta.youtube_id.as_deref(),
+            None,
+        )
+        .await
+        .ok();
+
+        let track_volume = azuki_db::queries::tracks::get_track(&state.db, &track_id)
+            .await
+            .map(|t| t.volume as u8)
+            .unwrap_or(5);
+
+        let track_info = TrackInfo {
+            id: track_id.clone(),
+            title: meta.title.clone(),
+            artist: meta.artist.clone(),
+            duration_ms: meta.duration_ms,
+            thumbnail_url: meta.thumbnail_url.clone(),
+            source_url: meta.source_url.clone(),
+            source_type: "youtube".to_string(),
+            file_path: Some(file_path_str),
+            youtube_id: meta.youtube_id,
+            volume: track_volume,
+        };
+
+        let action = state
+            .player
+            .play_or_enqueue(track_info, user_info)
+            .await
+            .map_err(crate::BotError::Player)?;
+        let content = play_action_message(action, &meta.title, &meta.source_url);
+
+        cmd.edit_response(
+            &ctx.http,
+            serenity::all::EditInteractionResponse::new()
+                .content(&content)
+                .components(vec![crate::embed::build_play_button(&track_id)]),
+        )
+        .await
+        .map_err(|e| crate::BotError::Serenity(e.to_string()))?;
     } else {
+        // Search path: show select menu with up to 5 results
         let youtube = state
             .youtube
             .read()
@@ -208,200 +274,265 @@ async fn handle_play(
             .clone()
             .ok_or(crate::BotError::NoYouTubeKey)?;
         let results = youtube
-            .search(&query, 1)
+            .search(&query, 5)
             .await
             .map_err(crate::BotError::Media)?;
-        let meta = results
-            .into_iter()
-            .next()
-            .ok_or_else(|| crate::BotError::NoResults)?;
-        state
-            .ytdlp
-            .download(&meta.source_url)
-            .await
-            .map_err(crate::BotError::Media)?
-    };
 
-    let track_id = sha_id(&meta.source_url);
-    let file_path_str = file_path.to_string_lossy().to_string();
-
-    // Download thumbnail
-    if let Some(ref thumb_url) = meta.thumbnail_url {
-        let thumb_path = std::path::Path::new("media/thumbnails").join(format!("{track_id}.jpg"));
-        if let Err(e) = azuki_media::YtDlp::download_thumbnail(thumb_url, &thumb_path).await {
-            tracing::warn!("thumbnail download failed: {e}");
+        if results.is_empty() {
+            return Err(crate::BotError::NoResults);
         }
-    }
 
-    // Save to DB
-    azuki_db::queries::tracks::upsert_track(
-        &state.db,
-        &track_id,
-        &meta.title,
-        meta.artist.as_deref(),
-        meta.duration_ms as i64,
-        meta.thumbnail_url.as_deref(),
-        &meta.source_url,
-        "youtube",
-        Some(&file_path_str),
-        meta.youtube_id.as_deref(),
-        None,
-    )
-    .await
-    .ok();
+        let select_data: Vec<(String, String, String, String)> = results
+            .iter()
+            .map(|r| {
+                (
+                    r.youtube_id.clone().unwrap_or_default(),
+                    r.title.clone(),
+                    r.artist.clone().unwrap_or_else(|| "Unknown".to_string()),
+                    format_duration(r.duration_ms),
+                )
+            })
+            .collect();
 
-    let track_volume = azuki_db::queries::tracks::get_track(&state.db, &track_id)
+        cmd.edit_response(
+            &ctx.http,
+            serenity::all::EditInteractionResponse::new()
+                .content("🔍 Select a track:")
+                .components(vec![crate::embed::build_search_select(&select_data)]),
+        )
         .await
-        .map(|t| t.volume as u8)
-        .unwrap_or(5);
-
-    let track_info = TrackInfo {
-        id: track_id,
-        title: meta.title.clone(),
-        artist: meta.artist.clone(),
-        duration_ms: meta.duration_ms,
-        thumbnail_url: meta.thumbnail_url.clone(),
-        source_url: meta.source_url,
-        source_type: "youtube".to_string(),
-        file_path: Some(file_path_str),
-        youtube_id: meta.youtube_id,
-        volume: track_volume,
-    };
-
-    // Check if something is playing
-    let snapshot = state.player.get_state().await;
-    match snapshot.state {
-        azuki_player::PlayStateInfo::Idle => {
-            state
-                .player
-                .play(track_info.clone(), user_info)
-                .await
-                .map_err(crate::BotError::Player)?;
-        }
-        _ => {
-            state
-                .player
-                .enqueue(track_info.clone(), user_info)
-                .await
-                .map_err(crate::BotError::Player)?;
-        }
+        .map_err(|e| crate::BotError::Serenity(e.to_string()))?;
     }
-
-    let content = format!(
-        "🎵 **{}** — {}",
-        meta.title,
-        meta.artist.as_deref().unwrap_or("Unknown")
-    );
-    cmd.edit_response(
-        &ctx.http,
-        serenity::all::EditInteractionResponse::new().content(&content),
-    )
-    .await
-    .map_err(|e| crate::BotError::Serenity(e.to_string()))?;
 
     Ok(())
 }
+
+// ---------------------------------------------------------------------------
+// /pause, /resume, /skip
+// ---------------------------------------------------------------------------
 
 async fn handle_pause(
     ctx: &Context,
     cmd: &CommandInteraction,
     state: &Arc<BotState>,
+    is_history: bool,
 ) -> Result<(), crate::BotError> {
     state
         .player
         .pause()
         .await
         .map_err(crate::BotError::Player)?;
-    // Songbird pause is handled by run_audio_subscriber via Paused event
-    respond(ctx, cmd, "⏸️ Paused").await
+    respond(ctx, cmd, "⏸️ Paused", is_history).await
 }
 
 async fn handle_resume(
     ctx: &Context,
     cmd: &CommandInteraction,
     state: &Arc<BotState>,
+    is_history: bool,
 ) -> Result<(), crate::BotError> {
     state
         .player
         .resume()
         .await
         .map_err(crate::BotError::Player)?;
-    // Audio will be re-triggered via the player event subscriber
-    respond(ctx, cmd, "▶️ Resumed").await
+    respond(ctx, cmd, "▶️ Resumed", is_history).await
 }
 
 async fn handle_skip(
     ctx: &Context,
     cmd: &CommandInteraction,
     state: &Arc<BotState>,
+    is_history: bool,
 ) -> Result<(), crate::BotError> {
     let next = state.player.skip().await.map_err(crate::BotError::Player)?;
     match next {
-        Some(track) => respond(ctx, cmd, &format!("⏭️ Skipped → **{}**", track.title)).await,
-        None => respond(ctx, cmd, "⏭️ Skipped — queue empty").await,
+        Some(track) => respond(ctx, cmd, &format!("⏭️ Skipped → **{}**", track.title), is_history).await,
+        None => respond(ctx, cmd, "⏭️ Skipped — queue empty", is_history).await,
     }
 }
 
-async fn handle_stop(
-    ctx: &Context,
-    cmd: &CommandInteraction,
-    state: &Arc<BotState>,
-) -> Result<(), crate::BotError> {
-    state.player.stop().await.map_err(crate::BotError::Player)?;
-    if let Some(sb) = state.songbird.lock().await.as_ref() {
-        crate::voice::leave_channel(sb, state.guild_id).await;
-    }
-    respond(ctx, cmd, "⏹️ Stopped and cleared queue").await
-}
+// ---------------------------------------------------------------------------
+// /queue (paginated)
+// ---------------------------------------------------------------------------
+
+const QUEUE_PAGE_SIZE: usize = 5;
 
 async fn handle_queue(
     ctx: &Context,
     cmd: &CommandInteraction,
     state: &Arc<BotState>,
+    is_history: bool,
 ) -> Result<(), crate::BotError> {
     let snapshot = state.player.get_state().await;
     if snapshot.queue.is_empty() {
-        return respond(ctx, cmd, "Queue is empty").await;
+        return respond(ctx, cmd, "Queue is empty", is_history).await;
     }
 
+    let (content, components) = build_queue_page(&snapshot.queue, 0);
+    let msg = CreateInteractionResponseMessage::new()
+        .content(content)
+        .components(components)
+        .ephemeral(is_history);
+    cmd.create_response(&ctx.http, CreateInteractionResponse::Message(msg))
+        .await
+        .map_err(|e| crate::BotError::Serenity(e.to_string()))
+}
+
+fn build_queue_page(
+    queue: &[azuki_player::QueueEntry],
+    page: usize,
+) -> (String, Vec<CreateActionRow>) {
+    let total_pages = queue.len().div_ceil(QUEUE_PAGE_SIZE);
+    let page = page.min(total_pages.saturating_sub(1));
+    let start = page * QUEUE_PAGE_SIZE;
+    let end = (start + QUEUE_PAGE_SIZE).min(queue.len());
+    let page_items = &queue[start..end];
+
+    // Build content
     let mut content = String::from("**Queue:**\n");
-    for (i, entry) in snapshot.queue.iter().enumerate().take(10) {
+    for (i, entry) in page_items.iter().enumerate() {
+        let pos = start + i + 1;
         let duration = format_duration(entry.track.duration_ms);
         content.push_str(&format!(
             "{}. **{}** — {} [{duration}]\n",
-            i + 1,
+            pos,
             entry.track.title,
             entry.track.artist.as_deref().unwrap_or("Unknown"),
         ));
     }
-    if snapshot.queue.len() > 10 {
-        content.push_str(&format!("...and {} more", snapshot.queue.len() - 10));
+
+    let mut components = Vec::new();
+
+    // Row 1: Remove buttons for displayed tracks
+    let remove_buttons: Vec<CreateButton> = page_items
+        .iter()
+        .enumerate()
+        .map(|(i, _)| {
+            let abs_pos = start + i;
+            CreateButton::new(format!("qr:{abs_pos}"))
+                .label(format!("✕ {}", start + i + 1))
+                .style(ButtonStyle::Danger)
+        })
+        .collect();
+    if !remove_buttons.is_empty() {
+        components.push(CreateActionRow::Buttons(remove_buttons));
     }
 
-    respond(ctx, cmd, &content).await
+    // Row 2: Pagination
+    let prev_btn = CreateButton::new(format!("qp:{}", page.saturating_sub(1)))
+        .label("◀ Prev")
+        .style(ButtonStyle::Secondary)
+        .disabled(page == 0);
+    let page_btn = CreateButton::new("qpage:info")
+        .label(format!("{}/{}", page + 1, total_pages))
+        .style(ButtonStyle::Secondary)
+        .disabled(true);
+    let next_btn = CreateButton::new(format!("qn:{}", page + 1))
+        .label("Next ▶")
+        .style(ButtonStyle::Secondary)
+        .disabled(page + 1 >= total_pages);
+    components.push(CreateActionRow::Buttons(vec![prev_btn, page_btn, next_btn]));
+
+    (content, components)
 }
 
-async fn handle_remove(
+pub async fn handle_queue_remove(
     ctx: &Context,
-    cmd: &CommandInteraction,
+    component: &ComponentInteraction,
     state: &Arc<BotState>,
-) -> Result<(), crate::BotError> {
-    let pos = get_int_option(cmd, "position").unwrap_or(0) as usize;
-    if pos == 0 {
-        return respond(ctx, cmd, "Position must be 1 or greater").await;
+    position: usize,
+) {
+    let _ = state.player.remove(position).await;
+
+    // Re-render queue
+    let snapshot = state.player.get_state().await;
+    if snapshot.queue.is_empty() {
+        let _ = component
+            .create_response(
+                &ctx.http,
+                CreateInteractionResponse::UpdateMessage(
+                    CreateInteractionResponseMessage::new()
+                        .content("Queue is empty")
+                        .components(vec![]),
+                ),
+            )
+            .await;
+        return;
     }
-    state
-        .player
-        .remove(pos - 1)
-        .await
-        .map_err(crate::BotError::Player)?;
-    respond(ctx, cmd, &format!("Removed track at position {pos}")).await
+
+    // Figure out which page we were on
+    let current_page = position / QUEUE_PAGE_SIZE;
+    let total_pages = snapshot.queue.len().div_ceil(QUEUE_PAGE_SIZE);
+    let page = current_page.min(total_pages.saturating_sub(1));
+
+    let (content, components) = build_queue_page(&snapshot.queue, page);
+    let _ = component
+        .create_response(
+            &ctx.http,
+            CreateInteractionResponse::UpdateMessage(
+                CreateInteractionResponseMessage::new()
+                    .content(content)
+                    .components(components),
+            ),
+        )
+        .await;
+}
+
+pub async fn handle_queue_page(
+    ctx: &Context,
+    component: &ComponentInteraction,
+    state: &Arc<BotState>,
+    page: usize,
+) {
+    let snapshot = state.player.get_state().await;
+    if snapshot.queue.is_empty() {
+        let _ = component
+            .create_response(
+                &ctx.http,
+                CreateInteractionResponse::UpdateMessage(
+                    CreateInteractionResponseMessage::new()
+                        .content("Queue is empty")
+                        .components(vec![]),
+                ),
+            )
+            .await;
+        return;
+    }
+
+    let (content, components) = build_queue_page(&snapshot.queue, page);
+    let _ = component
+        .create_response(
+            &ctx.http,
+            CreateInteractionResponse::UpdateMessage(
+                CreateInteractionResponseMessage::new()
+                    .content(content)
+                    .components(components),
+            ),
+        )
+        .await;
+}
+
+// ---------------------------------------------------------------------------
+// /now
+// ---------------------------------------------------------------------------
+
+fn make_title_link(title: &str, source_url: &str) -> String {
+    if source_url.starts_with("https://www.youtube.com")
+        || source_url.starts_with("https://youtube.com")
+        || source_url.starts_with("https://soundcloud.com")
+    {
+        format!("[{title}]({source_url})")
+    } else {
+        format!("**{title}**")
+    }
 }
 
 async fn handle_now(
     ctx: &Context,
     cmd: &CommandInteraction,
     state: &Arc<BotState>,
+    is_history: bool,
 ) -> Result<(), crate::BotError> {
     let snapshot = state.player.get_state().await;
     match snapshot.state {
@@ -410,44 +541,32 @@ async fn handle_now(
             let total = format_duration(track.duration_ms);
             let progress = if track.duration_ms > 0 {
                 let pct = (position_ms as f64 / track.duration_ms as f64 * 20.0) as usize;
-                let bar: String = "▓".repeat(pct) + &"░".repeat(20 - pct);
-                bar
+                "▓".repeat(pct) + &"░".repeat(20 - pct)
             } else {
                 "░".repeat(20)
             };
-            respond(
-                ctx,
-                cmd,
-                &format!(
-                    "🎵 **{}** — {}\n{pos} {progress} {total}",
-                    track.title,
-                    track.artist.as_deref().unwrap_or("Unknown"),
-                ),
-            )
-            .await
+            let title = make_title_link(&track.title, &track.source_url);
+            respond(ctx, cmd, &format!("{title}\n{pos} {progress} {total}"), is_history).await
         }
         azuki_player::PlayStateInfo::Paused { track, position_ms } => {
             let pos = format_duration(position_ms);
             let total = format_duration(track.duration_ms);
-            respond(
-                ctx,
-                cmd,
-                &format!(
-                    "⏸️ **{}** — {} (paused at {pos}/{total})",
-                    track.title,
-                    track.artist.as_deref().unwrap_or("Unknown"),
-                ),
-            )
-            .await
+            let title = make_title_link(&track.title, &track.source_url);
+            respond(ctx, cmd, &format!("⏸️ {title} — paused at {pos}/{total}"), is_history).await
         }
-        _ => respond(ctx, cmd, "Nothing playing").await,
+        _ => respond(ctx, cmd, "Nothing playing", is_history).await,
     }
 }
+
+// ---------------------------------------------------------------------------
+// /volume, /loop
+// ---------------------------------------------------------------------------
 
 async fn handle_volume(
     ctx: &Context,
     cmd: &CommandInteraction,
     state: &Arc<BotState>,
+    is_history: bool,
 ) -> Result<(), crate::BotError> {
     let level = get_int_option(cmd, "level").unwrap_or(5) as u8;
     state
@@ -463,34 +582,14 @@ async fn handle_volume(
             .await
             .ok();
     }
-    respond(ctx, cmd, &format!("🔊 Volume: {level}%")).await
-}
-
-async fn handle_seek(
-    ctx: &Context,
-    cmd: &CommandInteraction,
-    state: &Arc<BotState>,
-) -> Result<(), crate::BotError> {
-    let time_str = get_string_option(cmd, "time").unwrap_or_default();
-    let position_ms = parse_time(&time_str)
-        .ok_or_else(|| crate::BotError::InvalidInput("invalid time format".to_string()))?;
-    state
-        .player
-        .seek(position_ms)
-        .await
-        .map_err(crate::BotError::Player)?;
-    respond(
-        ctx,
-        cmd,
-        &format!("⏩ Seeked to {}", format_duration(position_ms)),
-    )
-    .await
+    respond(ctx, cmd, &format!("🔊 Volume: {level}%"), is_history).await
 }
 
 async fn handle_loop(
     ctx: &Context,
     cmd: &CommandInteraction,
     state: &Arc<BotState>,
+    is_history: bool,
 ) -> Result<(), crate::BotError> {
     let mode_str = get_string_option(cmd, "mode").unwrap_or_default();
     let mode = match mode_str.as_str() {
@@ -508,95 +607,12 @@ async fn handle_loop(
         LoopMode::One => "🔂 Loop one",
         LoopMode::All => "🔁 Loop all",
     };
-    respond(ctx, cmd, emoji).await
+    respond(ctx, cmd, emoji, is_history).await
 }
 
-async fn handle_playlist(
-    ctx: &Context,
-    cmd: &CommandInteraction,
-    state: &Arc<BotState>,
-) -> Result<(), crate::BotError> {
-    ensure_voice(ctx, cmd, state).await?;
-    defer(ctx, cmd).await?;
-
-    let name = get_string_option(cmd, "name").unwrap_or_default();
-    let user_info = user_info_from(&cmd.user);
-
-    // Check if it's a URL (YouTube playlist)
-    if name.starts_with("http") {
-        // TODO: YouTube playlist import
-        cmd.edit_response(
-            &ctx.http,
-            serenity::all::EditInteractionResponse::new()
-                .content("YouTube playlist import coming soon"),
-        )
-        .await
-        .map_err(|e| crate::BotError::Serenity(e.to_string()))?;
-        return Ok(());
-    }
-
-    // Search DB playlists
-    let playlists = azuki_db::queries::playlists::list_playlists(&state.db, &user_info.id)
-        .await
-        .map_err(crate::BotError::Db)?;
-
-    let playlist = playlists
-        .iter()
-        .find(|p| p.name.to_lowercase() == name.to_lowercase())
-        .ok_or_else(|| crate::BotError::NoResults)?;
-
-    let tracks = azuki_db::queries::playlists::get_playlist_tracks(&state.db, playlist.id)
-        .await
-        .map_err(crate::BotError::Db)?;
-
-    for track in &tracks {
-        let track_info = TrackInfo {
-            id: track.id.clone(),
-            title: track.title.clone(),
-            artist: track.artist.clone(),
-            duration_ms: track.duration_ms as u64,
-            thumbnail_url: track.thumbnail_url.clone(),
-            source_url: track.source_url.clone(),
-            source_type: track.source_type.clone(),
-            file_path: track.file_path.clone(),
-            youtube_id: track.youtube_id.clone(),
-            volume: track.volume as u8,
-        };
-        state.player.enqueue(track_info, user_info.clone()).await.ok();
-    }
-
-    cmd.edit_response(
-        &ctx.http,
-        serenity::all::EditInteractionResponse::new().content(format!(
-            "📋 Loaded **{}** ({} tracks)",
-            playlist.name,
-            tracks.len()
-        )),
-    )
-    .await
-    .map_err(|e| crate::BotError::Serenity(e.to_string()))?;
-
-    Ok(())
-}
-
-fn parse_time(s: &str) -> Option<u64> {
-    let parts: Vec<&str> = s.split(':').collect();
-    match parts.len() {
-        1 => parts[0].parse::<u64>().ok().map(|s| s * 1000),
-        2 => {
-            let min = parts[0].parse::<u64>().ok()?;
-            let sec = parts[1].parse::<u64>().ok()?;
-            Some((min * 60 + sec) * 1000)
-        }
-        3 => {
-            let hr = parts[0].parse::<u64>().ok()?;
-            let min = parts[1].parse::<u64>().ok()?;
-            let sec = parts[2].parse::<u64>().ok()?;
-            Some((hr * 3600 + min * 60 + sec) * 1000)
-        }
-        _ => None,
-    }
-}
+// ---------------------------------------------------------------------------
+// Utilities
+// ---------------------------------------------------------------------------
 
 pub fn format_duration(ms: u64) -> String {
     let total_secs = ms / 1000;
@@ -617,13 +633,57 @@ fn sha_id(input: &str) -> String {
     hex::encode(&hash[..8])
 }
 
-pub async fn handle_play_button(
+fn build_track_info_from_db(track: &azuki_db::models::Track) -> TrackInfo {
+    TrackInfo {
+        id: track.id.clone(),
+        title: track.title.clone(),
+        artist: track.artist.clone(),
+        duration_ms: track.duration_ms as u64,
+        thumbnail_url: track.thumbnail_url.clone(),
+        source_url: track.source_url.clone(),
+        source_type: track.source_type.clone(),
+        file_path: track.file_path.clone(),
+        youtube_id: track.youtube_id.clone(),
+        volume: track.volume as u8,
+    }
+}
+
+/// 현재 채널이 기록채널인지 확인 (AtomicU64 캐시 사용)
+fn is_history_channel(state: &BotState, channel_id: u64) -> bool {
+    let hc = state.history_channel_id.load(Ordering::Relaxed);
+    hc != 0 && hc == channel_id
+}
+
+/// smart play 결과를 메시지로 변환
+fn play_action_message(action: PlayAction, title: &str, url: &str) -> String {
+    match action {
+        PlayAction::PlayedNow => format!("[{}]({})\n재생 시작", title, url),
+        PlayAction::Enqueued => format!("[{}]({})\n대기열에 추가됨", title, url),
+    }
+}
+
+/// PlayerError → 한국어 메시지
+fn player_error_message(err: &PlayerError) -> &'static str {
+    match err {
+        PlayerError::NoTrack => "재생 중인 곡이 없습니다",
+        PlayerError::InvalidState(_) => "현재 상태에서 실행할 수 없습니다",
+        PlayerError::InvalidPosition => "잘못된 위치입니다",
+        PlayerError::QueueFull => "대기열이 가득 찼습니다",
+        PlayerError::Duplicate => "이미 대기열에 있는 곡입니다",
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Component interaction handlers
+// ---------------------------------------------------------------------------
+
+/// Unified smart play button handler (pn:/eq:/play: prefixes)
+pub async fn handle_smart_play_button(
     ctx: &Context,
     component: &ComponentInteraction,
     state: &Arc<BotState>,
     track_id: &str,
 ) {
-    // Validate track_id format (16-char hex)
     if track_id.len() != 16 || !track_id.chars().all(|c| c.is_ascii_hexdigit()) {
         let _ = component
             .create_response(
@@ -678,59 +738,21 @@ pub async fn handle_play_button(
     };
 
     let ui = user_info_from(&component.user);
-    let track_info = TrackInfo {
-        id: track.id.clone(),
-        title: track.title.clone(),
-        artist: track.artist.clone(),
-        duration_ms: track.duration_ms as u64,
-        thumbnail_url: track.thumbnail_url.clone(),
-        source_url: track.source_url.clone(),
-        source_type: track.source_type.clone(),
-        file_path: track.file_path.clone(),
-        youtube_id: track.youtube_id.clone(),
-        volume: track.volume as u8,
-    };
-
+    let track_info = build_track_info_from_db(&track);
     let has_file = track
         .file_path
         .as_ref()
         .is_some_and(|fp| std::path::Path::new(fp).exists());
 
-    if has_file {
-        let snapshot = state.player.get_state().await;
-        let result = match snapshot.state {
-            azuki_player::PlayStateInfo::Idle => {
-                state.player.play(track_info.clone(), ui.clone()).await
-            }
-            _ => state.player.enqueue(track_info.clone(), ui).await,
-        };
-
-        let content = if result.is_ok() {
-            format!("🎵 **{}** 재생 대기열에 추가했습니다", track_info.title)
-        } else {
-            "재생에 실패했습니다".to_string()
-        };
+    if !has_file {
         let _ = component
             .create_response(
                 &ctx.http,
                 CreateInteractionResponse::Message(
-                    CreateInteractionResponseMessage::new()
-                        .content(content)
-                        .ephemeral(true),
-                ),
-            )
-            .await;
-    } else {
-        let _ = component
-            .create_response(
-                &ctx.http,
-                CreateInteractionResponse::Message(
-                    CreateInteractionResponseMessage::new()
-                        .content(format!(
-                            "🔄 **{}** 다시 다운로드합니다...",
-                            track_info.title
-                        ))
-                        .ephemeral(true),
+                    CreateInteractionResponseMessage::new().content(format!(
+                        "🔄 **{}** 다시 다운로드합니다...",
+                        track_info.title
+                    )),
                 ),
             )
             .await;
@@ -739,7 +761,6 @@ pub async fn handle_play_button(
         let player = state.player.clone();
         let db = state.db.clone();
         let source_url = track.source_url.clone();
-        let ui = user_info_from(&component.user);
 
         tokio::spawn(async move {
             match ytdlp.download(&source_url).await {
@@ -747,7 +768,6 @@ pub async fn handle_play_button(
                     let file_path_str = file_path.to_string_lossy().to_string();
                     let mut ti = track_info;
                     ti.file_path = Some(file_path_str.clone());
-
                     let _ = azuki_db::queries::tracks::upsert_track(
                         &db,
                         &ti.id,
@@ -762,22 +782,286 @@ pub async fn handle_play_button(
                         None,
                     )
                     .await;
-
-                    let snapshot = player.get_state().await;
-                    match snapshot.state {
-                        azuki_player::PlayStateInfo::Idle => {
-                            let _ = player.play(ti, ui.clone()).await;
-                        }
-                        _ => {
-                            let _ = player.enqueue(ti, ui).await;
-                        }
-                    }
+                    let _ = player.play_or_enqueue(ti, ui).await;
                 }
-                Err(e) => {
-                    tracing::error!("re-download failed: {e}");
-                }
+                Err(e) => tracing::error!("re-download failed: {e}"),
             }
         });
+        return;
+    }
+
+    // File exists: atomic play_or_enqueue
+    let action = state.player.play_or_enqueue(track_info.clone(), ui).await;
+    let in_history = is_history_channel(state, component.channel_id.get());
+
+    match action {
+        Ok(act) if in_history => {
+            let msg = match act {
+                PlayAction::PlayedNow => "재생 시작",
+                PlayAction::Enqueued => "대기열에 추가됨",
+            };
+            let _ = component
+                .create_response(
+                    &ctx.http,
+                    CreateInteractionResponse::Message(
+                        CreateInteractionResponseMessage::new()
+                            .content(msg)
+                            .ephemeral(true),
+                    ),
+                )
+                .await;
+        }
+        Ok(act) => {
+            let _ = component
+                .create_response(
+                    &ctx.http,
+                    CreateInteractionResponse::Message(
+                        CreateInteractionResponseMessage::new()
+                            .content(play_action_message(
+                                act,
+                                &track_info.title,
+                                &track_info.source_url,
+                            ))
+                            .components(vec![crate::embed::build_play_button(&track_info.id)]),
+                    ),
+                )
+                .await;
+            // Delete the original message (bot's own message with play button)
+            if let Err(e) = component.message.delete(&ctx.http).await {
+                tracing::debug!("failed to delete original message: {e}");
+            }
+        }
+        Err(e) => {
+            tracing::warn!("play error: {e}");
+            let _ = component
+                .create_response(
+                    &ctx.http,
+                    CreateInteractionResponse::Message(
+                        CreateInteractionResponseMessage::new()
+                            .content(player_error_message(&e))
+                            .ephemeral(true),
+                    ),
+                )
+                .await;
+        }
+    }
+}
+
+/// Search select menu handler (ss:search)
+pub async fn handle_search_select(
+    ctx: &Context,
+    component: &ComponentInteraction,
+    state: &Arc<BotState>,
+) {
+    let youtube_id = match &component.data.kind {
+        ComponentInteractionDataKind::StringSelect { values } => {
+            values.first().cloned().unwrap_or_default()
+        }
+        _ => return,
+    };
+
+    if youtube_id.is_empty() {
+        return;
+    }
+
+    let guild_id = match component.guild_id {
+        Some(id) => id,
+        None => return,
+    };
+
+    if ensure_user_in_voice(ctx, guild_id, component.user.id, state)
+        .await
+        .is_err()
+    {
+        if component
+            .create_response(
+                &ctx.http,
+                CreateInteractionResponse::Message(
+                    CreateInteractionResponseMessage::new()
+                        .content("음성 채널에 먼저 접속해주세요")
+                        .ephemeral(true),
+                ),
+            )
+            .await
+            .is_ok()
+        {
+            let _ = component.message.delete(&ctx.http).await;
+        }
+        return;
+    }
+
+    // Pre-check: compute track_id from URL and check for duplicates before downloading
+    let url = format!("https://www.youtube.com/watch?v={youtube_id}");
+    let track_id = sha_id(&url);
+
+    let snapshot = state.player.get_state().await;
+    let now_playing_id = match &snapshot.state {
+        azuki_player::PlayStateInfo::Playing { track, .. }
+        | azuki_player::PlayStateInfo::Paused { track, .. } => Some(track.id.as_str()),
+        _ => None,
+    };
+    let in_queue = snapshot.queue.iter().any(|e| e.track.id == track_id);
+    if now_playing_id == Some(&track_id) || in_queue {
+        if component
+            .create_response(
+                &ctx.http,
+                CreateInteractionResponse::Message(
+                    CreateInteractionResponseMessage::new()
+                        .content(player_error_message(&PlayerError::Duplicate))
+                        .ephemeral(true),
+                ),
+            )
+            .await
+            .is_ok()
+        {
+            let _ = component.message.delete(&ctx.http).await;
+        }
+        return;
+    }
+
+    // Check if file already exists in DB — skip download if so
+    if let Ok(existing) = azuki_db::queries::tracks::get_track(&state.db, &track_id).await
+        && existing
+            .file_path
+            .as_ref()
+            .is_some_and(|fp| std::path::Path::new(fp).exists())
+    {
+        // Defer + replace select menu
+        let _ = component.defer(&ctx.http).await;
+        let track_info = build_track_info_from_db(&existing);
+        let ui = user_info_from(&component.user);
+        let action = state.player.play_or_enqueue(track_info, ui).await;
+
+        match action {
+            Ok(act) => {
+                let content = play_action_message(act, &existing.title, &existing.source_url);
+                let _ = component
+                    .edit_response(
+                        &ctx.http,
+                        serenity::all::EditInteractionResponse::new()
+                            .content(&content)
+                            .components(vec![crate::embed::build_play_button(&track_id)]),
+                    )
+                    .await;
+            }
+            Err(e) => {
+                let _ = component.delete_response(&ctx.http).await;
+                let _ = component
+                    .create_followup(
+                        &ctx.http,
+                        CreateInteractionResponseFollowup::new()
+                            .content(player_error_message(&e))
+                            .ephemeral(true),
+                    )
+                    .await;
+            }
+        }
+        return;
+    }
+
+    // Defer (update type so we can edit the original message)
+    let _ = component.defer(&ctx.http).await;
+
+    // Immediately replace select menu with loading indicator
+    let _ = component
+        .edit_response(
+            &ctx.http,
+            serenity::all::EditInteractionResponse::new()
+                .content("재생하는 중...")
+                .components(vec![]),
+        )
+        .await;
+
+    // Download
+    let (file_path, meta) = match state.ytdlp.download(&url).await {
+        Ok(r) => r,
+        Err(e) => {
+            tracing::error!("search select download failed: {e}");
+            let _ = component.delete_response(&ctx.http).await;
+            let _ = component
+                .create_followup(
+                    &ctx.http,
+                    CreateInteractionResponseFollowup::new()
+                        .content(format!("다운로드 실패: {e}"))
+                        .ephemeral(true),
+                )
+                .await;
+            return;
+        }
+    };
+
+    let track_id = sha_id(&meta.source_url);
+    let file_path_str = file_path.to_string_lossy().to_string();
+
+    // Download thumbnail
+    if let Some(ref thumb_url) = meta.thumbnail_url {
+        let thumb_path = std::path::Path::new("media/thumbnails").join(format!("{track_id}.jpg"));
+        if let Err(e) = azuki_media::YtDlp::download_thumbnail(thumb_url, &thumb_path).await {
+            tracing::warn!("thumbnail download failed: {e}");
+        }
+    }
+
+    // Save to DB
+    azuki_db::queries::tracks::upsert_track(
+        &state.db,
+        &track_id,
+        &meta.title,
+        meta.artist.as_deref(),
+        meta.duration_ms as i64,
+        meta.thumbnail_url.as_deref(),
+        &meta.source_url,
+        "youtube",
+        Some(&file_path_str),
+        meta.youtube_id.as_deref(),
+        None,
+    )
+    .await
+    .ok();
+
+    let track_volume = azuki_db::queries::tracks::get_track(&state.db, &track_id)
+        .await
+        .map(|t| t.volume as u8)
+        .unwrap_or(5);
+
+    let track_info = TrackInfo {
+        id: track_id.clone(),
+        title: meta.title.clone(),
+        artist: meta.artist.clone(),
+        duration_ms: meta.duration_ms,
+        thumbnail_url: meta.thumbnail_url.clone(),
+        source_url: meta.source_url.clone(),
+        source_type: "youtube".to_string(),
+        file_path: Some(file_path_str),
+        youtube_id: meta.youtube_id,
+        volume: track_volume,
+    };
+
+    let ui = user_info_from(&component.user);
+    let action = state.player.play_or_enqueue(track_info, ui).await;
+
+    match action {
+        Ok(act) => {
+            let content = play_action_message(act, &meta.title, &meta.source_url);
+            let _ = component
+                .edit_response(
+                    &ctx.http,
+                    serenity::all::EditInteractionResponse::new()
+                        .content(&content)
+                        .components(vec![crate::embed::build_play_button(&track_id)]),
+                )
+                .await;
+        }
+        Err(e) => {
+            let _ = component.delete_response(&ctx.http).await;
+            let _ = component
+                .create_followup(
+                    &ctx.http,
+                    CreateInteractionResponseFollowup::new()
+                        .content(player_error_message(&e))
+                        .ephemeral(true),
+                )
+                .await;
+        }
     }
 }
 
@@ -900,15 +1184,7 @@ pub async fn handle_legacy_play(
                     volume: track_volume,
                 };
 
-                let snapshot = player.get_state().await;
-                match snapshot.state {
-                    azuki_player::PlayStateInfo::Idle => {
-                        let _ = player.play(track_info, ui.clone()).await;
-                    }
-                    _ => {
-                        let _ = player.enqueue(track_info, ui).await;
-                    }
-                }
+                let _ = player.play_or_enqueue(track_info, ui).await;
             }
             Err(e) => {
                 tracing::error!("legacy play download failed: {e}");

@@ -4,6 +4,7 @@ pub mod routes;
 pub mod ws;
 
 use std::net::SocketAddr;
+use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, RwLock};
 
 use axum::extract::Request;
@@ -50,6 +51,7 @@ pub struct WebState {
     pub web_tx: broadcast::Sender<WebSeqEvent>,
     pub active_downloads: Arc<DashMap<String, DownloadStatus>>,
     pub download_tx: mpsc::Sender<DownloadRequest>,
+    pub history_channel_id: Arc<AtomicU64>,
 }
 
 #[derive(Debug, thiserror::Error)]

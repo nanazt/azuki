@@ -78,8 +78,21 @@ impl EventHandler for Handler {
             }
             Interaction::Component(component) => {
                 let custom_id = component.data.custom_id.clone();
-                if let Some(track_id) = custom_id.strip_prefix("play:") {
-                    commands::handle_play_button(&ctx, &component, &self.state, track_id).await;
+                if let Some(track_id) = custom_id
+                    .strip_prefix("pn:")
+                    .or_else(|| custom_id.strip_prefix("eq:"))
+                    .or_else(|| custom_id.strip_prefix("play:"))
+                {
+                    commands::handle_smart_play_button(&ctx, &component, &self.state, track_id)
+                        .await;
+                } else if custom_id.starts_with("ss:") {
+                    commands::handle_search_select(&ctx, &component, &self.state).await;
+                } else if let Some(pos) = custom_id.strip_prefix("qr:").and_then(|s| s.parse::<usize>().ok()) {
+                    commands::handle_queue_remove(&ctx, &component, &self.state, pos).await;
+                } else if let Some(page) = custom_id.strip_prefix("qp:").and_then(|s| s.parse::<usize>().ok()) {
+                    commands::handle_queue_page(&ctx, &component, &self.state, page).await;
+                } else if let Some(page) = custom_id.strip_prefix("qn:").and_then(|s| s.parse::<usize>().ok()) {
+                    commands::handle_queue_page(&ctx, &component, &self.state, page).await;
                 } else if let Some(url) = custom_id.strip_prefix("play-from-clicked-button#") {
                     commands::handle_legacy_play(&ctx, &component, &self.state, url).await;
                 } else if let Some(url) = custom_id.strip_prefix("play-yt-button-0;") {

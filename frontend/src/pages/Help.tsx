@@ -13,6 +13,7 @@ import type { LucideIcon } from "lucide-react";
 interface Command {
   name: string;
   args?: string;
+  description?: string;
 }
 
 interface CommandCluster {
@@ -24,26 +25,24 @@ const commandClusters: CommandCluster[] = [
   {
     label: "Playback",
     commands: [
-      { name: "play", args: "<query or URL>" },
+      {
+        name: "play",
+        args: "<query or URL>",
+        description: "대기 중이면 즉시 재생, 재생 중이면 대기열에 추가",
+      },
       { name: "pause" },
       { name: "resume" },
       { name: "skip" },
-      { name: "stop" },
-      { name: "seek", args: "<time>" },
     ],
   },
   {
-    label: "Queue",
+    label: "Queue & Settings",
     commands: [
       { name: "queue" },
-      { name: "remove", args: "<position>" },
-      { name: "loop", args: "<off | track | queue>" },
-      { name: "playlist", args: "<name>" },
+      { name: "now" },
+      { name: "volume", args: "<0–100>" },
+      { name: "loop", args: "<off | one | all>" },
     ],
-  },
-  {
-    label: "Info",
-    commands: [{ name: "now" }, { name: "volume", args: "<0–100>" }],
   },
 ];
 
@@ -126,16 +125,23 @@ function CommandsCard() {
               {cluster.commands.map((cmd) => (
                 <div
                   key={cmd.name}
-                  className="flex items-center gap-3 px-3 py-2 min-h-[44px] rounded-lg"
+                  className="flex flex-col px-3 py-2 min-h-[44px] rounded-lg justify-center"
                 >
-                  <span className="text-[var(--color-text-tertiary)]">/</span>
-                  <span className="font-medium text-[var(--color-text)]">
-                    {cmd.name}
-                  </span>
-                  {cmd.args && (
-                    <span className="text-xs text-[var(--color-text-tertiary)] ml-auto">
-                      {cmd.args}
+                  <div className="flex items-center gap-3">
+                    <span className="text-[var(--color-text-tertiary)]">/</span>
+                    <span className="font-medium text-[var(--color-text)]">
+                      {cmd.name}
                     </span>
+                    {cmd.args && (
+                      <span className="text-xs text-[var(--color-text-tertiary)] ml-auto">
+                        {cmd.args}
+                      </span>
+                    )}
+                  </div>
+                  {cmd.description && (
+                    <div className="text-xs text-[var(--color-text-tertiary)] font-sans ml-5 mt-0.5">
+                      {cmd.description}
+                    </div>
                   )}
                 </div>
               ))}

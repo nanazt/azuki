@@ -234,6 +234,15 @@ async fn run_normal(config: Config, pool: SqlitePool) -> anyhow::Result<()> {
 
     let cancel = CancellationToken::new();
 
+    // History channel ID cache (shared between bot and web)
+    let history_channel_id = azuki_db::config::get_config(&pool, "history_channel_id")
+        .await
+        .ok()
+        .flatten()
+        .and_then(|v| v.parse::<u64>().ok())
+        .unwrap_or(0);
+    let history_channel_id = Arc::new(AtomicU64::new(history_channel_id));
+
     // WebEvent broadcast channel
     let (web_tx, _) = broadcast::channel::<azuki_web::events::WebSeqEvent>(128);
     let active_downloads: Arc<DashMap<String, azuki_web::events::DownloadStatus>> =
@@ -265,6 +274,7 @@ async fn run_normal(config: Config, pool: SqlitePool) -> anyhow::Result<()> {
         web_tx: web_tx.clone(),
         active_downloads: Arc::clone(&active_downloads),
         download_tx,
+        history_channel_id: Arc::clone(&history_channel_id),
     };
 
     // Http watch channel for embed sending
@@ -281,6 +291,7 @@ async fn run_normal(config: Config, pool: SqlitePool) -> anyhow::Result<()> {
         voice_channels: Arc::clone(&voice_channels),
         text_channels: Arc::clone(&text_channels),
         http_tx,
+        history_channel_id: Arc::clone(&history_channel_id),
     });
 
     // Spawn services
@@ -431,6 +442,25 @@ async fn run_normal(config: Config, pool: SqlitePool) -> anyhow::Result<()> {
                                                             let _ = azuki_db::queries::history::update_message_id(
                                                                 &bridge_db, history_record.id, &sent.id.to_string(),
                                                             ).await;
+
+                                                            // Delete previous embeds for the same track
+                                                            if let Ok(old_ids) = azuki_db::queries::history::get_previous_message_ids(
+                                                                &bridge_db, &track.id, history_record.id,
+                                                            ).await {
+                                                                for old_id_str in &old_ids {
+                                                                    if let Ok(old_id) = old_id_str.parse::<u64>()
+                                                                        && let Err(e) = channel_id.delete_message(
+                                                                            http.as_ref(), serenity::all::MessageId::new(old_id),
+                                                                        ).await
+                                                                    {
+                                                                        tracing::debug!("failed to delete old history embed: {e}");
+                                                                    }
+                                                                }
+                                                                let _ = azuki_db::queries::history::clear_old_message_ids(
+                                                                    &bridge_db, &track.id, history_record.id,
+                                                                ).await;
+                                                            }
+
                                                             current_history = Some((
                                                                 channel_id, sent.id, history_record.id,
                                                                 track.clone(), display_name, track.volume,

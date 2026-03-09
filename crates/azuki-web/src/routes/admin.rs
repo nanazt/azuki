@@ -220,6 +220,12 @@ pub async fn history_channel_set(
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
+    // Update in-memory cache
+    let new_id = body.channel_id.parse::<u64>().unwrap_or(0);
+    state
+        .history_channel_id
+        .store(new_id, std::sync::atomic::Ordering::Relaxed);
+
     Ok(Json(serde_json::json!({ "success": true })))
 }
 

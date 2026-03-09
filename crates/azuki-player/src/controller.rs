@@ -68,6 +68,11 @@ pub enum PlayerCommand {
         to: usize,
         reply: oneshot::Sender<Result<(), PlayerError>>,
     },
+    PlayOrEnqueue {
+        track: TrackInfo,
+        user_info: UserInfo,
+        reply: oneshot::Sender<Result<PlayAction, PlayerError>>,
+    },
     GetState {
         reply: oneshot::Sender<PlayerSnapshot>,
     },
@@ -75,6 +80,12 @@ pub enum PlayerCommand {
         track_id: String,
         reason: TrackEndReason,
     },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PlayAction {
+    PlayedNow,
+    Enqueued,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -255,16 +266,15 @@ impl PlayerController {
         &self,
         track: TrackInfo,
         user_info: UserInfo,
-    ) -> Result<(), PlayerError> {
-        let snapshot = self.get_state().await;
-        match snapshot.state {
-            PlayStateInfo::Idle => self.play(track, user_info).await,
-            PlayStateInfo::Paused {
-                position_ms,
-                track: ref current,
-            } if position_ms >= current.duration_ms => self.play(track, user_info).await,
-            _ => self.enqueue(track, user_info).await,
-        }
+    ) -> Result<PlayAction, PlayerError> {
+        let (tx, rx) = oneshot::channel();
+        self.send_cmd(PlayerCommand::PlayOrEnqueue {
+            track,
+            user_info,
+            reply: tx,
+        })
+        .await;
+        rx.await.unwrap_or(Err(PlayerError::NoTrack))
     }
 
     pub async fn enqueue(&self, track: TrackInfo, user_info: UserInfo) -> Result<(), PlayerError> {
@@ -866,6 +876,79 @@ impl PlayerActor {
                 } else {
                     let _ = reply.send(Err(PlayerError::InvalidPosition));
                 }
+            }
+
+            PlayerCommand::PlayOrEnqueue {
+                track,
+                user_info,
+                reply,
+            } => {
+                let action = match &self.state {
+                    PlayState::Idle => {
+                        self.broadcast(PlayerEvent::TrackLoading {
+                            track: track.clone(),
+                        });
+                        self.volume = track.volume;
+                        self.current_added_by = Some(user_info.clone());
+                        self.state = PlayState::Playing {
+                            track: track.clone(),
+                            started_at: Instant::now(),
+                            position_ms: 0,
+                        };
+                        self.broadcast(PlayerEvent::TrackStarted {
+                            track,
+                            position_ms: 0,
+                            added_by: user_info,
+                        });
+                        self.broadcast(PlayerEvent::VolumeChanged { volume: self.volume });
+                        Ok(PlayAction::PlayedNow)
+                    }
+                    PlayState::Paused {
+                        track: current,
+                        position_ms,
+                    } if *position_ms >= current.duration_ms => {
+                        self.broadcast(PlayerEvent::TrackLoading {
+                            track: track.clone(),
+                        });
+                        self.volume = track.volume;
+                        self.current_added_by = Some(user_info.clone());
+                        self.state = PlayState::Playing {
+                            track: track.clone(),
+                            started_at: Instant::now(),
+                            position_ms: 0,
+                        };
+                        self.broadcast(PlayerEvent::TrackStarted {
+                            track,
+                            position_ms: 0,
+                            added_by: user_info,
+                        });
+                        self.broadcast(PlayerEvent::VolumeChanged { volume: self.volume });
+                        Ok(PlayAction::PlayedNow)
+                    }
+                    _ => {
+                        // Enqueue logic (same as Enqueue handler)
+                        let now_playing = match &self.state {
+                            PlayState::Playing { track: t, .. }
+                            | PlayState::Paused { track: t, .. }
+                            | PlayState::Loading { track: t }
+                            | PlayState::Error { track: t, .. } => Some(t.id.as_str()),
+                            PlayState::Idle => None,
+                        };
+                        let is_duplicate = now_playing == Some(track.id.as_str())
+                            || self.queue.contains(&track.id);
+                        if is_duplicate {
+                            Err(PlayerError::Duplicate)
+                        } else if self.queue.enqueue(track, user_info) {
+                            self.broadcast(PlayerEvent::QueueUpdated {
+                                queue: self.queue.items(),
+                            });
+                            Ok(PlayAction::Enqueued)
+                        } else {
+                            Err(PlayerError::QueueFull)
+                        }
+                    }
+                };
+                let _ = reply.send(action);
             }
 
             PlayerCommand::GetState { reply } => {

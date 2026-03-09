@@ -62,12 +62,6 @@ pub async fn previous(
     Ok(StatusCode::OK)
 }
 
-pub async fn stop(jar: CookieJar, State(state): State<WebState>) -> Result<StatusCode, ApiError> {
-    extract_user_id(&jar, &state).await?;
-    state.player.stop().await?;
-    Ok(StatusCode::OK)
-}
-
 pub async fn seek(
     jar: CookieJar,
     State(state): State<WebState>,
@@ -327,7 +321,6 @@ pub fn player_routes() -> axum::Router<WebState> {
         .route("/api/player/resume", axum::routing::post(resume))
         .route("/api/player/skip", axum::routing::post(skip))
         .route("/api/player/previous", axum::routing::post(previous))
-        .route("/api/player/stop", axum::routing::post(stop))
         .route("/api/player/seek", axum::routing::post(seek))
         .route("/api/player/volume", axum::routing::post(volume))
         .route("/api/player/loop", axum::routing::post(set_loop))

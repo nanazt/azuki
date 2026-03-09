@@ -3,6 +3,7 @@ pub mod embed;
 pub mod handler;
 pub mod voice;
 
+use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, RwLock};
 
 use serenity::all::GuildId;
@@ -23,6 +24,7 @@ pub struct BotState {
     pub voice_channels: Arc<RwLock<Vec<(u64, String)>>>,
     pub text_channels: Arc<RwLock<Vec<(u64, String)>>>,
     pub http_tx: tokio::sync::watch::Sender<Option<Arc<serenity::http::Http>>>,
+    pub history_channel_id: Arc<AtomicU64>,
 }
 
 #[derive(Debug, thiserror::Error)]

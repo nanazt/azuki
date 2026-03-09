@@ -1,6 +1,6 @@
 use serenity::all::{
     ButtonStyle, Colour, CreateActionRow, CreateButton, CreateEmbed, CreateEmbedAuthor,
-    CreateEmbedFooter, Timestamp,
+    CreateEmbedFooter, CreateSelectMenu, CreateSelectMenuKind, CreateSelectMenuOption, Timestamp,
 };
 
 use azuki_player::TrackInfo;
@@ -41,8 +41,35 @@ pub fn build_play_button(track_id: &str) -> CreateActionRow {
     CreateActionRow::Buttons(vec![
         CreateButton::new(format!("play:{track_id}"))
             .label("재생하기")
-            .style(ButtonStyle::Secondary),
+            .style(ButtonStyle::Success),
     ])
+}
+
+pub fn build_search_select(results: &[(String, String, String, String)]) -> CreateActionRow {
+    // results: Vec of (youtube_id, title, artist, duration_str)
+    let options: Vec<CreateSelectMenuOption> = results
+        .iter()
+        .filter(|(id, _, _, _)| !id.is_empty())
+        .take(5)
+        .map(|(id, title, artist, dur)| {
+            CreateSelectMenuOption::new(truncate_str(title, 100), id)
+                .description(truncate_str(&format!("{artist} · {dur}"), 100))
+        })
+        .collect();
+
+    CreateActionRow::SelectMenu(
+        CreateSelectMenu::new("ss:search", CreateSelectMenuKind::String { options })
+            .placeholder("Select a track to play"),
+    )
+}
+
+fn truncate_str(s: &str, max: usize) -> String {
+    if s.chars().count() <= max {
+        s.to_string()
+    } else {
+        let truncated: String = s.chars().take(max - 3).collect();
+        format!("{truncated}...")
+    }
 }
 
 fn embed_color(source_type: &str) -> Colour {
