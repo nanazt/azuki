@@ -83,6 +83,7 @@ fn escape_like(input: &str) -> String {
 }
 
 /// Cursor-based search (for history source infinite scroll)
+/// Only returns tracks that have been played at least once (exist in play_history).
 pub async fn search_tracks_cursor(
     pool: &SqlitePool,
     query: &str,
@@ -94,6 +95,7 @@ pub async fn search_tracks_cursor(
         format!(
             "SELECT {TRACK_COLUMNS} FROM tracks
              WHERE (title LIKE ?1 ESCAPE '\\' OR artist LIKE ?1 ESCAPE '\\')
+               AND EXISTS (SELECT 1 FROM play_history WHERE play_history.track_id = tracks.id)
                AND (created_at < ?3 OR (created_at = ?3 AND id < ?4))
              ORDER BY created_at DESC, id DESC
              LIMIT ?2"
@@ -101,7 +103,8 @@ pub async fn search_tracks_cursor(
     } else {
         format!(
             "SELECT {TRACK_COLUMNS} FROM tracks
-             WHERE title LIKE ?1 ESCAPE '\\' OR artist LIKE ?1 ESCAPE '\\'
+             WHERE (title LIKE ?1 ESCAPE '\\' OR artist LIKE ?1 ESCAPE '\\')
+               AND EXISTS (SELECT 1 FROM play_history WHERE play_history.track_id = tracks.id)
              ORDER BY created_at DESC, id DESC
              LIMIT ?2"
         )
