@@ -13,6 +13,9 @@
   --color-accent-hover: #ff9db5;
   --color-danger: #e53e3e;
   --color-success: #38a169;
+  --color-warning: #92400e;
+  --color-warning-bg: #fef3c7;
+  --color-warning-border: #d97706;
 }
 
 @keyframes eq-bounce {
@@ -74,6 +77,9 @@ html.light {
   --color-accent-hover: #ff9db5;
   --color-danger: #c53030;
   --color-success: #276749;
+  --color-warning: #92400e;
+  --color-warning-bg: #fef3c7;
+  --color-warning-border: #d97706;
 }
 
 html.light ::-webkit-scrollbar-thumb {
