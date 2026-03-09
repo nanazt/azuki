@@ -4,6 +4,7 @@ import type { Stats as StatsData, ArtistStat, TrackInfo } from "../lib/types";
 import { Skeleton } from "../components/ui/Skeleton";
 import { BarChart2, Disc, Flame, Trophy, Music, Users } from "lucide-react";
 import { TrackThumbnail } from "../components/ui/TrackThumbnail";
+import { useInfiniteScroll } from "../hooks/useInfiniteScroll";
 
 // ─── Helpers ───
 
@@ -443,68 +444,6 @@ function ArtistRow({
   );
 }
 
-// ─── Infinite scroll hook ───
-
-function useInfiniteScroll<T>(
-  fetcher: (cursor?: string) => Promise<{ items: T[]; next_cursor: string | null }>,
-) {
-  const [items, setItems] = useState<T[]>([]);
-  const [nextCursor, setNextCursor] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const sentinelRef = useRef<HTMLDivElement>(null);
-  const hasMore = nextCursor !== null;
-
-  const loadMore = useCallback(async () => {
-    if (loadingMore || !hasMore) return;
-    setLoadingMore(true);
-    try {
-      const res = await fetcher(nextCursor!);
-      setItems((prev) => [...prev, ...res.items]);
-      setNextCursor(res.next_cursor);
-    } catch {
-      // ignore
-    } finally {
-      setLoadingMore(false);
-    }
-  }, [fetcher, nextCursor, loadingMore, hasMore]);
-
-  const loadInitial = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await fetcher();
-      setItems(res.items);
-      setNextCursor(res.next_cursor);
-    } catch {
-      // ignore
-    } finally {
-      setLoading(false);
-    }
-  }, [fetcher]);
-
-  // Initial load
-  useEffect(() => {
-    loadInitial();
-  }, [loadInitial]);
-
-  // IntersectionObserver for infinite scroll
-  useEffect(() => {
-    if (!sentinelRef.current || !hasMore) return;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting) {
-          loadMore();
-        }
-      },
-      { threshold: 0 },
-    );
-    observer.observe(sentinelRef.current);
-    return () => observer.disconnect();
-  }, [hasMore, loadMore]);
-
-  return { items, loading, loadingMore, hasMore, sentinelRef, reload: loadInitial };
-}
-
 // ─── Main Stats Page ───
 
 export function Stats() {
@@ -522,8 +461,8 @@ export function Stats() {
     [],
   );
 
-  const tracks = useInfiniteScroll(fetchTracks);
-  const artists = useInfiniteScroll(fetchArtists);
+  const tracks = useInfiniteScroll<{ track: TrackInfo; play_count: number }>({ fetcher: fetchTracks });
+  const artists = useInfiniteScroll<ArtistStat>({ fetcher: fetchArtists });
 
   const fetchStats = useCallback(() => {
     setError(false);

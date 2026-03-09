@@ -73,8 +73,12 @@ export const api = {
   moveInQueue: (from: number, to: number) => put<void>("/api/queue/move", { from, to }),
 
   // Search
-  search: (q: string, source = "youtube") =>
-    get<{ results: TrackInfo[] }>(`/api/search?q=${encodeURIComponent(q)}&source=${source}`),
+  search: (q: string, source = "youtube", cursor?: string, limit?: number) => {
+    const params = new URLSearchParams({ q, source });
+    if (cursor) params.set("cursor", cursor);
+    if (limit) params.set("limit", String(limit));
+    return get<CursorResponse<TrackInfo>>(`/api/search?${params}`);
+  },
 
   // History
   getHistory: (cursor?: string, limit = 20) => {

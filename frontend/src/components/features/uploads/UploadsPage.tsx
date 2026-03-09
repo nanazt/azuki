@@ -1,10 +1,11 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback } from "react";
 import { Upload, Plus, Loader2, Trash2 } from "lucide-react";
 import clsx from "clsx";
 import { api } from "../../../lib/api";
 import { useToast } from "../../../hooks/useToast";
 import { useAuthStore } from "../../../stores/authStore";
-import type { TrackInfo } from "../../../lib/types";
+import type { TrackInfo, UploadsResponse } from "../../../lib/types";
+import { useInfiniteScroll } from "../../../hooks/useInfiniteScroll";
 
 function formatDuration(ms: number): string {
   const s = Math.floor(ms / 1000);
@@ -79,7 +80,7 @@ function UploadRow({
   };
 
   return (
-    <div className="flex items-center gap-3 px-3 py-2.5 hover:bg-[var(--color-bg-hover)] rounded-md group transition-colors">
+    <li className="flex items-center gap-3 px-3 py-2.5 hover:bg-[var(--color-bg-hover)] rounded-md group transition-colors">
       {/* Icon */}
       <div className="w-10 h-10 rounded bg-[var(--color-bg-tertiary)] flex items-center justify-center flex-shrink-0">
         <Upload size={16} className="text-[var(--color-text-tertiary)]" />
@@ -184,42 +185,24 @@ function UploadRow({
           </>
         )}
       </div>
-    </div>
+    </li>
   );
 }
 
 export function UploadsPage() {
-  const [tracks, setTracks] = useState<TrackInfo[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
   const [total, setTotal] = useState(0);
-  const [nextCursor, setNextCursor] = useState<string | null>(null);
   const isAdmin = useAuthStore((s) => s.isAdmin);
 
-  const fetchUploads = useCallback(async (cursor?: string) => {
-    if (!cursor) setLoading(true);
-    else setLoadingMore(true);
-    try {
-      const data = await api.getUploads(cursor);
-      setTracks((prev) => (cursor ? [...prev, ...data.items] : data.items));
-      setTotal(data.total);
-      setNextCursor(data.next_cursor);
-    } catch {
-      // ignore
-    } finally {
-      setLoading(false);
-      setLoadingMore(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchUploads();
-  }, [fetchUploads]);
+  const { items: tracks, setItems: setTracks, loading, loadingMore, hasMore, sentinelRef, reload, loadMore } =
+    useInfiniteScroll<TrackInfo, UploadsResponse>({
+      fetcher: (cursor) => api.getUploads(cursor),
+      onResponse: (res) => setTotal(res.total),
+    });
 
   const handleDelete = useCallback((id: string) => {
     setTracks((prev) => prev.filter((t) => t.id !== id));
     setTotal((t) => t - 1);
-  }, []);
+  }, [setTracks]);
 
   return (
     <div className="p-4 md:p-6 max-w-3xl mx-auto flex flex-col gap-6">
@@ -250,28 +233,65 @@ export function UploadsPage() {
         </div>
       )}
 
-      {tracks.map((track) => (
-        <UploadRow
-          key={track.id}
-          track={track}
-          onUpdate={fetchUploads}
-          isAdmin={isAdmin}
-          onDelete={handleDelete}
-        />
-      ))}
+      {tracks.length > 0 && (
+        <ul role="list" className="flex flex-col gap-0">
+          {tracks.map((track) => (
+            <UploadRow
+              key={track.id}
+              track={track}
+              onUpdate={reload}
+              isAdmin={isAdmin}
+              onDelete={handleDelete}
+            />
+          ))}
+        </ul>
+      )}
 
-      {/* Load more */}
-      {nextCursor && (
-        <div className="flex items-center justify-center py-4">
-          <button
-            onClick={() => fetchUploads(nextCursor)}
-            disabled={loadingMore}
-            className="px-4 py-1.5 text-xs rounded-md bg-[var(--color-bg-tertiary)] text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover)] transition-colors disabled:opacity-50"
-          >
-            {loadingMore ? "Loading..." : "Load more"}
-          </button>
+      {/* Sentinel + skeleton loading */}
+      {hasMore && (
+        <div ref={sentinelRef}>
+          {loadingMore ? (
+            Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="flex items-center gap-3 px-3 py-2">
+                <div className="w-10 h-10 rounded bg-[var(--color-bg-tertiary)] animate-pulse flex-shrink-0" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-3 bg-[var(--color-bg-tertiary)] rounded animate-pulse w-3/4" />
+                  <div className="h-3 bg-[var(--color-bg-tertiary)] rounded animate-pulse w-1/2" />
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="py-8" />
+          )}
         </div>
       )}
+
+      {/* Keyboard fallback */}
+      {hasMore && !loadingMore && (
+        <button
+          onClick={loadMore}
+          className="sr-only focus:not-sr-only focus:flex focus:justify-center focus:py-3 focus:text-sm focus:text-[var(--color-text-secondary)] focus:underline w-full"
+        >
+          Load more
+        </button>
+      )}
+
+      {/* End-of-list indicator */}
+      {!loading && !hasMore && tracks.length > 0 && (
+        <div className="flex items-center gap-3 px-3 py-6">
+          <div className="flex-1 h-px bg-[var(--color-border)]" />
+          <span className="text-xs text-[var(--color-text-tertiary)] px-2 shrink-0">
+            {tracks.length} tracks
+          </span>
+          <div className="flex-1 h-px bg-[var(--color-border)]" />
+        </div>
+      )}
+
+      {/* Screen reader announcement */}
+      <div aria-live="polite" aria-atomic="false" className="sr-only">
+        {loadingMore ? "Loading more tracks" : ""}
+        {!hasMore && tracks.length > 0 ? `All ${tracks.length} tracks loaded` : ""}
+      </div>
     </div>
   );
 }

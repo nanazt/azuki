@@ -74,6 +74,47 @@ pub async fn search_tracks(
         .map_err(DbError::from)
 }
 
+/// Escape LIKE wildcard characters
+fn escape_like(input: &str) -> String {
+    input
+        .replace('\\', "\\\\")
+        .replace('%', "\\%")
+        .replace('_', "\\_")
+}
+
+/// Cursor-based search (for history source infinite scroll)
+pub async fn search_tracks_cursor(
+    pool: &SqlitePool,
+    query: &str,
+    limit: i64,
+    cursor: Option<(&str, &str)>,
+) -> DbResult<Vec<Track>> {
+    let pattern = format!("%{}%", escape_like(query));
+    let sql = if cursor.is_some() {
+        format!(
+            "SELECT {TRACK_COLUMNS} FROM tracks
+             WHERE (title LIKE ?1 ESCAPE '\\' OR artist LIKE ?1 ESCAPE '\\')
+               AND (created_at < ?3 OR (created_at = ?3 AND id < ?4))
+             ORDER BY created_at DESC, id DESC
+             LIMIT ?2"
+        )
+    } else {
+        format!(
+            "SELECT {TRACK_COLUMNS} FROM tracks
+             WHERE title LIKE ?1 ESCAPE '\\' OR artist LIKE ?1 ESCAPE '\\'
+             ORDER BY created_at DESC, id DESC
+             LIMIT ?2"
+        )
+    };
+    let mut q = sqlx::query_as::<_, Track>(&sql)
+        .bind(&pattern)
+        .bind(limit + 1); // +1 for has_more detection
+    if let Some((cursor_at, cursor_id)) = cursor {
+        q = q.bind(cursor_at).bind(cursor_id);
+    }
+    q.fetch_all(pool).await.map_err(DbError::from)
+}
+
 pub async fn update_track_volume(pool: &SqlitePool, track_id: &str, volume: i64) -> DbResult<()> {
     sqlx::query("UPDATE tracks SET volume = ?1 WHERE id = ?2")
         .bind(volume)

@@ -271,8 +271,8 @@ async fn handle_play_inner(
             .unwrap()
             .clone()
             .ok_or(crate::BotError::NoYouTubeKey)?;
-        let results = youtube
-            .search(&query, 5)
+        let (results, _) = youtube
+            .search(&query, 5, None)
             .await
             .map_err(crate::BotError::Media)?;
 

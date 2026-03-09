@@ -46,7 +46,7 @@ export function AppShell({ children }: AppShellProps) {
       {/* Main content area */}
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <ConnectionStatus />
-        <div className="flex-1 overflow-y-auto pb-32 md:pb-20">{children}</div>
+        <div className="flex-1 overflow-y-auto pb-32 md:pb-20" data-main-scroll>{children}</div>
       </main>
 
       {/* Right panel — hidden on mobile and tablet */}

@@ -703,8 +703,8 @@ async fn download_worker(
             } else {
                 let yt = youtube.read().unwrap().clone();
                 match yt {
-                    Some(client) => match client.search(&req.query_or_url, 1).await {
-                        Ok(results) => match results.into_iter().next() {
+                    Some(client) => match client.search(&req.query_or_url, 1, None).await {
+                        Ok((results, _)) => match results.into_iter().next() {
                             Some(meta) => {
                                 // Broadcast resolved metadata from search result
                                 broadcast_web_event(

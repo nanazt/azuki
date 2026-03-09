@@ -1,12 +1,12 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { api } from "../lib/api";
 import type { TrackInfo } from "../lib/types";
 import { Skeleton } from "../components/ui/Skeleton";
-import { Button } from "../components/ui/Button";
 import { TrackThumbnail } from "../components/ui/TrackThumbnail";
 import { Clock, Plus, Loader2 } from "lucide-react";
 import { formatTime } from "../lib/utils";
 import { useToast } from "../components/ui/Toast";
+import { useInfiniteScroll } from "../hooks/useInfiniteScroll";
 import clsx from "clsx";
 
 interface HistoryEntry {
@@ -17,7 +17,6 @@ interface HistoryEntry {
 }
 
 function formatDate(iso: string): string {
-  // SQLite CURRENT_TIMESTAMP omits timezone — append Z to interpret as UTC
   const date = new Date(iso.endsWith("Z") || iso.includes("+") ? iso : iso + "Z");
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
@@ -33,45 +32,34 @@ function formatDate(iso: string): string {
 }
 
 export function History() {
-  const [items, setItems] = useState<HistoryEntry[]>([]);
-  const [nextCursor, setNextCursor] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
   const [hasNewTrack, setHasNewTrack] = useState(false);
   const [isFirstPage, setIsFirstPage] = useState(true);
 
-  const loadHistory = async (cursor?: string) => {
-    if (!cursor) setLoading(true);
-    else setLoadingMore(true);
+  const { items, setItems, loading, loadingMore, hasMore, sentinelRef, reload, loadMore } =
+    useInfiniteScroll<HistoryEntry>({
+      fetcher: (cursor) => api.getHistory(cursor),
+    });
 
-    try {
-      const res = await api.getHistory(cursor);
-      setNextCursor(res.next_cursor);
-      setItems((prev) => (cursor ? [...prev, ...res.items] : res.items));
-      if (!cursor) setIsFirstPage(true);
-    } catch {
-      // ignore
-    } finally {
-      setLoading(false);
-      setLoadingMore(false);
-    }
-  };
+  // Track when user scrolls past first page
+  const handleReload = useCallback(() => {
+    setHasNewTrack(false);
+    setIsFirstPage(true);
+    reload();
+  }, [reload]);
 
   useEffect(() => {
-    loadHistory();
-  }, []);
+    if (loadingMore) setIsFirstPage(false);
+  }, [loadingMore]);
 
-  const handleLoadMore = () => {
-    if (nextCursor) loadHistory(nextCursor);
-  };
-
+  // Real-time track insertion
   useEffect(() => {
     const handler = (e: Event) => {
       const detail = (e as CustomEvent).detail;
-      if (isFirstPage && window.scrollY < 50) {
+      const scrollTop = document.querySelector("[data-main-scroll]")?.scrollTop ?? 0;
+      if (isFirstPage && scrollTop < 50) {
         setItems((prev) => {
-          const existing = prev.find((e) => e.track.id === detail.track.id);
-          const filtered = prev.filter((e) => e.track.id !== detail.track.id);
+          const existing = prev.find((entry) => entry.track.id === detail.track.id);
+          const filtered = prev.filter((entry) => entry.track.id !== detail.track.id);
           return [{
             track: detail.track,
             played_at: new Date().toISOString(),
@@ -85,7 +73,7 @@ export function History() {
     };
     window.addEventListener("history-added", handler);
     return () => window.removeEventListener("history-added", handler);
-  }, [isFirstPage]);
+  }, [isFirstPage, setItems]);
 
   const [addingIds, setAddingIds] = useState<Set<string>>(new Set());
   const { showToast } = useToast();
@@ -105,8 +93,6 @@ export function History() {
       });
     }
   };
-
-  const hasMore = nextCursor !== null;
 
   return (
     <div className="p-4 md:p-6 max-w-3xl mx-auto flex flex-col gap-6">
@@ -136,19 +122,15 @@ export function History() {
         <>
           {hasNewTrack && (
             <button
-              onClick={() => {
-                setHasNewTrack(false);
-                setIsFirstPage(true);
-                loadHistory();
-              }}
+              onClick={handleReload}
               className="w-full py-2 text-sm text-[var(--color-text)] bg-[var(--color-accent)]/10 rounded-lg hover:bg-[var(--color-accent)]/20 transition-colors"
             >
               New track played — click to refresh
             </button>
           )}
           <ul className="flex flex-col">
-            {items.map((entry, i) => (
-              <li key={i} className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-[var(--color-bg-hover)] transition-colors duration-100 group">
+            {items.map((entry) => (
+              <li key={`${entry.track.id}-${entry.played_at}`} className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-[var(--color-bg-hover)] transition-colors duration-100 group">
                   <TrackThumbnail track={entry.track} sizeClass="w-12 h-12" iconSize={18} className="rounded" />
                   <div className="min-w-0 flex-1">
                     <div className="text-sm font-medium text-[var(--color-text)] truncate">
@@ -187,13 +169,51 @@ export function History() {
             ))}
           </ul>
 
+          {/* Sentinel + skeleton loading */}
           {hasMore && (
-            <div className="flex justify-center pt-2">
-              <Button variant="ghost" onClick={handleLoadMore} disabled={loadingMore}>
-                {loadingMore ? "Loading..." : "Load more"}
-              </Button>
+            <div ref={sentinelRef}>
+              {loadingMore ? (
+                Array.from({ length: 3 }).map((_, i) => (
+                  <div key={i} className="flex items-center gap-3 px-3 py-2">
+                    <div className="w-12 h-12 rounded bg-[var(--color-bg-tertiary)] animate-pulse flex-shrink-0" />
+                    <div className="flex-1 space-y-2">
+                      <div className="h-3 bg-[var(--color-bg-tertiary)] rounded animate-pulse w-3/4" />
+                      <div className="h-3 bg-[var(--color-bg-tertiary)] rounded animate-pulse w-1/2" />
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="py-8" />
+              )}
             </div>
           )}
+
+          {/* Keyboard fallback */}
+          {hasMore && !loadingMore && (
+            <button
+              onClick={loadMore}
+              className="sr-only focus:not-sr-only focus:flex focus:justify-center focus:py-3 focus:text-sm focus:text-[var(--color-text-secondary)] focus:underline w-full"
+            >
+              Load more
+            </button>
+          )}
+
+          {/* End-of-list indicator */}
+          {!loading && !hasMore && items.length > 0 && (
+            <div className="flex items-center gap-3 px-3 py-6">
+              <div className="flex-1 h-px bg-[var(--color-border)]" />
+              <span className="text-xs text-[var(--color-text-tertiary)] px-2 shrink-0">
+                {items.length} tracks
+              </span>
+              <div className="flex-1 h-px bg-[var(--color-border)]" />
+            </div>
+          )}
+
+          {/* Screen reader announcement */}
+          <div aria-live="polite" aria-atomic="false" className="sr-only">
+            {loadingMore ? "Loading more tracks" : ""}
+            {!hasMore && items.length > 0 ? `All ${items.length} tracks loaded` : ""}
+          </div>
         </>
       )}
     </div>

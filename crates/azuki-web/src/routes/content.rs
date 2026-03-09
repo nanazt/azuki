@@ -16,6 +16,8 @@ use crate::{ApiError, WebState};
 pub struct SearchQuery {
     pub q: String,
     pub source: Option<String>,
+    pub cursor: Option<String>,
+    pub limit: Option<i64>,
 }
 
 #[derive(Deserialize)]
@@ -46,17 +48,27 @@ pub async fn search(
 ) -> Result<Json<serde_json::Value>, ApiError> {
     extract_user_id(&jar, &state).await?;
 
+    // Query length limit
+    if params.q.len() > 200 {
+        return Err(ApiError::BadRequest("query too long".into()));
+    }
+
     let source = params.source.as_deref().unwrap_or("youtube");
 
     match source {
         "youtube" => {
+            let limit = params.limit.unwrap_or(10).clamp(1, 25) as u32;
+            let page_token = params.cursor.as_deref();
+
             let youtube = state.youtube.read().unwrap().clone()
                 .ok_or_else(|| ApiError::BadRequest("YouTube API key not configured".to_string()))?;
-            let results = youtube.search(&params.q, 10).await?;
+            let (results, next_page_token) = youtube.search(&params.q, limit, page_token).await?;
+
             let items: Vec<serde_json::Value> = results
                 .into_iter()
                 .map(|m| {
                     serde_json::json!({
+                        "id": m.youtube_id.as_deref().unwrap_or(""),
                         "title": m.title,
                         "artist": m.artist,
                         "duration_ms": m.duration_ms,
@@ -66,14 +78,39 @@ pub async fn search(
                     })
                 })
                 .collect();
-            Ok(Json(serde_json::json!({ "results": items })))
+
+            Ok(Json(serde_json::json!({
+                "items": items,
+                "next_cursor": next_page_token,
+            })))
         }
         "history" => {
-            let tracks =
-                azuki_db::queries::tracks::search_tracks(&state.db, &params.q, 20, 0).await?;
-            Ok(Json(serde_json::json!({ "results": tracks })))
+            let limit = params.limit.unwrap_or(20).clamp(1, 100);
+            let cursor: Option<(String, String)> = params
+                .cursor
+                .as_deref()
+                .map(decode_cursor)
+                .transpose()?;
+
+            let cursor_refs = cursor.as_ref().map(|(a, b)| (a.as_str(), b.as_str()));
+            let mut tracks = azuki_db::queries::tracks::search_tracks_cursor(
+                &state.db, &params.q, limit, cursor_refs,
+            ).await?;
+
+            let next_cursor = if tracks.len() as i64 > limit {
+                tracks.pop();
+                let last = tracks.last().unwrap();
+                Some(encode_cursor(&(&last.created_at, &last.id)))
+            } else {
+                None
+            };
+
+            Ok(Json(serde_json::json!({
+                "items": tracks,
+                "next_cursor": next_cursor,
+            })))
         }
-        _ => Ok(Json(serde_json::json!({ "results": [] }))),
+        _ => Ok(Json(serde_json::json!({ "items": [], "next_cursor": null }))),
     }
 }
 

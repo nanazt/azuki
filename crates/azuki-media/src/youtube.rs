@@ -29,16 +29,26 @@ impl YouTubeClient {
         }
     }
 
-    pub async fn search(&self, query: &str, limit: u32) -> Result<Vec<TrackMeta>, MediaError> {
+    pub async fn search(
+        &self,
+        query: &str,
+        limit: u32,
+        page_token: Option<&str>,
+    ) -> Result<(Vec<TrackMeta>, Option<String>), MediaError> {
+        let limit_str = limit.to_string();
+        let mut params: Vec<(&str, &str)> = vec![
+            ("part", "snippet"),
+            ("type", "video"),
+            ("q", query),
+            ("maxResults", &limit_str),
+            ("key", &self.api_key),
+        ];
+        if let Some(token) = page_token {
+            params.push(("pageToken", token));
+        }
         let search_url = Url::parse_with_params(
             "https://www.googleapis.com/youtube/v3/search",
-            &[
-                ("part", "snippet"),
-                ("type", "video"),
-                ("q", query),
-                ("maxResults", &limit.to_string()),
-                ("key", &self.api_key),
-            ],
+            &params,
         )
         .map_err(|e| MediaError::YouTube(format!("failed to build search URL: {e}")))?;
 
@@ -55,8 +65,10 @@ impl YouTubeClient {
             .map_err(|e| MediaError::YouTube(sanitize_error(e)))?;
 
         if search_resp.items.is_empty() {
-            return Ok(Vec::new());
+            return Ok((Vec::new(), None));
         }
+
+        let next_page_token = search_resp.next_page_token.clone();
 
         let ids: String = search_resp
             .items
@@ -121,7 +133,7 @@ impl YouTubeClient {
             })
             .collect();
 
-        Ok(results)
+        Ok((results, next_page_token))
     }
 
     pub fn extract_playlist_id(url: &str) -> Option<String> {
@@ -446,8 +458,10 @@ fn parse_iso8601_duration(s: &str) -> u64 {
 // Response structs for YouTube API
 
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct SearchResponse {
     items: Vec<SearchItem>,
+    next_page_token: Option<String>,
 }
 
 #[derive(Deserialize)]
