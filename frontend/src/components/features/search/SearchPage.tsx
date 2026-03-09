@@ -46,7 +46,7 @@ export function SearchPage() {
 
     debounceRef.current = setTimeout(() => {
       setDebouncedQuery(query);
-    }, 225);
+    }, 300);
 
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -224,7 +224,9 @@ export function SearchPage() {
         {/* Screen reader announcement */}
         <div aria-live="polite" aria-atomic="false" className="sr-only">
           {loadingMore ? "Loading more results" : ""}
-          {!hasMore && results.length > 0 ? `All ${results.length} results loaded` : ""}
+          {!hasMore && results.length > 0
+            ? `All ${results.length} results loaded`
+            : ""}
         </div>
       </div>
     </div>

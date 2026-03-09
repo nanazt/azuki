@@ -290,15 +290,21 @@ impl PlayerController {
 
     pub async fn remove(&self, position: usize) -> Result<(), PlayerError> {
         let (tx, rx) = oneshot::channel();
-        self.send_cmd(PlayerCommand::Remove { position, reply: tx })
-            .await;
+        self.send_cmd(PlayerCommand::Remove {
+            position,
+            reply: tx,
+        })
+        .await;
         rx.await.unwrap_or(Err(PlayerError::NoTrack))
     }
 
     pub async fn play_at(&self, position: usize) -> Result<(), PlayerError> {
         let (tx, rx) = oneshot::channel();
-        self.send_cmd(PlayerCommand::PlayAt { position, reply: tx })
-            .await;
+        self.send_cmd(PlayerCommand::PlayAt {
+            position,
+            reply: tx,
+        })
+        .await;
         rx.await.unwrap_or(Err(PlayerError::NoTrack))
     }
 
@@ -431,7 +437,9 @@ impl PlayerActor {
                     position_ms: 0,
                     added_by: user_info,
                 });
-                self.broadcast(PlayerEvent::VolumeChanged { volume: self.volume });
+                self.broadcast(PlayerEvent::VolumeChanged {
+                    volume: self.volume,
+                });
                 let _ = reply.send(Ok(()));
             }
 
@@ -451,9 +459,7 @@ impl PlayerActor {
                     let _ = reply.send(Ok(()));
                 }
                 _ => {
-                    let _ = reply.send(Err(PlayerError::InvalidState(
-                        "not playing".to_string(),
-                    )));
+                    let _ = reply.send(Err(PlayerError::InvalidState("not playing".to_string())));
                 }
             },
 
@@ -470,9 +476,7 @@ impl PlayerActor {
                     let _ = reply.send(Ok(()));
                 }
                 _ => {
-                    let _ = reply.send(Err(PlayerError::InvalidState(
-                        "not paused".to_string(),
-                    )));
+                    let _ = reply.send(Err(PlayerError::InvalidState("not paused".to_string())));
                 }
             },
 
@@ -525,7 +529,9 @@ impl PlayerActor {
                         position_ms: 0,
                         added_by,
                     });
-                    self.broadcast(PlayerEvent::VolumeChanged { volume: self.volume });
+                    self.broadcast(PlayerEvent::VolumeChanged {
+                        volume: self.volume,
+                    });
                     self.broadcast(PlayerEvent::QueueUpdated {
                         queue: self.queue.items(),
                     });
@@ -555,9 +561,7 @@ impl PlayerActor {
                 self.state = PlayState::Idle;
                 self.current_added_by = None;
                 self.queue.clear();
-                self.broadcast(PlayerEvent::QueueUpdated {
-                    queue: Vec::new(),
-                });
+                self.broadcast(PlayerEvent::QueueUpdated { queue: Vec::new() });
                 let _ = reply.send(Ok(()));
             }
 
@@ -577,10 +581,7 @@ impl PlayerActor {
                 }
                 PlayState::Paused { track, .. } => {
                     let track = track.clone();
-                    self.state = PlayState::Paused {
-                        track,
-                        position_ms,
-                    };
+                    self.state = PlayState::Paused { track, position_ms };
                     self.broadcast(PlayerEvent::Seeked {
                         position_ms,
                         paused: true,
@@ -620,8 +621,8 @@ impl PlayerActor {
                     | PlayState::Error { track: t, .. } => Some(t.id.as_str()),
                     PlayState::Idle => None,
                 };
-                let is_duplicate = now_playing == Some(track.id.as_str())
-                    || self.queue.contains(&track.id);
+                let is_duplicate =
+                    now_playing == Some(track.id.as_str()) || self.queue.contains(&track.id);
                 if is_duplicate {
                     let _ = reply.send(Err(PlayerError::Duplicate));
                 } else if self.queue.enqueue(track, user_info) {
@@ -635,7 +636,7 @@ impl PlayerActor {
             }
 
             PlayerCommand::Previous { reply } => {
-                const RESTART_THRESHOLD_MS: u64 = 5000;
+                const RESTART_THRESHOLD_MS: u64 = 3000;
 
                 let (current_pos, has_track) = match &self.state {
                     PlayState::Playing {
@@ -655,8 +656,8 @@ impl PlayerActor {
                 }
 
                 // LoopMode::One or position > threshold → seek to 0
-                let should_restart = self.queue.loop_mode() == LoopMode::One
-                    || current_pos > RESTART_THRESHOLD_MS;
+                let should_restart =
+                    self.queue.loop_mode() == LoopMode::One || current_pos > RESTART_THRESHOLD_MS;
 
                 if should_restart {
                     match &self.state {
@@ -694,8 +695,9 @@ impl PlayerActor {
                     let prev = self.queue.pop_back();
                     if let Some(prev_entry) = prev {
                         let current_track = match &self.state {
-                            PlayState::Playing { track, .. }
-                            | PlayState::Paused { track, .. } => track.clone(),
+                            PlayState::Playing { track, .. } | PlayState::Paused { track, .. } => {
+                                track.clone()
+                            }
                             _ => unreachable!(),
                         };
                         let current_id = current_track.id.clone();
@@ -726,7 +728,9 @@ impl PlayerActor {
                             position_ms: 0,
                             added_by,
                         });
-                        self.broadcast(PlayerEvent::VolumeChanged { volume: self.volume });
+                        self.broadcast(PlayerEvent::VolumeChanged {
+                            volume: self.volume,
+                        });
                         self.broadcast(PlayerEvent::QueueUpdated {
                             queue: self.queue.items(),
                         });
@@ -766,8 +770,9 @@ impl PlayerActor {
                 // LoopMode::Off and position <= threshold → go to history
                 if let Some(prev_entry) = self.queue.go_previous() {
                     let current_track = match &self.state {
-                        PlayState::Playing { track, .. }
-                        | PlayState::Paused { track, .. } => track.clone(),
+                        PlayState::Playing { track, .. } | PlayState::Paused { track, .. } => {
+                            track.clone()
+                        }
                         _ => unreachable!(),
                     };
                     let current_id = current_track.id.clone();
@@ -798,7 +803,9 @@ impl PlayerActor {
                         position_ms: 0,
                         added_by,
                     });
-                    self.broadcast(PlayerEvent::VolumeChanged { volume: self.volume });
+                    self.broadcast(PlayerEvent::VolumeChanged {
+                        volume: self.volume,
+                    });
                     self.broadcast(PlayerEvent::QueueUpdated {
                         queue: self.queue.items(),
                     });
@@ -877,7 +884,9 @@ impl PlayerActor {
                         position_ms: 0,
                         added_by,
                     });
-                    self.broadcast(PlayerEvent::VolumeChanged { volume: self.volume });
+                    self.broadcast(PlayerEvent::VolumeChanged {
+                        volume: self.volume,
+                    });
                     self.broadcast(PlayerEvent::QueueUpdated {
                         queue: self.queue.items(),
                     });
@@ -934,7 +943,9 @@ impl PlayerActor {
                             position_ms: 0,
                             added_by: user_info,
                         });
-                        self.broadcast(PlayerEvent::VolumeChanged { volume: self.volume });
+                        self.broadcast(PlayerEvent::VolumeChanged {
+                            volume: self.volume,
+                        });
                         Ok(PlayAction::PlayedNow)
                     }
                     PlayState::Paused {
@@ -956,7 +967,9 @@ impl PlayerActor {
                             position_ms: 0,
                             added_by: user_info,
                         });
-                        self.broadcast(PlayerEvent::VolumeChanged { volume: self.volume });
+                        self.broadcast(PlayerEvent::VolumeChanged {
+                            volume: self.volume,
+                        });
                         Ok(PlayAction::PlayedNow)
                     }
                     _ => {
@@ -1030,9 +1043,9 @@ impl PlayerActor {
                 }
 
                 let completed = matches!(reason, TrackEndReason::Finished);
-                let listened_ms = current_track.as_ref().map_or(0, |t| {
-                    self.current_position_ms().min(t.duration_ms)
-                });
+                let listened_ms = current_track
+                    .as_ref()
+                    .map_or(0, |t| self.current_position_ms().min(t.duration_ms));
 
                 // Auto-advance
                 if let Some(next) = self.queue.advance() {
@@ -1055,7 +1068,9 @@ impl PlayerActor {
                         position_ms: 0,
                         added_by,
                     });
-                    self.broadcast(PlayerEvent::VolumeChanged { volume: self.volume });
+                    self.broadcast(PlayerEvent::VolumeChanged {
+                        volume: self.volume,
+                    });
                     self.broadcast(PlayerEvent::QueueUpdated {
                         queue: self.queue.items(),
                     });
