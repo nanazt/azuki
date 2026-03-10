@@ -7,6 +7,7 @@ interface SkeletonProps {
   width?: string | number;
   height?: string | number;
   className?: string;
+  animate?: boolean;
 }
 
 export function Skeleton({
@@ -14,6 +15,7 @@ export function Skeleton({
   width,
   height,
   className,
+  animate = true,
 }: SkeletonProps) {
   const style: React.CSSProperties = {
     width: typeof width === "number" ? `${width}px` : width,
@@ -23,7 +25,8 @@ export function Skeleton({
   return (
     <div
       className={clsx(
-        "bg-[var(--color-bg-tertiary)] animate-pulse",
+        "bg-[var(--color-bg-tertiary)]",
+        animate && "animate-pulse",
         variant === "text" && "rounded h-4",
         variant === "circle" && "rounded-full",
         variant === "rect" && "rounded-md",

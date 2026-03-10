@@ -22,7 +22,7 @@ export function MobileTabBar() {
   ];
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 h-16 z-30 flex items-center bg-[var(--color-bg-secondary)] border-t border-[var(--color-border)]">
+    <nav className="h-16 w-full flex items-center bg-[var(--color-bg-secondary)] border-t border-[var(--color-border)]">
       {TABS.map((tab) => (
         <NavLink
           key={tab.to}

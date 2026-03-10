@@ -158,12 +158,21 @@ export function PlayerBar({ onToggleQueue, queueDrawerOpen }: PlayerBarProps) {
               </>
             ) : (
               <>
-                <Skeleton variant="rect" className="w-12 h-12 rounded" />
+                <Skeleton
+                  variant="rect"
+                  className="w-12 h-12 rounded"
+                  animate={false}
+                />
                 <div className="flex flex-col gap-1.5">
-                  <Skeleton variant="text" className="h-3 w-32 rounded-full" />
+                  <Skeleton
+                    variant="text"
+                    className="h-3 w-32 rounded-full"
+                    animate={false}
+                  />
                   <Skeleton
                     variant="text"
                     className="h-2.5 w-20 rounded-full"
+                    animate={false}
                   />
                 </div>
               </>
@@ -367,10 +376,22 @@ export function PlayerBar({ onToggleQueue, queueDrawerOpen }: PlayerBarProps) {
           </>
         ) : (
           <div className="flex items-center gap-3 min-w-0 flex-1">
-            <Skeleton variant="rect" className="w-10 h-10 rounded" />
+            <Skeleton
+              variant="rect"
+              className="w-10 h-10 rounded"
+              animate={false}
+            />
             <div className="flex flex-col gap-1.5">
-              <Skeleton variant="text" className="h-3 w-28 rounded-full" />
-              <Skeleton variant="text" className="h-2.5 w-16 rounded-full" />
+              <Skeleton
+                variant="text"
+                className="h-3 w-28 rounded-full"
+                animate={false}
+              />
+              <Skeleton
+                variant="text"
+                className="h-2.5 w-16 rounded-full"
+                animate={false}
+              />
             </div>
           </div>
         )}

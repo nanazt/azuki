@@ -37,23 +37,39 @@ export function AppShell({ children }: AppShellProps) {
   }, []);
 
   return (
-    <div className="flex h-dvh overflow-hidden bg-[var(--color-bg)]">
-      {/* Left sidebar — hidden on mobile */}
-      <div className="hidden md:flex flex-shrink-0 w-60">
-        <Sidebar />
+    <div className="flex flex-col h-dvh overflow-hidden bg-[var(--color-bg)]">
+      {/* Top row: sidebar + content + queue panel */}
+      <div className="flex flex-1 min-h-0">
+        {/* Left sidebar — hidden on mobile */}
+        <div className="hidden md:flex flex-shrink-0 w-60">
+          <Sidebar />
+        </div>
+
+        {/* Main content area */}
+        <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
+          <ConnectionStatus />
+          <div className="flex-1 overflow-y-auto" data-main-scroll>
+            {children}
+          </div>
+        </main>
+
+        {/* Right panel — hidden on mobile and tablet */}
+        <div className="hidden lg:flex flex-shrink-0 w-[340px] border-l border-[var(--color-border)] flex-col overflow-hidden">
+          <QueuePanel />
+        </div>
       </div>
 
-      {/* Main content area */}
-      <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        <ConnectionStatus />
-        <div className="flex-1 overflow-y-auto pb-32 md:pb-20" data-main-scroll>
-          {children}
-        </div>
-      </main>
+      {/* Mobile bottom tab bar */}
+      <div className="md:hidden flex-shrink-0">
+        <MobileTabBar />
+      </div>
 
-      {/* Right panel — hidden on mobile and tablet */}
-      <div className="hidden lg:flex flex-shrink-0 w-[340px] border-l border-[var(--color-border)] flex-col overflow-hidden">
-        <QueuePanel />
+      {/* Player bar — full width */}
+      <div className="flex-shrink-0">
+        <PlayerBar
+          onToggleQueue={toggleQueueDrawer}
+          queueDrawerOpen={queueDrawerOpen}
+        />
       </div>
 
       {/* Queue drawer backdrop — md~lg only */}
@@ -71,19 +87,6 @@ export function AppShell({ children }: AppShellProps) {
         }`}
       >
         <QueuePanel />
-      </div>
-
-      {/* Fixed bottom player bar */}
-      <div className="fixed bottom-0 left-0 right-0 z-30">
-        <PlayerBar
-          onToggleQueue={toggleQueueDrawer}
-          queueDrawerOpen={queueDrawerOpen}
-        />
-      </div>
-
-      {/* Mobile bottom tab bar — shown only on mobile, above player bar */}
-      <div className="md:hidden fixed bottom-[60px] left-0 right-0 z-30">
-        <MobileTabBar />
       </div>
     </div>
   );

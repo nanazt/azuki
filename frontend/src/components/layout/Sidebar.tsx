@@ -51,7 +51,7 @@ export function Sidebar() {
   const listeners = usePlayerStore((s) => s.listeners);
 
   return (
-    <aside className="flex flex-col w-60 h-full bg-[var(--color-bg-secondary)] border-r border-[var(--color-border)] overflow-y-auto pb-20">
+    <aside className="flex flex-col w-60 h-full bg-[var(--color-bg-secondary)] border-r border-[var(--color-border)] overflow-y-auto">
       {/* Logo */}
       <div className="px-4 py-5 flex-shrink-0">
         <span className="text-base font-bold text-[var(--color-text)] tracking-tight">

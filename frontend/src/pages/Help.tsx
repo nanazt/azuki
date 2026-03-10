@@ -203,7 +203,7 @@ export function Help() {
   const s = t();
 
   return (
-    <div className="p-4 md:p-6 max-w-3xl mx-auto flex flex-col gap-4 pb-32 md:pb-6">
+    <div className="p-4 md:p-6 max-w-3xl mx-auto flex flex-col gap-4 pb-6">
       <h1 className="text-lg font-semibold text-[var(--color-text)] flex items-center gap-2">
         <HelpCircle size={20} className="text-[var(--color-text-secondary)]" />
         {s.help.title}

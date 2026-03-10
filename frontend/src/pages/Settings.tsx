@@ -229,7 +229,7 @@ export function Settings() {
 
   if (showSkeleton) {
     return (
-      <div className="p-4 md:p-6 max-w-3xl mx-auto flex flex-col gap-8 pb-32 md:pb-6">
+      <div className="p-4 md:p-6 max-w-3xl mx-auto flex flex-col gap-8 pb-6">
         <Skeleton className="h-8 w-40 rounded" />
         <Skeleton className="h-40 rounded-xl" />
         <Skeleton className="h-40 rounded-xl" />
@@ -239,7 +239,7 @@ export function Settings() {
 
   return (
     <div
-      className="p-4 md:p-6 max-w-3xl mx-auto flex flex-col gap-10 pb-32 md:pb-6"
+      className="p-4 md:p-6 max-w-3xl mx-auto flex flex-col gap-10 pb-6"
       style={{
         animation: "fadeIn var(--duration-normal) var(--ease-out-soft)",
       }}

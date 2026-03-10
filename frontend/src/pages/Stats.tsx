@@ -796,7 +796,7 @@ export function Stats() {
 
   return (
     <div
-      className="p-4 md:p-6 max-w-3xl mx-auto flex flex-col gap-6 pb-32"
+      className="p-4 md:p-6 max-w-3xl mx-auto flex flex-col gap-6"
       style={{ animation: "fadeIn var(--duration-slow) var(--ease-out-soft)" }}
     >
       {/* Title */}
