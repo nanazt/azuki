@@ -155,18 +155,10 @@ fi
 echo "==> nginx configuration OK"
 
 # ── Create data directories ──
-# Match the UID/GID of the 'azuki' user inside the container so it can write to bind mounts
+# UID/GID must match the 'azuki' user in the Dockerfile (10001:10001)
 echo "==> Creating data directories..."
 mkdir -p /opt/azuki/data /opt/azuki/media
-AZUKI_UID=$(docker run --rm ghcr.io/nanazt/azuki:latest id -u azuki 2>/dev/null || echo "")
-if [[ -n "$AZUKI_UID" ]]; then
-    AZUKI_GID=$(docker run --rm ghcr.io/nanazt/azuki:latest id -g azuki)
-    chown -R "${AZUKI_UID}:${AZUKI_GID}" /opt/azuki/data /opt/azuki/media
-    echo "==> Set ownership to ${AZUKI_UID}:${AZUKI_GID}"
-else
-    echo "ERROR: Could not determine container user UID. Is the image pulled?"
-    exit 1
-fi
+chown -R 10001:10001 /opt/azuki/data /opt/azuki/media
 
 # ── Start Docker Compose ──
 echo "==> Pulling latest image and starting Docker Compose..."

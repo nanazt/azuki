@@ -40,7 +40,7 @@ COPY --from=rust-builder /usr/local/bin/azuki /usr/local/bin/azuki
 COPY --from=frontend-builder /app/frontend/dist /app/frontend/dist
 
 # Create non-root user and data directories
-RUN groupadd -r azuki && useradd -r -g azuki -d /app azuki \
+RUN groupadd -r -g 10001 azuki && useradd -r -u 10001 -g azuki -d /app azuki \
     && mkdir -p /app/data /app/media \
     && chown -R azuki:azuki /app/data /app/media
 
