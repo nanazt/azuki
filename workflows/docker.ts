@@ -50,7 +50,7 @@ new Workflow({
           .add(
             buildPush({
               with: {
-                push: "true",
+                push: true,
                 tags: "${{ steps.meta.outputs.tags }}",
                 labels: "${{ steps.meta.outputs.labels }}",
                 "cache-from": "type=gha",
