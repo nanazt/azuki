@@ -9,6 +9,8 @@ export function useWebSocket() {
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const retriesRef = useRef(0);
+  const syncDebounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const syncTimeoutRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const { showToast } = useToast();
   const showToastRef = useRef(showToast);
   showToastRef.current = showToast;
@@ -27,6 +29,7 @@ export function useWebSocket() {
 
     ws.onmessage = (e) => {
       try {
+        clearTimeout(syncTimeoutRef.current);
         const data = JSON.parse(e.data);
         handleEvent(data);
       } catch {
@@ -248,8 +251,36 @@ export function useWebSocket() {
   }, []);
 
   useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState !== "visible") return;
+
+      clearTimeout(syncDebounceRef.current);
+      syncDebounceRef.current = setTimeout(() => {
+        const ws = wsRef.current;
+
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ action: "sync" }));
+
+          // Zombie WS detection: reconnect if no response within 5s
+          clearTimeout(syncTimeoutRef.current);
+          syncTimeoutRef.current = setTimeout(() => {
+            wsRef.current?.close();
+          }, 5000);
+        } else if (!ws || ws.readyState === WebSocket.CLOSED) {
+          retriesRef.current = 0;
+          if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
+          connect();
+        }
+        // CONNECTING state: do nothing, wait for handshake
+      }, 250);
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
     connect();
     return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      clearTimeout(syncDebounceRef.current);
+      clearTimeout(syncTimeoutRef.current);
       clearTimeout(reconnectTimer.current);
       wsRef.current?.close();
     };

@@ -1,3 +1,5 @@
+use std::time::{Duration, Instant};
+
 use axum::extract::ws::{Message, WebSocket};
 use axum::extract::{State, WebSocketUpgrade};
 use axum::http::HeaderMap;
@@ -117,9 +119,32 @@ async fn handle_ws(socket: WebSocket, state: WebState, user_id: String) {
     });
 
     // Handle incoming client messages (control commands)
+    let mut last_sync = Instant::now() - Duration::from_secs(1);
     while let Some(msg) = receiver.next().await {
         match msg {
             Ok(Message::Text(text)) => {
+                // Handle sync command separately with rate limiting
+                if let Ok(cmd) = serde_json::from_str::<serde_json::Value>(&text)
+                    && cmd.get("action").and_then(|a| a.as_str()) == Some("sync")
+                {
+                    if last_sync.elapsed() >= Duration::from_millis(500) {
+                        last_sync = Instant::now();
+                        let snapshot = state.player.get_state().await;
+                        let downloads: Vec<_> = state
+                            .active_downloads
+                            .iter()
+                            .map(|e| e.value().clone())
+                            .collect();
+                        let event = WebEvent::StateSnapshot {
+                            state: snapshot,
+                            active_downloads: downloads,
+                        };
+                        if let Ok(json) = serde_json::to_string(&event) {
+                            let _ = response_tx.send(json);
+                        }
+                    }
+                    continue;
+                }
                 if let Some(err_json) = handle_ws_command(&text, &state, &user_id).await {
                     let _ = response_tx.send(err_json);
                 }
