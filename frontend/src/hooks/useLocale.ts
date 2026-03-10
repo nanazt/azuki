@@ -10,12 +10,20 @@ function isValidLocale(v: unknown): v is Locale {
   return typeof v === "string" && VALID_LOCALES.has(v);
 }
 
+// ─── Side effects ───
+
+function applyLocale(locale: Locale): void {
+  localStorage.setItem("azuki-locale", locale);
+  document.documentElement.lang = locale;
+}
+
 // ─── Singleton store (mirrors useTheme pattern) ───
 
 let currentLocale: Locale = (() => {
   const stored = localStorage.getItem("azuki-locale");
   return isValidLocale(stored) ? stored : "ko";
 })();
+document.documentElement.lang = currentLocale;
 let snapshot: Locale = currentLocale;
 const listeners = new Set<() => void>();
 let serverSynced = false;
@@ -43,7 +51,7 @@ export function syncLocaleFromServer(): void {
     .then((prefs) => {
       if (isValidLocale(prefs.locale) && prefs.locale !== currentLocale) {
         currentLocale = prefs.locale;
-        localStorage.setItem("azuki-locale", prefs.locale);
+        applyLocale(prefs.locale);
         notify();
       }
     })
@@ -57,7 +65,7 @@ export function useLocale(): Locale {
 export function setLocale(locale: Locale): void {
   if (!isValidLocale(locale)) return;
   currentLocale = locale;
-  localStorage.setItem("azuki-locale", locale);
+  applyLocale(locale);
   notify();
   api.updatePreferences({ locale }).catch(() => {});
 }

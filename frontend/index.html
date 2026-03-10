@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="ko">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
@@ -16,6 +16,14 @@
             : t;
         if (d === "light") {
           document.documentElement.classList.add("light");
+        }
+      })();
+    </script>
+    <script>
+      (function () {
+        var s = localStorage.getItem("azuki-locale");
+        if (s === "ko" || s === "en") {
+          document.documentElement.lang = s;
         }
       })();
     </script>
