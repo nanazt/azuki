@@ -110,11 +110,13 @@ impl Queue {
     }
 
     fn push_history(&mut self, entry: QueueEntry) {
-        // Deduplicate consecutive entries
-        if let Some(last) = self.history.last()
-            && last.track.id == entry.track.id
+        // Full dedup: remove any existing occurrence before appending
+        if let Some(pos) = self
+            .history
+            .iter()
+            .rposition(|e| e.track.id == entry.track.id)
         {
-            return;
+            self.history.remove(pos);
         }
         self.history.push(entry);
         // Cap history at 50

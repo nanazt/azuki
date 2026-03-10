@@ -104,34 +104,36 @@ export function Home() {
           </p>
         ) : (
           <ul className="flex flex-col gap-1">
-            {history.map((entry, i) => (
-              <li key={i}>
-                <button
-                  onClick={() => handlePlay(entry.track)}
-                  className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-[var(--color-bg-secondary)] transition-colors text-left group"
-                >
-                  <TrackThumbnail
-                    track={entry.track}
-                    sizeClass="w-10 h-10"
-                    iconSize={16}
-                    className="rounded-md"
-                  />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-[var(--color-text)] truncate">
-                      {entry.track.title}
-                    </p>
-                    {entry.track.artist && (
-                      <p className="text-xs text-[var(--color-text-tertiary)] truncate">
-                        {entry.track.artist}
+            {history
+              .filter((entry) => entry.track.id !== currentTrack?.id)
+              .map((entry, i) => (
+                <li key={i}>
+                  <button
+                    onClick={() => handlePlay(entry.track)}
+                    className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-[var(--color-bg-secondary)] transition-colors text-left group"
+                  >
+                    <TrackThumbnail
+                      track={entry.track}
+                      sizeClass="w-10 h-10"
+                      iconSize={16}
+                      className="rounded-md"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-[var(--color-text)] truncate">
+                        {entry.track.title}
                       </p>
-                    )}
-                  </div>
-                  <span className="text-xs text-[var(--color-text-tertiary)] flex-shrink-0">
-                    {formatTime(entry.track.duration_ms)}
-                  </span>
-                </button>
-              </li>
-            ))}
+                      {entry.track.artist && (
+                        <p className="text-xs text-[var(--color-text-tertiary)] truncate">
+                          {entry.track.artist}
+                        </p>
+                      )}
+                    </div>
+                    <span className="text-xs text-[var(--color-text-tertiary)] flex-shrink-0">
+                      {formatTime(entry.track.duration_ms)}
+                    </span>
+                  </button>
+                </li>
+              ))}
           </ul>
         )}
       </section>

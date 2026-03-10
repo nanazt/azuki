@@ -165,7 +165,11 @@ pub async fn get_history_for_restore(pool: &SqlitePool, limit: i64) -> DbResult<
          FROM play_history h
          JOIN tracks t ON t.id = h.track_id
          LEFT JOIN users u ON u.id = h.user_id
-         ORDER BY h.played_at DESC
+         WHERE h.id = (
+             SELECT MAX(h2.id) FROM play_history h2
+             WHERE h2.track_id = h.track_id
+         )
+         ORDER BY h.id DESC
          LIMIT ?1",
     )
     .bind(limit)

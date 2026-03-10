@@ -417,3 +417,74 @@ fn test_remove_last_by_track_id_preserves_others() {
     let ids: Vec<String> = q.items().iter().map(|e| e.track.id.clone()).collect();
     assert_eq!(ids, vec!["X", "Y", "Z"]);
 }
+
+// Q28: non-consecutive duplicate is moved to end
+#[test]
+fn test_history_full_dedup_non_consecutive() {
+    let mut q = Queue::new();
+    q.push_to_history(make_entry("A"));
+    q.push_to_history(make_entry("B"));
+    q.push_to_history(make_entry("A"));
+    let ids: Vec<&str> = q.history().iter().map(|e| e.track.id.as_str()).collect();
+    assert_eq!(ids, vec!["B", "A"]);
+}
+
+// Q29: repeated reorderings collapse correctly
+#[test]
+fn test_history_full_dedup_sequence() {
+    let mut q = Queue::new();
+    for id in &["A", "B", "C", "A", "B"] {
+        q.push_to_history(make_entry(id));
+    }
+    let ids: Vec<&str> = q.history().iter().map(|e| e.track.id.as_str()).collect();
+    assert_eq!(ids, vec!["C", "A", "B"]);
+}
+
+// Q30: go_previous after dedup returns correct entry
+#[test]
+fn test_go_previous_after_full_dedup() {
+    let mut q = Queue::new();
+    q.push_to_history(make_entry("A"));
+    q.push_to_history(make_entry("B"));
+    q.push_to_history(make_entry("A"));
+    let prev = q.go_previous().unwrap();
+    assert_eq!(prev.track.id, "A");
+    assert_eq!(q.history().len(), 1);
+    assert_eq!(q.history()[0].track.id, "B");
+}
+
+// Q31: cap at 50 still works when duplicate re-pushed on full history
+#[test]
+fn test_history_full_dedup_still_caps_at_50() {
+    let mut q = Queue::new();
+    for i in 0..50 {
+        q.push_to_history(make_entry(&i.to_string()));
+    }
+    q.push_to_history(make_entry("0")); // re-push oldest
+    assert_eq!(q.history().len(), 50);
+    assert_eq!(q.history().last().unwrap().track.id, "0");
+    assert_eq!(q.history()[0].track.id, "1");
+}
+
+// Q32: new track on full history evicts oldest (regression guard)
+#[test]
+fn test_history_cap_new_track_evicts_oldest() {
+    let mut q = Queue::new();
+    for i in 0..50 {
+        q.push_to_history(make_entry(&i.to_string()));
+    }
+    q.push_to_history(make_entry("new"));
+    assert_eq!(q.history().len(), 50);
+    assert_eq!(q.history().last().unwrap().track.id, "new");
+    assert_eq!(q.history()[0].track.id, "1");
+}
+
+// Q33: single item re-pushed stays length 1
+#[test]
+fn test_history_full_dedup_single_item_repush() {
+    let mut q = Queue::new();
+    q.push_to_history(make_entry("Z"));
+    q.push_to_history(make_entry("Z"));
+    assert_eq!(q.history().len(), 1);
+    assert_eq!(q.history()[0].track.id, "Z");
+}
