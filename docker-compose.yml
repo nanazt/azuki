@@ -6,8 +6,8 @@ services:
     ports:
       - "127.0.0.1:3000:3000" # only accessible through nginx
     volumes:
-      - azuki-data:/app/data
-      - azuki-media:/app/media
+      - /opt/azuki/data:/app/data
+      - /opt/azuki/media:/app/media
     environment:
       - DATABASE_URL=sqlite:/app/data/azuki.db
       - WEB_PORT=3000
@@ -19,6 +19,3 @@ services:
       - MAX_CACHE_SIZE_GB=${MAX_CACHE_SIZE_GB:-30}
       - RUST_LOG=${RUST_LOG:-azuki=info,azuki_bot=info,azuki_web=info,azuki_media=info,sqlx=warn}
 
-volumes:
-  azuki-data:
-  azuki-media:

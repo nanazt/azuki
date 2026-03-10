@@ -154,9 +154,14 @@ if ! nginx -t 2>&1; then
 fi
 echo "==> nginx configuration OK"
 
+# ── Create data directories ──
+echo "==> Creating data directories..."
+mkdir -p /opt/azuki/data /opt/azuki/media
+
 # ── Start Docker Compose ──
 echo "==> Starting Docker Compose..."
 cd "$PROJECT_DIR"
+export WEB_ORIGIN="https://${DOMAIN}"
 docker compose up -d
 
 echo "==> Waiting for app to be ready on port 3000..."
