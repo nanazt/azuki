@@ -62,11 +62,11 @@ impl PlayerActor {
     fn current_position_ms(&self) -> u64 {
         match &self.state {
             PlayState::Playing {
+                track,
                 started_at,
                 position_ms,
-                ..
-            } => position_ms + started_at.elapsed().as_millis() as u64,
-            PlayState::Paused { position_ms, .. } => *position_ms,
+            } => (position_ms + started_at.elapsed().as_millis() as u64).min(track.duration_ms),
+            PlayState::Paused { track, position_ms } => (*position_ms).min(track.duration_ms),
             _ => 0,
         }
     }
@@ -83,11 +83,12 @@ impl PlayerActor {
                 position_ms,
             } => PlayStateInfo::Playing {
                 track: track.clone(),
-                position_ms: *position_ms + started_at.elapsed().as_millis() as u64,
+                position_ms: (*position_ms + started_at.elapsed().as_millis() as u64)
+                    .min(track.duration_ms),
             },
             PlayState::Paused { track, position_ms } => PlayStateInfo::Paused {
                 track: track.clone(),
-                position_ms: *position_ms,
+                position_ms: (*position_ms).min(track.duration_ms),
             },
             PlayState::Error { track, error } => PlayStateInfo::Error {
                 track: track.clone(),

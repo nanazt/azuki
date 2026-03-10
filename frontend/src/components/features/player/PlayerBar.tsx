@@ -77,7 +77,7 @@ export function PlayerBar({ onToggleQueue, queueDrawerOpen }: PlayerBarProps) {
         cancelAnimationFrame(rafRef.current);
         rafRef.current = null;
       }
-      setElapsed(positionMs);
+      setElapsed(Math.min(positionMs, duration));
     }
 
     return () => {
