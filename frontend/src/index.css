@@ -28,6 +28,15 @@
   }
 }
 
+:root {
+  --color-accent-faint: color-mix(in srgb, var(--color-accent) 30%, transparent);
+  --color-heatmap-1: color-mix(in srgb, var(--color-accent) 20%, var(--color-bg-tertiary));
+  --color-heatmap-2: color-mix(in srgb, var(--color-accent) 40%, var(--color-bg-tertiary));
+  --color-heatmap-3: color-mix(in srgb, var(--color-accent) 65%, var(--color-bg-tertiary));
+  --color-heatmap-4: color-mix(in srgb, var(--color-accent) 82%, var(--color-bg-tertiary));
+  --color-heatmap-5: var(--color-accent);
+}
+
 html {
   color-scheme: dark;
 }

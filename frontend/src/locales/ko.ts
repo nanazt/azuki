@@ -37,7 +37,7 @@ export const ko = {
     nowPlaying: "지금 재생 중",
     upNext: "다음 곡",
     empty: "대기열이 비어 있어요",
-    downloading: "다운로드 중이에요",
+    downloading: "다운로드 중",
     searchForMusic: "음악 검색",
     playNow: "{title} 바로 재생",
     removeFromQueue: "{title} 대기열에서 제거",

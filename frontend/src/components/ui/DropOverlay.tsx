@@ -11,7 +11,7 @@ export function DropOverlay({ onSelectFile }: Props) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="flex flex-col items-center gap-4 p-12 border-2 border-dashed border-[var(--color-accent)] rounded-2xl bg-[var(--color-bg-primary)]/80">
+      <div className="flex flex-col items-center gap-4 p-12 border-2 border-dashed border-[var(--color-accent)] rounded-2xl bg-[var(--color-bg-secondary)]/80">
         <Upload size={48} className="text-[var(--color-text-secondary)]" />
         <div className="text-center">
           <p className="text-lg font-medium text-[var(--color-text)]">

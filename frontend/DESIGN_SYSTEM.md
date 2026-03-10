@@ -30,6 +30,16 @@ New colors must be defined in **both** themes. Use `var(--color-…)` CSS variab
 
 **Text on accent backgrounds**: Always use `text-[#1a1a1a]` (dark text) for readable contrast on pastel pink.
 
+### Derived Accent (computed in :root via color-mix)
+
+| Token                | Intensity | Usage                                  |
+| -------------------- | --------- | -------------------------------------- |
+| --color-accent-faint | 30%       | Spinner background borders             |
+
+Defined in `src/index.css` `:root` block.
+
+**Accent intensity rule**: Data visualization elements (bar fills, chart dots, indicator outlines) use full `--color-accent` (100%) for consistency with interaction points (play button, tab underline). Reduced intensities are only for structural/functional needs (gradients, spinner mechanics).
+
 ### Dark Mode (default)
 
 #### Background Elevation (dark → light)
@@ -53,9 +63,12 @@ New colors must be defined in **both** themes. Use `var(--color-…)` CSS variab
 
 | Token           | Value   | Usage                      |
 | --------------- | ------- | -------------------------- |
-| --color-border  | #333    | Dividers, card borders     |
-| --color-danger  | #e53e3e | Delete, error              |
-| --color-success | #38a169 | Connection status, success |
+| --color-border         | #333    | Dividers, card borders    |
+| --color-danger         | #e53e3e | Delete, error             |
+| --color-success        | #38a169 | Connection status, success |
+| --color-warning        | #92400e | Warning text              |
+| --color-warning-bg     | #fef3c7 | Warning banner background |
+| --color-warning-border | #d97706 | Warning banner border     |
 
 ### Light Mode
 
@@ -80,9 +93,12 @@ New colors must be defined in **both** themes. Use `var(--color-…)` CSS variab
 
 | Token           | Value   | Usage                  |
 | --------------- | ------- | ---------------------- |
-| --color-border  | #d4d4d4 | Dividers, card borders |
-| --color-danger  | #c53030 | Delete, error          |
-| --color-success | #276749 | Success                |
+| --color-border         | #d4d4d4 | Dividers, card borders    |
+| --color-danger         | #c53030 | Delete, error             |
+| --color-success        | #276749 | Success                   |
+| --color-warning        | #92400e | Warning text              |
+| --color-warning-bg     | #fef3c7 | Warning banner background |
+| --color-warning-border | #d97706 | Warning banner border     |
 
 ---
 
@@ -157,6 +173,32 @@ bg-[var(--color-accent)]/20 rounded-lg text-[var(--color-text)]
 
 Never use `text-[var(--color-accent)]` for active states.
 
+### Slider
+
+```
+Track: h-1 rounded-full bg-[var(--color-bg-tertiary)]
+Fill:  h-1 rounded-full bg-[var(--color-accent)]
+Thumb: w-3 h-3 rounded-full bg-white shadow-md
+```
+
+Thumb uses `bg-white` (not themed) — sufficient contrast via shadow on both modes, consistent with OS native slider convention.
+
+### Status banner
+
+```
+bg-[var(--color-warning-bg)] border-b border-[var(--color-warning-border)]
+```
+
+- Indicator dot: `bg-[var(--color-warning)]` with `animate-ping`
+- Text: `text-xs font-medium text-[var(--color-warning)]`
+
+### Overlay (modal backdrop)
+
+```
+Backdrop: fixed inset-0 z-50 bg-black/60 backdrop-blur-sm
+Inner card: bg-[var(--color-bg-secondary)]/80 rounded-2xl border-dashed border-[var(--color-accent)]
+```
+
 ### Border radius
 
 | Size         | Usage                 |
@@ -169,16 +211,16 @@ Never use `text-[var(--color-accent)]` for active states.
 
 ## Heatmap Palette
 
-6-step gradient (both modes identical, `empty` = `--color-bg-tertiary`):
+6-step gradient defined via `color-mix()` in `:root` (both modes):
 
-| Level | Color                    | Meaning     |
-| ----- | ------------------------ | ----------- |
-| 0     | var(--color-bg-tertiary) | No activity |
-| 1     | #FFD4E0                  | Low         |
-| 2     | #FFB7C9                  | Medium      |
-| 3     | #FF9DB5                  | High        |
-| 4     | #FF82A0                  | Very high   |
-| 5     | #FF6B8A                  | Maximum     |
+| Level | Token              | Definition                                  | Meaning     |
+| ----- | ------------------ | ------------------------------------------- | ----------- |
+| 0     | --color-bg-tertiary | (base)                                     | No activity |
+| 1     | --color-heatmap-1  | accent 20% + bg-tertiary 80%               | Low         |
+| 2     | --color-heatmap-2  | accent 40% + bg-tertiary 60%               | Medium      |
+| 3     | --color-heatmap-3  | accent 65% + bg-tertiary 35%               | High        |
+| 4     | --color-heatmap-4  | accent 82% + bg-tertiary 18%               | Very high   |
+| 5     | --color-heatmap-5  | accent 100%                                | Maximum     |
 
 ## Touch & Accessibility
 

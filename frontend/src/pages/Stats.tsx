@@ -57,11 +57,11 @@ const HEATMAP_COLORS = {
   empty: "var(--color-bg-tertiary)",
   colors: [
     "var(--color-bg-tertiary)",
-    "#FFD4E0",
-    "#FFB7C9",
-    "#FF9DB5",
-    "#FF82A0",
-    "#FF6B8A",
+    "var(--color-heatmap-1)",
+    "var(--color-heatmap-2)",
+    "var(--color-heatmap-3)",
+    "var(--color-heatmap-4)",
+    "var(--color-heatmap-5)",
   ],
 };
 
@@ -211,6 +211,7 @@ function ContributionHeatmap({
                   style={{
                     position: "absolute",
                     left: m.col * (cellSize + gap),
+                    whiteSpace: "nowrap",
                   }}
                 >
                   {m.label}
@@ -259,7 +260,7 @@ function ContributionHeatmap({
                           backgroundColor: getColor(cell.ms),
                           outline:
                             cell.dateStr === todayStr
-                              ? "1px solid rgba(255, 183, 201, 0.5)"
+                              ? "1px solid var(--color-accent)"
                               : "none",
                           outlineOffset: "1px",
                         }}
@@ -335,7 +336,7 @@ function TrendChart({
   const s = t();
   if (data.length === 0) return null;
 
-  const accent = "#FFB7C9";
+  const accent = "var(--color-accent)";
   const maxCount = Math.max(...data.map((d) => d.play_count), 1);
   const w = 100;
   const h = 40;
@@ -377,7 +378,7 @@ function TrendChart({
         <path d={linePath} fill="none" stroke={accent} strokeWidth="0.5" />
         {points.map((p, i) => (
           <g key={i}>
-            <circle cx={p.x} cy={p.y} r="0.8" fill={accent} opacity={0.6} />
+            <circle cx={p.x} cy={p.y} r="0.8" fill={accent} />
             <title>{`${p.date}: ${s.stats.playsCount.replace("{n}", String(p.play_count))}`}</title>
             <rect
               x={p.x - 1.5}
@@ -442,8 +443,11 @@ function DowChart({ data }: { data: number[] }) {
               </span>
               <div className="flex-1 h-5 bg-[var(--color-bg)] rounded overflow-hidden relative">
                 <div
-                  className="h-full rounded bg-[var(--color-accent)]/60 transition-all"
-                  style={{ width: `${Math.max(pct, 4)}%` }}
+                  className="h-full rounded transition-all"
+                  style={{
+                    width: `${Math.max(pct, 4)}%`,
+                    backgroundColor: "var(--color-accent)",
+                  }}
                 />
               </div>
               <span className="text-xs text-[var(--color-text-secondary)] w-16 text-right">
@@ -742,7 +746,13 @@ export function Stats() {
                   className="py-4 flex justify-center"
                 >
                   {tracks.loadingMore && (
-                    <div className="w-5 h-5 border-2 border-[var(--color-accent)]/30 border-t-[var(--color-accent)] rounded-full animate-spin" />
+                    <div
+                      className="w-5 h-5 rounded-full animate-spin"
+                      style={{
+                        border: "2px solid var(--color-accent-faint)",
+                        borderTopColor: "var(--color-accent)",
+                      }}
+                    />
                   )}
                 </div>
               )}
@@ -776,7 +786,13 @@ export function Stats() {
                   className="py-4 flex justify-center"
                 >
                   {artists.loadingMore && (
-                    <div className="w-5 h-5 border-2 border-[var(--color-accent)]/30 border-t-[var(--color-accent)] rounded-full animate-spin" />
+                    <div
+                      className="w-5 h-5 rounded-full animate-spin"
+                      style={{
+                        border: "2px solid var(--color-accent-faint)",
+                        borderTopColor: "var(--color-accent)",
+                      }}
+                    />
                   )}
                 </div>
               )}
