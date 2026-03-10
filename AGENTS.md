@@ -8,12 +8,12 @@ Discord music bot with web dashboard. Rust workspace backend (6 crates) + React 
 
 ## Key Files
 
-| File         | Description                                        |
-| ------------ | -------------------------------------------------- |
-| `Cargo.toml` | Workspace manifest with all dependency versions    |
-| `justfile`   | Task runner commands (dev, build, check, test)     |
-| `.gitignore` | Ignore rules for Rust, Node, OS, and project files |
-| `gaji.config.ts` | gaji workflow tool configuration                |
+| File                  | Description                                            |
+| --------------------- | ------------------------------------------------------ |
+| `Cargo.toml`          | Workspace manifest with all dependency versions        |
+| `justfile`            | Task runner commands (dev, build, check, test)         |
+| `.gitignore`          | Ignore rules for Rust, Node, OS, and project files     |
+| `gaji.config.ts`      | gaji workflow tool configuration                       |
 | `workflows/docker.ts` | Docker build/push GitHub Actions workflow (TypeScript) |
 
 ## Subdirectories
@@ -23,15 +23,15 @@ Discord music bot with web dashboard. Rust workspace backend (6 crates) + React 
 | `crates/`     | Rust workspace crates (see `crates/AGENTS.md`)      |
 | `frontend/`   | React SPA web dashboard (see `frontend/AGENTS.md`)  |
 | `migrations/` | SQLite migration files (see `migrations/AGENTS.md`) |
-| `deploy/`     | nginx config + deployment scripts for Lightsail      |
-| `workflows/`  | gaji workflow source files (TypeScript → YAML)       |
+| `deploy/`     | nginx config + deployment scripts for Lightsail     |
+| `workflows/`  | gaji workflow source files (TypeScript → YAML)      |
 
 ## For AI Agents
 
 ### Working In This Directory
 
 - Workspace-level `Cargo.toml` defines all shared dependencies — add new deps here first
-- Build check: `SQLX_OFFLINE=true cargo clippy --workspace --all-targets -- -D warnings`
+- Build check: `just check`
 - Edition 2024, resolver 3
 - All TEXT NOT NULL columns need `as "col!"` suffix in sqlx queries
 - COUNT queries need `as "count!: i64"` and `ORDER BY 4 DESC` (not `ORDER BY count`)
@@ -39,8 +39,8 @@ Discord music bot with web dashboard. Rust workspace backend (6 crates) + React 
 
 ### Testing Requirements
 
-- `SQLX_OFFLINE=true cargo clippy --workspace --all-targets -- -D warnings` must pass clean
-- `SQLX_OFFLINE=true cargo test --workspace` — all tests must pass
+- `just check` must pass clean
+- `just test` — all tests must pass
 - Frontend: `cd frontend && npx tsc --noEmit && npm run build` (type-check first, then build)
 
 ### API Integration Testing
@@ -70,6 +70,7 @@ Discord music bot with web dashboard. Rust workspace backend (6 crates) + React 
 - **Korean is the source of truth**: Write Korean strings first, then translate to English. Key structure and wording are designed around Korean.
 
 **Frontend:**
+
 - Translation files: `frontend/src/locales/ko.ts` (source-of-truth type), `en.ts`, `index.ts`
 - Hook: `frontend/src/hooks/useLocale.ts` — exports `useLocale()`, `setLocale()`, `t()`
 - Usage in components: `const s = t();` then `s.nav.home`. Never cache `t()` at module scope.
@@ -77,11 +78,13 @@ Discord music bot with web dashboard. Rust workspace backend (6 crates) + React 
 - Adding strings: add key to `ko.ts` + `en.ts` (missing key = tsc compile error via `Translations` type)
 
 **Backend (bot):**
+
 - Bot messages: `crates/azuki-bot/src/messages.rs` — `Messages` struct, `KO`/`EN` statics, `get(&AtomicU8)`
 - Bot locale: `Arc<AtomicU8>` shared between `BotState` and `WebState` (0=ko, 1=en)
 - Admin API: `GET/PUT /api/admin/bot-locale` (server-wide bot language)
 
 **User locale:**
+
 - DB: `user_preferences.locale` column (`CHECK (locale IN ('ko', 'en'))`)
 - API: `GET/PUT /api/preferences` includes `locale` field
 - Backend validation: `matches!(locale, "ko" | "en")` in preferences.rs

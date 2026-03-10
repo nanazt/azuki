@@ -24,3 +24,6 @@ frontend-dev:
 # Check rust code
 check:
     SQLX_OFFLINE=true cargo clippy --workspace --all-targets -- -D warnings
+
+test *args:
+    SQLX_OFFLINE=true cargo test --workspace {{args}}
