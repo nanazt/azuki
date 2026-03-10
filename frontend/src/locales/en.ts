@@ -169,6 +169,8 @@ export const en: Translations = {
   login: {
     continueWithDiscord: "Continue with Discord",
     serverMembersOnly: "Only server members can log in",
+    notMemberError:
+      "Only server members can log in. Please join the server first.",
   },
 
   history: {

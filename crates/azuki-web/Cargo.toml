@@ -35,8 +35,16 @@ base64.workspace = true
 chrono-tz = "0.10"
 regex = "1"
 
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("test-support"))'] }
+
+[features]
+test-support = []
+
 [dev-dependencies]
+azuki-web = { path = ".", features = ["test-support"] }
 tower = { workspace = true, features = ["util"] }
 http-body-util = "0.1"
 tempfile = "3"
-tokio = { workspace = true, features = ["rt", "macros"] }
+tokio = { workspace = true, features = ["rt", "macros", "test-util"] }
+wiremock = "0.6"

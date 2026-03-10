@@ -15,6 +15,7 @@ use tower::ServiceExt;
 use azuki_media::{MediaStore, YtDlp};
 use azuki_player::PlayerController;
 use azuki_web::events::{DownloadStatus, WebSeqEvent};
+use azuki_web::guild::GuildMemberCache;
 use azuki_web::{DownloadRequest, WebState, build_router};
 
 pub struct TestApp {
@@ -22,60 +23,103 @@ pub struct TestApp {
     pub db: SqlitePool,
     pub jwt_secret: String,
     pub media_dir_path: PathBuf,
+    pub guild_member_cache: Arc<GuildMemberCache>,
     _media_dir: tempfile::TempDir,
     _download_rx: mpsc::Receiver<DownloadRequest>,
 }
 
+struct BuildParts {
+    state: WebState,
+    db: SqlitePool,
+    jwt_secret: String,
+    media_dir_path: PathBuf,
+    media_dir: tempfile::TempDir,
+    download_rx: mpsc::Receiver<DownloadRequest>,
+    guild_member_cache: Arc<GuildMemberCache>,
+}
+
+async fn build_state(guild_id: u64, discord_api_base: &str) -> BuildParts {
+    let db = SqlitePool::connect("sqlite::memory:").await.unwrap();
+    azuki_db::run_migrations(&db).await.unwrap();
+
+    let media_dir = tempfile::tempdir().unwrap();
+    let media_dir_path = media_dir.path().to_path_buf();
+
+    let player = PlayerController::new();
+    let ytdlp = Arc::new(YtDlp::new(&media_dir_path, &media_dir_path));
+    let media_store = Arc::new(MediaStore::new(&media_dir_path, 1).unwrap());
+    let youtube: Arc<RwLock<Option<Arc<azuki_media::YouTubeClient>>>> = Arc::new(RwLock::new(None));
+
+    let (web_tx, _) = broadcast::channel::<WebSeqEvent>(64);
+    let (download_tx, download_rx) = mpsc::channel::<DownloadRequest>(8);
+
+    let jwt_secret = "test-secret".to_string();
+    let guild_member_cache = Arc::new(GuildMemberCache::new());
+
+    let state = WebState {
+        db: db.clone(),
+        player,
+        ytdlp,
+        media_store,
+        youtube,
+        jwt_secret: jwt_secret.clone(),
+        discord_client_id: "dummy-client-id".to_string(),
+        discord_client_secret: "dummy-client-secret".to_string(),
+        discord_redirect_uri: "http://localhost/auth/callback".to_string(),
+        allowed_origins: vec!["http://localhost".to_string()],
+        static_dir: None,
+        voice_channels: Arc::new(RwLock::new(Vec::new())),
+        text_channels: Arc::new(RwLock::new(Vec::new())),
+        web_tx,
+        active_downloads: Arc::new(DashMap::new()),
+        download_tx,
+        history_channel_id: Arc::new(AtomicU64::new(0)),
+        bot_locale: Arc::new(std::sync::atomic::AtomicU8::new(0)),
+        max_upload_size_mb: 100,
+        http_client: reqwest::Client::new(),
+        guild_id,
+        bot_token: String::new(),
+        discord_api_base: discord_api_base.to_string(),
+        guild_member_cache: guild_member_cache.clone(),
+    };
+
+    BuildParts {
+        state,
+        db,
+        jwt_secret,
+        media_dir_path,
+        media_dir,
+        download_rx,
+        guild_member_cache,
+    }
+}
+
 impl TestApp {
     pub async fn new() -> Self {
-        let db = SqlitePool::connect("sqlite::memory:").await.unwrap();
-        azuki_db::run_migrations(&db).await.unwrap();
-
-        let media_dir = tempfile::tempdir().unwrap();
-        let media_dir_path = media_dir.path().to_path_buf();
-
-        let player = PlayerController::new();
-        let ytdlp = Arc::new(YtDlp::new(&media_dir_path, &media_dir_path));
-        let media_store = Arc::new(MediaStore::new(&media_dir_path, 1).unwrap());
-        let youtube: Arc<RwLock<Option<Arc<azuki_media::YouTubeClient>>>> =
-            Arc::new(RwLock::new(None));
-
-        let (web_tx, _) = broadcast::channel::<WebSeqEvent>(64);
-        let (download_tx, download_rx) = mpsc::channel::<DownloadRequest>(8);
-
-        let jwt_secret = "test-secret".to_string();
-
-        let state = WebState {
-            db: db.clone(),
-            player,
-            ytdlp,
-            media_store,
-            youtube,
-            jwt_secret: jwt_secret.clone(),
-            discord_client_id: "dummy-client-id".to_string(),
-            discord_client_secret: "dummy-client-secret".to_string(),
-            discord_redirect_uri: "http://localhost/auth/callback".to_string(),
-            allowed_origins: vec!["http://localhost".to_string()],
-            static_dir: None,
-            voice_channels: Arc::new(RwLock::new(Vec::new())),
-            text_channels: Arc::new(RwLock::new(Vec::new())),
-            web_tx,
-            active_downloads: Arc::new(DashMap::new()),
-            download_tx,
-            history_channel_id: Arc::new(AtomicU64::new(0)),
-            bot_locale: Arc::new(std::sync::atomic::AtomicU8::new(0)),
-            max_upload_size_mb: 100,
-        };
-
-        let router = build_router(state);
-
+        let parts = build_state(0, "").await;
+        let router = build_router(parts.state);
         Self {
             router,
-            db,
-            jwt_secret,
-            media_dir_path,
-            _media_dir: media_dir,
-            _download_rx: download_rx,
+            db: parts.db,
+            jwt_secret: parts.jwt_secret,
+            media_dir_path: parts.media_dir_path,
+            guild_member_cache: parts.guild_member_cache,
+            _media_dir: parts.media_dir,
+            _download_rx: parts.download_rx,
+        }
+    }
+
+    pub async fn with_guild(guild_id: u64, discord_api_base: &str) -> Self {
+        let parts = build_state(guild_id, discord_api_base).await;
+        let router = build_router(parts.state);
+        Self {
+            router,
+            db: parts.db,
+            jwt_secret: parts.jwt_secret,
+            media_dir_path: parts.media_dir_path,
+            guild_member_cache: parts.guild_member_cache,
+            _media_dir: parts.media_dir,
+            _download_rx: parts.download_rx,
         }
     }
 }

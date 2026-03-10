@@ -256,6 +256,27 @@ async fn run_normal(config: Config, pool: SqlitePool) -> anyhow::Result<()> {
         .unwrap_or(0); // default: ko
     let bot_locale = Arc::new(std::sync::atomic::AtomicU8::new(bot_locale_val));
 
+    // Guild member cache
+    let guild_member_cache = std::sync::Arc::new(azuki_web::guild::GuildMemberCache::new());
+    let http_client = azuki_web::new_http_client();
+    {
+        let timeout = tokio::time::timeout(
+            std::time::Duration::from_secs(10),
+            guild_member_cache.refresh(
+                &http_client,
+                "https://discord.com",
+                config.discord_token.expose_secret(),
+                config.discord_guild_id,
+            ),
+        )
+        .await;
+        match timeout {
+            Ok(Ok(())) => {}
+            Ok(Err(e)) => tracing::warn!("initial guild member cache refresh failed: {e}"),
+            Err(_) => tracing::warn!("initial guild member cache refresh timed out"),
+        }
+    }
+
     // WebEvent broadcast channel
     let (web_tx, _) = broadcast::channel::<azuki_web::events::WebSeqEvent>(128);
     let active_downloads: Arc<DashMap<String, azuki_web::events::DownloadStatus>> =
@@ -290,6 +311,11 @@ async fn run_normal(config: Config, pool: SqlitePool) -> anyhow::Result<()> {
         history_channel_id: Arc::clone(&history_channel_id),
         bot_locale: Arc::clone(&bot_locale),
         max_upload_size_mb: config.max_upload_size_mb,
+        http_client: azuki_web::new_http_client(),
+        guild_id: config.discord_guild_id,
+        bot_token: config.discord_token.expose_secret().to_string(),
+        discord_api_base: "https://discord.com".to_string(),
+        guild_member_cache: std::sync::Arc::clone(&guild_member_cache),
     };
 
     // Http watch channel for embed sending for embed sending
@@ -329,6 +355,15 @@ async fn run_normal(config: Config, pool: SqlitePool) -> anyhow::Result<()> {
             tracing::error!("web server error: {e}");
         }
     });
+
+    // Guild member cache refresh loop
+    guild_member_cache.start_refresh_loop(
+        http_client,
+        "https://discord.com".to_string(),
+        config.discord_token.expose_secret().to_string(),
+        config.discord_guild_id,
+        cancel.clone(),
+    );
 
     // yt-dlp install check (runs concurrently with bot/web startup)
     let ytdlp_init = ytdlp.clone();

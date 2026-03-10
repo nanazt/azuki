@@ -112,9 +112,9 @@ pub async fn callback(
     }
 
     // Exchange code for token
-    let client = reqwest::Client::new();
+    let client = &state.http_client;
     let token_resp = client
-        .post("https://discord.com/api/oauth2/token")
+        .post(format!("{}/api/oauth2/token", state.discord_api_base))
         .form(&[
             ("client_id", state.discord_client_id.as_str()),
             ("client_secret", state.discord_client_secret.as_str()),
@@ -143,7 +143,7 @@ pub async fn callback(
 
     // Get user info
     let user_resp = client
-        .get("https://discord.com/api/users/@me")
+        .get(format!("{}/api/users/@me", state.discord_api_base))
         .bearer_auth(&token_data.access_token)
         .send()
         .await;
@@ -161,6 +161,23 @@ pub async fn callback(
             return (StatusCode::BAD_GATEWAY, "user fetch failed").into_response();
         }
     };
+
+    // Guild membership check
+    if state.guild_id != 0 {
+        if !state.guild_member_cache.is_member(&user.id) {
+            let clear_state = Cookie::build((OAUTH_STATE_COOKIE, ""))
+                .path("/")
+                .max_age(cookie::time::Duration::ZERO)
+                .build();
+            return (
+                jar.add(clear_state),
+                Redirect::temporary("/login?error=not_member"),
+            )
+                .into_response();
+        }
+    } else {
+        tracing::warn!("guild_id is 0, skipping guild membership check");
+    }
 
     // Upsert user in DB
     let avatar_url = user
@@ -229,6 +246,11 @@ pub async fn extract_verified_user(
 
     if claims.tv != user.token_version {
         return Err(ApiError::Unauthorized);
+    }
+
+    // Guild membership check on every request
+    if state.guild_id != 0 && !state.guild_member_cache.is_member(&claims.sub) {
+        return Err(ApiError::Forbidden);
     }
 
     Ok(user)

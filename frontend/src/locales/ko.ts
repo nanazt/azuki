@@ -166,6 +166,8 @@ export const ko = {
   login: {
     continueWithDiscord: "Discord로 계속해요",
     serverMembersOnly: "서버 멤버만 로그인할 수 있어요",
+    notMemberError:
+      "서버 멤버만 로그인할 수 있어요. 서버에 먼저 참가해 주세요.",
   },
 
   history: {

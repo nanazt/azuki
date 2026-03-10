@@ -1,5 +1,6 @@
 pub mod auth;
 pub mod events;
+pub mod guild;
 pub mod routes;
 pub mod ws;
 
@@ -24,6 +25,7 @@ use azuki_media::{MediaStore, YouTubeClient, YtDlp};
 use azuki_player::PlayerController;
 
 use crate::events::{DownloadStatus, WebSeqEvent};
+use crate::guild::GuildMemberCache;
 
 /// Request to download and enqueue a track.
 #[derive(Debug)]
@@ -54,6 +56,11 @@ pub struct WebState {
     pub history_channel_id: Arc<AtomicU64>,
     pub bot_locale: Arc<std::sync::atomic::AtomicU8>,
     pub max_upload_size_mb: u64,
+    pub http_client: reqwest::Client,
+    pub guild_id: u64,
+    pub bot_token: String,
+    pub discord_api_base: String,
+    pub guild_member_cache: Arc<GuildMemberCache>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -132,6 +139,10 @@ pub mod util {
         let hash = Sha256::digest(input.as_bytes());
         hex::encode(&hash[..8])
     }
+}
+
+pub fn new_http_client() -> reqwest::Client {
+    reqwest::Client::new()
 }
 
 pub fn build_router(state: WebState) -> axum::Router {
