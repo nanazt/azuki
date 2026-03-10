@@ -7,20 +7,29 @@ COPY frontend/ ./
 RUN npm run build
 
 # Stage 2: Build Rust binary
-FROM rust:trixie AS rust-builder
+FROM rust:trixie AS chef
+RUN cargo install cargo-chef
 WORKDIR /app
 
-# Install build dependencies
+FROM chef AS planner
+COPY . .
+RUN cargo chef prepare --recipe-path recipe.json
+
+FROM chef AS rust-builder
+
+# Install build dependencies (needed before cook for audiopus_sys, songbird, etc.)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     pkg-config libopus-dev cmake \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy everything and build
-COPY . .
+# Cook dependencies (re-runs only when Cargo.toml/Cargo.lock change)
+COPY --from=planner /app/recipe.json recipe.json
 ENV SQLX_OFFLINE=true
-RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    --mount=type=cache,target=/app/target \
-    cargo build --release --bin azuki \
+RUN cargo chef cook --release --recipe-path recipe.json
+
+# Build application (only recompiles source changes)
+COPY . .
+RUN cargo build --release --bin azuki \
     && cp target/release/azuki /usr/local/bin/azuki
 
 # Stage 3: Runtime
