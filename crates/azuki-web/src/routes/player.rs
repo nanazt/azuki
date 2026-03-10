@@ -4,7 +4,7 @@ use axum::http::StatusCode;
 use axum_extra::extract::CookieJar;
 use serde::Deserialize;
 
-use azuki_media::extract_video_id;
+use azuki_media::{DetectedUrl, detect_url};
 use azuki_player::LoopMode;
 
 use crate::auth::{extract_admin_id, extract_user_id};
@@ -182,6 +182,54 @@ pub async fn queue_add_track(
     Ok(StatusCode::NO_CONTENT)
 }
 
+/// Known tracking query parameters to strip from resolved SoundCloud URLs.
+const TRACKING_PARAMS: &[&str] = &[
+    "utm_source",
+    "utm_medium",
+    "utm_campaign",
+    "utm_content",
+    "utm_term",
+    "si",
+    "ref",
+];
+
+/// Resolve SoundCloud shortened URLs (on.soundcloud.com) to canonical form.
+/// Returns the original URL unchanged if not a shortened URL or if resolution fails.
+async fn resolve_soundcloud_short_url(url: &str) -> String {
+    let Ok(parsed) = url::Url::parse(url) else {
+        return url.to_string();
+    };
+    if parsed.host_str() != Some("on.soundcloud.com") {
+        return url.to_string();
+    }
+
+    static SC_CLIENT: std::sync::LazyLock<reqwest::Client> = std::sync::LazyLock::new(|| {
+        reqwest::Client::builder()
+            .redirect(reqwest::redirect::Policy::limited(5))
+            .timeout(std::time::Duration::from_secs(5))
+            .build()
+            .expect("failed to build SC redirect client")
+    });
+
+    let Ok(resp) = SC_CLIENT.get(url).send().await else {
+        return url.to_string();
+    };
+
+    let final_url = resp.url().clone();
+    let mut cleaned = final_url.clone();
+    let retained: Vec<(String, String)> = final_url
+        .query_pairs()
+        .filter(|(k, _)| !TRACKING_PARAMS.contains(&k.as_ref()))
+        .map(|(k, v)| (k.into_owned(), v.into_owned()))
+        .collect();
+    if retained.is_empty() {
+        cleaned.set_query(None);
+    } else {
+        cleaned.query_pairs_mut().clear().extend_pairs(&retained);
+    }
+    cleaned.to_string()
+}
+
 pub async fn queue_add(
     jar: CookieJar,
     State(state): State<WebState>,
@@ -206,22 +254,64 @@ pub async fn queue_add(
         }
     }
 
-    // Pre-check: if YouTube URL, check if track is already playing or in queue
-    if let Some(video_id) = extract_video_id(&body.query_or_url) {
-        let canonical_url = format!("https://www.youtube.com/watch?v={video_id}");
-        let track_id = crate::util::sha_id(&canonical_url);
+    // Resolve SoundCloud shortened URLs before detection
+    let resolved_url = resolve_soundcloud_short_url(&body.query_or_url).await;
+
+    let canonical_url = match detect_url(&resolved_url) {
+        DetectedUrl::YoutubeVideo { video_id } => {
+            Some(format!("https://www.youtube.com/watch?v={video_id}"))
+        }
+        DetectedUrl::SoundcloudTrack { url } => Some(url),
+        _ => None,
+    };
+
+    if let Some(ref canonical) = canonical_url {
+        let track_id = crate::util::sha_id(canonical);
+
+        // Duplicate-in-queue check
         let snapshot = state.player.get_state().await;
         let now_playing_id = match &snapshot.state {
             azuki_player::PlayStateInfo::Playing { track, .. }
             | azuki_player::PlayStateInfo::Paused { track, .. } => Some(track.id.as_str()),
             _ => None,
         };
-        let in_queue = snapshot.queue.iter().any(|e| e.track.id == track_id);
-        if now_playing_id == Some(&track_id) || in_queue {
+        if now_playing_id == Some(&*track_id)
+            || snapshot.queue.iter().any(|e| e.track.id == track_id)
+        {
             return Err(ApiError::BadRequest("duplicate".into()));
+        }
+
+        // Cache fast-path: if track exists in DB with a valid file, enqueue immediately
+        if let Ok(existing) = azuki_db::queries::tracks::get_track(&state.db, &track_id).await
+            && let Some(ref fp) = existing.file_path
+            && state.media_store.file_exists(fp)
+        {
+            let user = azuki_db::queries::users::get_user(&state.db, &user_id)
+                .await
+                .map_err(ApiError::Db)?;
+            let user_info = azuki_player::UserInfo {
+                id: user.id,
+                username: user.username,
+                avatar_url: user.avatar_url,
+            };
+            let track_info = azuki_player::TrackInfo {
+                id: existing.id,
+                title: existing.title,
+                artist: existing.artist,
+                duration_ms: existing.duration_ms as u64,
+                thumbnail_url: existing.thumbnail_url,
+                source_url: existing.source_url,
+                source_type: existing.source_type,
+                file_path: existing.file_path,
+                youtube_id: existing.youtube_id,
+                volume: existing.volume as u8,
+            };
+            state.player.play_or_enqueue(track_info, user_info).await?;
+            return Ok((StatusCode::NO_CONTENT, Json(serde_json::json!(null))));
         }
     }
 
+    // Cache miss or search query — fall through to download worker
     let user = azuki_db::queries::users::get_user(&state.db, &user_id)
         .await
         .map_err(ApiError::Db)?;
@@ -232,7 +322,7 @@ pub async fn queue_add(
     };
 
     let request = crate::DownloadRequest {
-        query_or_url: body.query_or_url,
+        query_or_url: resolved_url,
         user_info,
         download_id: download_id.clone(),
     };

@@ -72,7 +72,9 @@ export const api = {
   getQueue: () =>
     get<{ now_playing: TrackInfo | null; queue: QueueEntry[] }>("/api/queue"),
   addToQueue: (query_or_url: string) =>
-    post<{ download_id: string }>("/api/queue/add", { query_or_url }),
+    post<{ download_id: string } | undefined>("/api/queue/add", {
+      query_or_url,
+    }),
   removeFromQueue: (position: number) => del<void>(`/api/queue/${position}`),
   playAt: (position: number) => post<void>(`/api/queue/${position}/play`),
   moveInQueue: (from: number, to: number) =>

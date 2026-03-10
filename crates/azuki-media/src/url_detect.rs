@@ -65,13 +65,13 @@ pub fn detect_url(input: &str) -> DetectedUrl {
                 .filter(|s| !s.is_empty())
                 .collect();
 
+            let canonical = format!("https://soundcloud.com/{}", segments.join("/"));
+
             match segments.as_slice() {
-                [_user, "sets", _slug] => DetectedUrl::SoundcloudPlaylist {
-                    url: input.to_string(),
-                },
-                [_user, track] if *track != "sets" => DetectedUrl::SoundcloudTrack {
-                    url: input.to_string(),
-                },
+                [_user, "sets", _slug] => DetectedUrl::SoundcloudPlaylist { url: canonical },
+                [_user, track] if *track != "sets" => {
+                    DetectedUrl::SoundcloudTrack { url: canonical }
+                }
                 _ => DetectedUrl::Other {
                     url: input.to_string(),
                 },
@@ -185,7 +185,7 @@ mod tests {
         assert_eq!(
             result,
             DetectedUrl::SoundcloudTrack {
-                url: "https://www.soundcloud.com/artistname/my-track".to_string()
+                url: "https://soundcloud.com/artistname/my-track".to_string()
             }
         );
     }
@@ -207,7 +207,7 @@ mod tests {
         assert_eq!(
             result,
             DetectedUrl::SoundcloudPlaylist {
-                url: "https://m.soundcloud.com/user123/sets/cool-set".to_string()
+                url: "https://soundcloud.com/user123/sets/cool-set".to_string()
             }
         );
     }
