@@ -33,8 +33,6 @@ const ALLOWED_EXTENSIONS = [
   "m4a",
 ];
 
-const MAX_UPLOAD_SIZE_MB = 300;
-
 export interface DroppedFileUpload {
   name: string;
   size: number;
@@ -82,13 +80,6 @@ function validateFile(
       showToast(t().error.unsupportedFileTypeGeneric, "error");
       return false;
     }
-  }
-  if (file.size > MAX_UPLOAD_SIZE_MB * 1024 * 1024) {
-    showToast(
-      t().error.fileTooLarge.replace("{max}", String(MAX_UPLOAD_SIZE_MB)),
-      "error",
-    );
-    return false;
   }
   return true;
 }

@@ -173,11 +173,17 @@ pub async fn upload(
     let mut provided_artist: Option<String> = None;
     let mut field_count = 0u8;
 
-    while let Some(field) = multipart
-        .next_field()
-        .await
-        .map_err(|e| ApiError::BadRequest(e.to_string()))?
-    {
+    while let Some(field) = multipart.next_field().await.map_err(|e| {
+        let msg = e.to_string();
+        if msg.contains("limit") || msg.contains("body") {
+            ApiError::BadRequest(format!(
+                "File too large (max {}MB)",
+                state.max_upload_size_mb
+            ))
+        } else {
+            ApiError::BadRequest(msg)
+        }
+    })? {
         field_count += 1;
         if field_count > 5 {
             return Err(ApiError::BadRequest("too many fields".into()));
@@ -186,10 +192,17 @@ pub async fn upload(
         match field.name() {
             Some("file") => {
                 let filename = field.file_name().unwrap_or("upload").to_string();
-                let data = field
-                    .bytes()
-                    .await
-                    .map_err(|e| ApiError::BadRequest(e.to_string()))?;
+                let data = field.bytes().await.map_err(|e| {
+                    let msg = e.to_string();
+                    if msg.contains("limit") || msg.contains("body") {
+                        ApiError::BadRequest(format!(
+                            "File too large (max {}MB)",
+                            state.max_upload_size_mb
+                        ))
+                    } else {
+                        ApiError::BadRequest(msg)
+                    }
+                })?;
                 file_data = Some((filename, data));
             }
             Some("title") => {
@@ -543,13 +556,14 @@ pub async fn oembed_proxy(
     Ok(Json(data))
 }
 
-pub fn content_routes() -> axum::Router<WebState> {
+pub fn content_routes(max_upload_size_mb: u64) -> axum::Router<WebState> {
+    let max_bytes = (max_upload_size_mb as usize) * 1024 * 1024;
     axum::Router::new()
         .route("/api/search", axum::routing::get(search))
         .route("/api/history", axum::routing::get(history))
         .route(
             "/api/upload",
-            axum::routing::post(upload).layer(DefaultBodyLimit::max(300 * 1024 * 1024)),
+            axum::routing::post(upload).layer(DefaultBodyLimit::max(max_bytes)),
         )
         .route("/api/download/{track_id}", axum::routing::get(download))
         .route("/api/uploads", axum::routing::get(list_uploads))

@@ -278,7 +278,6 @@ export const en: Translations = {
     failedToLoadStats: "Failed to load stats",
     unsupportedFileType: "Unsupported file type: {type}",
     unsupportedFileTypeGeneric: "Unsupported file type",
-    fileTooLarge: "File too large (max {max}MB)",
   },
 
   upload: {

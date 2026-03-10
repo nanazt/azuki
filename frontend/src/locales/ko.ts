@@ -275,7 +275,6 @@ export const ko = {
     failedToLoadStats: "통계를 불러오지 못했어요",
     unsupportedFileType: "지원하지 않는 파일 형식: {type}",
     unsupportedFileTypeGeneric: "지원하지 않는 파일 형식이에요",
-    fileTooLarge: "파일이 너무 커요 (최대 {max}MB)",
   },
 
   upload: {

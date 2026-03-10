@@ -53,6 +53,7 @@ pub struct WebState {
     pub download_tx: mpsc::Sender<DownloadRequest>,
     pub history_channel_id: Arc<AtomicU64>,
     pub bot_locale: Arc<std::sync::atomic::AtomicU8>,
+    pub max_upload_size_mb: u64,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -153,7 +154,7 @@ pub fn build_router(state: WebState) -> axum::Router {
     // API routes with CSRF protection
     let api_routes = axum::Router::new()
         .merge(routes::player::player_routes())
-        .merge(routes::content::content_routes())
+        .merge(routes::content::content_routes(state.max_upload_size_mb))
         .merge(routes::stats::stats_routes())
         .merge(routes::admin::admin_routes())
         .merge(routes::preferences::preferences_routes())

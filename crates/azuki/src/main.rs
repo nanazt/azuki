@@ -289,6 +289,7 @@ async fn run_normal(config: Config, pool: SqlitePool) -> anyhow::Result<()> {
         download_tx,
         history_channel_id: Arc::clone(&history_channel_id),
         bot_locale: Arc::clone(&bot_locale),
+        max_upload_size_mb: config.max_upload_size_mb,
     };
 
     // Http watch channel for embed sending for embed sending

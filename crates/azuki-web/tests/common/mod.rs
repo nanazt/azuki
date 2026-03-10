@@ -64,6 +64,7 @@ impl TestApp {
             download_tx,
             history_channel_id: Arc::new(AtomicU64::new(0)),
             bot_locale: Arc::new(std::sync::atomic::AtomicU8::new(0)),
+            max_upload_size_mb: 100,
         };
 
         let router = build_router(state);

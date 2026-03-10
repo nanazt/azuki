@@ -88,7 +88,10 @@ export function UploadMetadataModal({ file, onClose }: Props) {
       (err) => {
         if (cancelled) return;
         console.error("Upload failed:", err);
-        // Don't close — show retry UI so user can pick the file manually.
+        showToast(
+          err instanceof Error ? err.message : t().toast.failed,
+          "error",
+        );
         setUploading(false);
         setUploadFailed(true);
       },
