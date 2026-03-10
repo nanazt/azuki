@@ -297,7 +297,7 @@ function DownloadItem({ download }: { download: DownloadEntry }) {
   const hasMetadata = !!download.title;
 
   return (
-    <div className="relative border-l-2 border-[var(--color-accent)] rounded-lg overflow-hidden">
+    <div className="relative rounded-lg overflow-hidden">
       <div className="flex items-center gap-3 px-3 py-2">
         {/* Thumbnail / Skeleton */}
         {hasMetadata ? (
