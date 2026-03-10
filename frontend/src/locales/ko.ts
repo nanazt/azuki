@@ -134,6 +134,7 @@ export const ko = {
       home: "최근 재생 기록과 빠른 접근이 가능해요",
       search: "YouTube / 재생 기록에서 검색해 노래를 찾을 수 있어요",
       player: "음악 재생 상태를 제어할 수 있어요",
+      volumePerSong: "소리 크기는 각 노래마다 저장돼요",
       history: "재생 기록을 확인하고, 대기열에 추가할 수 있어요",
       uploads: "업로드한 파일을 확인하고, 메타데이터를 편집할 수 있어요",
       dragAndDrop: "오디오 파일을 드래그 앤 드롭으로 업로드할 수 있어요",
@@ -145,6 +146,7 @@ export const ko = {
       home: "홈",
       search: "검색",
       player: "플레이어",
+      volumePerSong: "곡별 볼륨",
       history: "기록",
       uploads: "업로드",
       dragAndDrop: "드래그 & 드롭",
@@ -300,7 +302,7 @@ export const ko = {
   },
 
   welcome: {
-    subtitle: "사악한 유대인들의 모임",
+    subtitle: "로또 1등 당첨 확률 분석가들의 모임",
     viewHelp: "도움말 보러 가요",
     getStarted: "시작해요",
   },

@@ -9,6 +9,7 @@ import {
   Home,
   Settings,
   FileAudio,
+  Volume2,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useLocale, t } from "../hooks/useLocale";
@@ -54,6 +55,7 @@ const webFeatures: WebFeature[] = [
   { icon: Home, labelKey: "home", descriptionKey: "home" },
   { icon: Search, labelKey: "search", descriptionKey: "search" },
   { icon: Play, labelKey: "player", descriptionKey: "player" },
+  { icon: Volume2, labelKey: "volumePerSong", descriptionKey: "volumePerSong" },
   { icon: Clock, labelKey: "history", descriptionKey: "history" },
   { icon: Upload, labelKey: "uploads", descriptionKey: "uploads" },
   { icon: FileAudio, labelKey: "dragAndDrop", descriptionKey: "dragAndDrop" },
