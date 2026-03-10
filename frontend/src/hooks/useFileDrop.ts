@@ -52,7 +52,10 @@ function uploadFile(file: File): Promise<UploadResponse> {
     headers: { "X-Requested-With": "XMLHttpRequest" },
   }).then(async (res) => {
     if (res.status === 401) {
-      window.location.href = "/auth/login";
+      const path = window.location.pathname;
+      if (!path.startsWith("/login") && !path.startsWith("/auth")) {
+        window.location.href = "/login";
+      }
       throw new Error("unauthorized");
     }
     if (!res.ok) {

@@ -24,7 +24,7 @@ function uploadViaFilePicker(file: File): Promise<UploadResponse> {
     if (res.status === 401) {
       const path = window.location.pathname;
       if (!path.startsWith("/login") && !path.startsWith("/auth")) {
-        window.location.href = "/auth/login";
+        window.location.href = "/login";
       }
       throw new Error("unauthorized");
     }

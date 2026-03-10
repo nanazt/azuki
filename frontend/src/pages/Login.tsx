@@ -11,9 +11,12 @@ export function Login() {
       <div className="w-full max-w-sm bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded-2xl p-8 flex flex-col items-center gap-6 shadow-xl">
         {/* Logo / Name */}
         <div className="flex flex-col items-center gap-2">
-          <div className="w-16 h-16 rounded-2xl bg-[var(--color-accent)] flex items-center justify-center text-[#1a1a1a] text-3xl font-bold select-none">
-            a
-          </div>
+          <img
+            src="/favicon.svg"
+            alt="azuki"
+            className="w-16 h-16 rounded-2xl select-none"
+            draggable={false}
+          />
           <h1 className="text-2xl font-bold text-[var(--color-text)] tracking-tight">
             azuki
           </h1>

@@ -23,7 +23,7 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
   if (res.status === 401) {
     const path = window.location.pathname;
     if (!path.startsWith("/login") && !path.startsWith("/auth")) {
-      window.location.href = "/auth/login";
+      window.location.href = "/login";
     }
     throw new Error("unauthorized");
   }
@@ -163,7 +163,10 @@ export const api = {
       headers: { "X-Requested-With": "XMLHttpRequest" },
     });
     if (res.status === 401) {
-      window.location.href = "/auth/login";
+      const path = window.location.pathname;
+      if (!path.startsWith("/login") && !path.startsWith("/auth")) {
+        window.location.href = "/login";
+      }
       throw new Error("unauthorized");
     }
     if (!res.ok) {
