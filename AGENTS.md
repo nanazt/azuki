@@ -21,6 +21,7 @@ Discord music bot with web dashboard. Rust workspace backend (6 crates) + React 
 | `crates/`     | Rust workspace crates (see `crates/AGENTS.md`)      |
 | `frontend/`   | React SPA web dashboard (see `frontend/AGENTS.md`)  |
 | `migrations/` | SQLite migration files (see `migrations/AGENTS.md`) |
+| `deploy/`     | nginx config + deployment scripts for Lightsail      |
 
 ## For AI Agents
 
