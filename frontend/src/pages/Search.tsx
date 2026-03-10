@@ -117,6 +117,7 @@ export function SearchPage() {
           <input
             type="text"
             autoFocus
+            data-search-input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={s.search.placeholder}

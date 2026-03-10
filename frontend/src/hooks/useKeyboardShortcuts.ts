@@ -20,13 +20,13 @@ export function useKeyboardShortcuts() {
         (active as HTMLElement)?.isContentEditable;
 
       // "/" works even when not focused on input
-      if (e.key === "/") {
+      // Use e.code for IME-independent matching (e.g. Korean input mode)
+      if (e.key === "/" || e.code === "Slash") {
         if (isInput) return;
         e.preventDefault();
         if (location.pathname === "/search") {
-          // Already on search page — focus the search input
           const input = document.querySelector<HTMLInputElement>(
-            'input[placeholder="Search for music…"]',
+            "[data-search-input]",
           );
           input?.focus();
         } else {
@@ -72,6 +72,12 @@ export function useKeyboardShortcuts() {
         case "m":
         case "M":
           setVolume(volume > 0 ? 0 : 5);
+          break;
+        default:
+          // IME-independent matching via physical key code
+          if (e.code === "KeyM") {
+            setVolume(volume > 0 ? 0 : 5);
+          }
           break;
       }
     };
