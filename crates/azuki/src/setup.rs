@@ -59,7 +59,7 @@ pub async fn run_setup(port: u16, pool: SqlitePool) -> anyhow::Result<Config> {
         .layer(axum::middleware::map_response(add_security_headers))
         .with_state(state);
 
-    let listener = tokio::net::TcpListener::bind(("127.0.0.1", port)).await?;
+    let listener = tokio::net::TcpListener::bind(("0.0.0.0", port)).await?;
     let server = axum::serve(listener, app);
 
     let config = tokio::select! {

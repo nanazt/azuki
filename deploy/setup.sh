@@ -195,6 +195,9 @@ echo "==> Installing daily Cloudflare IP update cron..."
 cp "${SCRIPT_DIR}/nginx/update-cloudflare-ips.sh" /etc/cron.daily/update-cloudflare-ips
 chmod 755 /etc/cron.daily/update-cloudflare-ips
 
+# ── Extract setup token (if in setup mode) ──
+SETUP_TOKEN=$(docker compose logs azuki 2>/dev/null | grep -oP 'SETUP TOKEN: \K\S+' | tail -1)
+
 # ── Verification ──
 echo ""
 echo "============================================================"
@@ -203,6 +206,11 @@ echo ""
 echo "  Domain:  ${DOMAIN}"
 echo "  nginx:   $(systemctl is-active nginx)"
 echo "  Docker:  $(docker compose ps --format '{{.Status}}' 2>/dev/null | head -1)"
+if [[ -n "$SETUP_TOKEN" ]]; then
+    echo ""
+    echo "  Setup token: ${SETUP_TOKEN}"
+    echo "  Open https://${DOMAIN} and enter this token to complete setup"
+fi
 echo ""
 echo "  Next steps:"
 echo "    1. Ensure Cloudflare DNS A/AAAA record points to this server"
