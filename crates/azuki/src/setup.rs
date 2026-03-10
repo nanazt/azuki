@@ -216,7 +216,7 @@ const SETUP_HTML: &str = r#"<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>azuki — Setup</title>
+<title>Azuki — Setup</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:#0f0f0f;color:#e0e0e0;font-family:system-ui,-apple-system,sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:1rem}
@@ -250,7 +250,7 @@ input::placeholder{color:#555}
 </head>
 <body>
 <div class="container">
-<h1>azuki setup</h1>
+<h1>Azuki setup</h1>
 <p class="subtitle">Configure your Discord music bot</p>
 <form id="form">
 <div class="section">
@@ -346,7 +346,7 @@ document.getElementById('form').addEventListener('submit',async e=>{
       return;
     }
     status.className='status success';
-    status.textContent='Starting azuki...';
+    status.textContent='Starting Azuki...';
     setTimeout(()=>{
       const poll=setInterval(async()=>{
         try{

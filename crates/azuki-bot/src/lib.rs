@@ -27,6 +27,7 @@ pub struct BotState {
     pub http_tx: tokio::sync::watch::Sender<Option<Arc<serenity::http::Http>>>,
     pub history_channel_id: Arc<AtomicU64>,
     pub locale: Arc<AtomicU8>,
+    pub web_url: String,
 }
 
 #[derive(Debug, thiserror::Error)]

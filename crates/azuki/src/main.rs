@@ -307,6 +307,7 @@ async fn run_normal(config: Config, pool: SqlitePool) -> anyhow::Result<()> {
         http_tx,
         history_channel_id: Arc::clone(&history_channel_id),
         locale: Arc::clone(&bot_locale),
+        web_url: config.web_origin.clone(),
     });
 
     // Spawn services

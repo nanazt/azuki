@@ -43,6 +43,8 @@ pub struct Messages {
     // now playing status
     pub paused_at: &'static str,
     pub volume_label: &'static str,
+    // web link
+    pub web_link: &'static str,
 }
 
 pub static KO: Messages = Messages {
@@ -80,6 +82,7 @@ pub static KO: Messages = Messages {
     youtube_key_missing: "YouTube API 키가 설정되지 않았어요",
     paused_at: "일시정지 중",
     volume_label: "볼륨",
+    web_link: "", // 🌐 웹에서 열기
 };
 
 pub static EN: Messages = Messages {
@@ -117,6 +120,7 @@ pub static EN: Messages = Messages {
     youtube_key_missing: "YouTube API key not configured",
     paused_at: "paused at",
     volume_label: "Volume",
+    web_link: "", // 🌐 Open in browser
 };
 
 /// 0 = ko (default), 1 = en

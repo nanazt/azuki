@@ -60,10 +60,12 @@ pub async fn register_commands(ctx: &Context, guild_id: GuildId) -> Result<(), s
                     .add_string_choice("one", "one")
                     .add_string_choice("all", "all"),
             ),
+        CreateCommand::new("web").description("Get web dashboard link"),
     ];
 
+    let count = commands.len();
     guild_id.set_commands(&ctx.http, commands).await?;
-    info!("registered 7 slash commands");
+    info!("registered {} slash commands", count);
     Ok(())
 }
 
@@ -81,6 +83,7 @@ pub async fn handle_command(
         "now" => handle_now(ctx, cmd, state, is_history).await,
         "volume" => handle_volume(ctx, cmd, state, is_history).await,
         "loop" => handle_loop(ctx, cmd, state, is_history).await,
+        "web" => handle_web(ctx, cmd, state, is_history).await,
         _ => Ok(()),
     }
 }
@@ -320,6 +323,26 @@ async fn handle_play_inner(
     }
 
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// /web
+// ---------------------------------------------------------------------------
+
+async fn handle_web(
+    ctx: &Context,
+    cmd: &CommandInteraction,
+    state: &Arc<BotState>,
+    is_history: bool,
+) -> Result<(), crate::BotError> {
+    let m = msg(state);
+    respond(
+        ctx,
+        cmd,
+        &format!("{}: {}", m.web_link, state.web_url),
+        is_history,
+    )
+    .await
 }
 
 // ---------------------------------------------------------------------------
