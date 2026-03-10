@@ -10,6 +10,7 @@ import { ToastProvider, ToastContainer } from "./components/ui/Toast";
 import { useAuthStore } from "./stores/authStore";
 import { useWebSocket } from "./hooks/useWebSocket";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
+import { syncLocaleFromServer } from "./hooks/useLocale";
 import { usePasteDetection } from "./hooks/usePasteDetection";
 import { useFileDrop } from "./hooks/useFileDrop";
 import { AppShell } from "./components/layout/AppShell";
@@ -66,6 +67,7 @@ function AuthenticatedLayout() {
   useWebSocket();
   useKeyboardShortcuts();
   usePasteDetection();
+  useEffect(() => syncLocaleFromServer(), []);
   const { isDragging, droppedFile, clearDroppedFile, triggerFileInput } =
     useFileDrop();
   const [showWelcome, setShowWelcome] = useState(

@@ -34,8 +34,9 @@ function subscribe(listener: () => void) {
   return () => listeners.delete(listener);
 }
 
-// Sync with server once
-if (!serverSynced) {
+// Sync with server once (call only after authentication is confirmed)
+export function syncLocaleFromServer(): void {
+  if (serverSynced) return;
   serverSynced = true;
   api
     .getPreferences()
