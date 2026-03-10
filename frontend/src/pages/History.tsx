@@ -41,6 +41,11 @@ export function History() {
   const [hasNewTrack, setHasNewTrack] = useState(false);
   const [isFirstPage, setIsFirstPage] = useState(true);
   const [showSkeleton, setShowSkeleton] = useState(true);
+  const [scrollRoot, setScrollRoot] = useState<Element | null>(null);
+
+  useEffect(() => {
+    setScrollRoot(document.querySelector("[data-main-scroll]"));
+  }, []);
 
   const {
     items,
@@ -53,6 +58,7 @@ export function History() {
     loadMore,
   } = useInfiniteScroll<HistoryEntry>({
     fetcher: (cursor) => api.getHistory(cursor),
+    scrollRoot,
   });
 
   // Track when user scrolls past first page

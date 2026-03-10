@@ -1,4 +1,10 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import {
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+  type RefCallback,
+} from "react";
 
 interface UseInfiniteScrollOptions<
   T,
@@ -7,7 +13,7 @@ interface UseInfiniteScrollOptions<
   fetcher: (cursor?: string) => Promise<R>;
   onResponse?: (response: R) => void;
   enabled?: boolean;
-  rootRef?: React.RefObject<Element | null>;
+  scrollRoot?: Element | null;
 }
 
 interface UseInfiniteScrollReturn<T> {
@@ -16,7 +22,7 @@ interface UseInfiniteScrollReturn<T> {
   loading: boolean;
   loadingMore: boolean;
   hasMore: boolean;
-  sentinelRef: React.RefObject<HTMLDivElement | null>;
+  sentinelRef: RefCallback<HTMLDivElement>;
   reload: () => void;
   loadMore: () => void;
 }
@@ -32,7 +38,10 @@ export function useInfiniteScroll<
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(false);
-  const sentinelRef = useRef<HTMLDivElement>(null);
+  const [sentinelNode, setSentinelNode] = useState<HTMLDivElement | null>(null);
+  const sentinelRef = useCallback<RefCallback<HTMLDivElement>>((node) => {
+    setSentinelNode(node);
+  }, []);
 
   // Store fetcher/onResponse in refs to avoid deps instability
   const fetcherRef = useRef(options.fetcher);
@@ -93,20 +102,20 @@ export function useInfiniteScroll<
 
   // IntersectionObserver with rootRef support
   useEffect(() => {
-    if (!sentinelRef.current || !hasMore) return;
+    if (!sentinelNode || !hasMore) return;
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) loadMore();
       },
       {
-        root: options.rootRef?.current ?? null,
+        root: options.scrollRoot ?? null,
         threshold: 0,
         rootMargin: "0px 0px 80px 0px",
       },
     );
-    observer.observe(sentinelRef.current);
+    observer.observe(sentinelNode);
     return () => observer.disconnect();
-  }, [hasMore, loadMore, options.rootRef]);
+  }, [hasMore, loadMore, options.scrollRoot, sentinelNode]);
 
   return {
     items,

@@ -67,7 +67,7 @@ export function SearchPage() {
   } = useInfiniteScroll<TrackInfo>({
     fetcher: (cursor) => api.search(debouncedQuery, source, cursor),
     enabled: debouncedQuery.trim().length > 0,
-    rootRef: containerRef,
+    scrollRoot: containerRef.current,
   });
 
   // Reload when debouncedQuery or source changes
