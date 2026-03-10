@@ -13,6 +13,8 @@ Discord music bot with web dashboard. Rust workspace backend (6 crates) + React 
 | `Cargo.toml` | Workspace manifest with all dependency versions    |
 | `justfile`   | Task runner commands (dev, build, check, test)     |
 | `.gitignore` | Ignore rules for Rust, Node, OS, and project files |
+| `gaji.config.ts` | gaji workflow tool configuration                |
+| `workflows/docker.ts` | Docker build/push GitHub Actions workflow (TypeScript) |
 
 ## Subdirectories
 
@@ -22,6 +24,7 @@ Discord music bot with web dashboard. Rust workspace backend (6 crates) + React 
 | `frontend/`   | React SPA web dashboard (see `frontend/AGENTS.md`)  |
 | `migrations/` | SQLite migration files (see `migrations/AGENTS.md`) |
 | `deploy/`     | nginx config + deployment scripts for Lightsail      |
+| `workflows/`  | gaji workflow source files (TypeScript → YAML)       |
 
 ## For AI Agents
 
@@ -82,5 +85,11 @@ Discord music bot with web dashboard. Rust workspace backend (6 crates) + React 
 - DB: `user_preferences.locale` column (`CHECK (locale IN ('ko', 'en'))`)
 - API: `GET/PUT /api/preferences` includes `locale` field
 - Backend validation: `matches!(locale, "ko" | "en")` in preferences.rs
+
+### CI/CD
+
+- **gaji**: TypeScript-based GitHub Actions workflow tool. `npx gaji dev` (type generation), `npx gaji build` (TS→YAML compilation)
+- **Docker image**: `ghcr.io/nanazt/azuki` — built by GitHub Actions on `v*` tag push
+- **Workflow source**: `workflows/docker.ts` → `.github/workflows/docker.yml` (do not edit YAML directly)
 
 <!-- MANUAL: -->

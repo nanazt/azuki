@@ -159,9 +159,10 @@ echo "==> Creating data directories..."
 mkdir -p /opt/azuki/data /opt/azuki/media
 
 # ── Start Docker Compose ──
-echo "==> Starting Docker Compose..."
+echo "==> Pulling latest image and starting Docker Compose..."
 cd "$PROJECT_DIR"
 export WEB_ORIGIN="https://${DOMAIN}"
+docker compose pull
 docker compose up -d
 
 echo "==> Waiting for app to be ready on port 3000..."

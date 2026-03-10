@@ -11,6 +11,7 @@ Deployment configuration for AWS Lightsail. nginx reverse proxy + Cloudflare SSL
 | File                                  | Description                                          |
 | ------------------------------------- | ---------------------------------------------------- |
 | `setup.sh`                            | Idempotent deploy script (`sudo ./setup.sh <domain>`) |
+| `update.sh`                           | Quick image update (`sudo ./update.sh <domain>`)     |
 | `nginx/nginx.conf`                    | Main nginx config (gzip, rate limiting, proxy)       |
 | `nginx/conf.d/azuki.conf`            | Server blocks (HTTPS, WebSocket, upload, SPA)        |
 | `nginx/snippets/cloudflare-realip.conf` | Cloudflare IP ranges for real IP restoration        |
@@ -20,6 +21,10 @@ Deployment configuration for AWS Lightsail. nginx reverse proxy + Cloudflare SSL
 
 ### Working In This Directory
 
+- Docker images are pulled from ghcr.io (no local build)
+- Initial deploy: `sudo ./setup.sh <domain>` (nginx, UFW, SSL, Docker — full setup)
+- Image update only: `sudo ./update.sh <domain>` (pull + restart)
+- ghcr.io auth: `docker login ghcr.io` required once (PAT with `read:packages` scope)
 - `AZUKI_DOMAIN` in `azuki.conf` is a placeholder replaced by `setup.sh` at deploy time
 - `cloudflare-realip.conf` is a fallback — `setup.sh` fetches fresh IPs on deploy
 - nginx configs use `conf.d/` only (no `sites-enabled/`)

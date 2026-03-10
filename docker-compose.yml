@@ -1,6 +1,6 @@
 services:
   azuki:
-    build: .
+    image: ghcr.io/nanazt/azuki:latest
     container_name: azuki
     restart: unless-stopped
     ports:
