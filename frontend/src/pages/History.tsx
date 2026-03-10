@@ -189,7 +189,7 @@ export function History() {
                   disabled={addingIds.has(entry.track.id)}
                   className={clsx(
                     "flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium",
-                    "transition-all duration-150 cursor-pointer",
+                    "transition-[color,background-color,opacity] duration-150 cursor-pointer",
                     addingIds.has(entry.track.id)
                       ? "bg-[var(--color-bg-tertiary)] text-[var(--color-text-tertiary)] cursor-not-allowed"
                       : "bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] text-[#1a1a1a] opacity-0 group-hover:opacity-100 [@media(hover:none)]:opacity-100",
