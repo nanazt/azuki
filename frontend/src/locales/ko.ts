@@ -170,7 +170,7 @@ export const ko = {
     title: "기록",
     empty: "재생 기록이 없어요",
     emptyAction: "음악을 들어보세요!",
-    newTrackPlayed: "새 곡이 재생됐어요 — 클릭하여 새로고침",
+    newRecordsBadge: "새 기록 {n}건",
     unknownArtist: "알 수 없는 아티스트",
     add: "추가",
     adding: "추가 중이에요",
@@ -300,7 +300,7 @@ export const ko = {
   },
 
   welcome: {
-    subtitle: "서브타이틀은서브타이틀이에요",
+    subtitle: "사악한 유대인들의 모임",
     viewHelp: "도움말 보러 가요",
     getStarted: "시작해요",
   },

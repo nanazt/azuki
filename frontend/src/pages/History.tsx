@@ -1,9 +1,9 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { api } from "../lib/api";
 import type { TrackInfo } from "../lib/types";
 import { Skeleton } from "../components/ui/Skeleton";
 import { TrackThumbnail } from "../components/ui/TrackThumbnail";
-import { Clock, Plus, Check } from "lucide-react";
+import { Clock, Plus, Check, ArrowUp } from "lucide-react";
 import { formatTime } from "../lib/utils";
 import { useToast } from "../components/ui/Toast";
 import { useInfiniteScroll } from "../hooks/useInfiniteScroll";
@@ -38,10 +38,17 @@ function formatDate(iso: string): string {
 export function History() {
   useLocale();
   const s = t();
-  const [hasNewTrack, setHasNewTrack] = useState(false);
+  const [exitingKeys, setExitingKeys] = useState<Set<string>>(new Set());
+  const [enteringKeys, setEnteringKeys] = useState<Set<string>>(new Set());
+  const [pendingRecords, setPendingRecords] = useState<
+    Array<{ track: TrackInfo; user_id: string; play_count?: number }>
+  >([]);
   const [isFirstPage, setIsFirstPage] = useState(true);
   const [showSkeleton, setShowSkeleton] = useState(true);
   const [scrollRoot, setScrollRoot] = useState<Element | null>(null);
+  const exitTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(
+    new Map(),
+  );
 
   useEffect(() => {
     setScrollRoot(document.querySelector("[data-main-scroll]"));
@@ -54,19 +61,11 @@ export function History() {
     loadingMore,
     hasMore,
     sentinelRef,
-    reload,
     loadMore,
   } = useInfiniteScroll<HistoryEntry>({
     fetcher: (cursor) => api.getHistory(cursor),
     scrollRoot,
   });
-
-  // Track when user scrolls past first page
-  const handleReload = useCallback(() => {
-    setHasNewTrack(false);
-    setIsFirstPage(true);
-    reload();
-  }, [reload]);
 
   useEffect(() => {
     if (!loading) {
@@ -79,37 +78,138 @@ export function History() {
     if (loadingMore) setIsFirstPage(false);
   }, [loadingMore]);
 
+  // Merge pending records into items with entering animation
+  const mergePendingRecords = useCallback(() => {
+    if (pendingRecords.length === 0) return;
+
+    setItems((prev) => {
+      let updated = [...prev];
+      const newEntering = new Set<string>();
+      const newExiting = new Set<string>();
+
+      for (const record of pendingRecords) {
+        const existing = updated.find(
+          (entry) => entry.track.id === record.track.id,
+        );
+        if (existing) {
+          const oldKey = `${existing.track.id}-${existing.played_at}`;
+          newExiting.add(oldKey);
+        }
+
+        const newEntry: HistoryEntry = {
+          track: record.track,
+          played_at: new Date().toISOString(),
+          user_id: record.user_id,
+          play_count: (existing?.play_count ?? record.play_count ?? 0) + 1,
+        };
+        const newKey = `${newEntry.track.id}-${newEntry.played_at}`;
+        newEntering.add(newKey);
+        updated = [newEntry, ...updated];
+      }
+
+      // Schedule exiting/entering state updates
+      setExitingKeys((prev) => new Set([...prev, ...newExiting]));
+      setEnteringKeys((prev) => new Set([...prev, ...newEntering]));
+
+      // Safety timeouts for exiting keys
+      for (const key of newExiting) {
+        const timer = setTimeout(() => {
+          setExitingKeys((s) => {
+            const n = new Set(s);
+            n.delete(key);
+            return n;
+          });
+          setItems((prev) =>
+            prev.filter((x) => `${x.track.id}-${x.played_at}` !== key),
+          );
+          exitTimers.current.delete(key);
+        }, 500);
+        exitTimers.current.set(key, timer);
+      }
+
+      return updated;
+    });
+    setPendingRecords([]);
+  }, [pendingRecords, setItems]);
+
   // Real-time track insertion
   useEffect(() => {
     const handler = (e: Event) => {
       const detail = (e as CustomEvent).detail;
       const scrollTop =
         document.querySelector("[data-main-scroll]")?.scrollTop ?? 0;
+
       if (isFirstPage && scrollTop < 50) {
+        // At top: animate transition in place
         setItems((prev) => {
           const existing = prev.find(
             (entry) => entry.track.id === detail.track.id,
           );
-          const filtered = prev.filter(
-            (entry) => entry.track.id !== detail.track.id,
-          );
-          return [
-            {
-              track: detail.track,
-              played_at: new Date().toISOString(),
-              user_id: detail.user_id,
-              play_count: (existing?.play_count ?? 0) + 1,
-            },
-            ...filtered,
-          ];
+
+          if (existing) {
+            const oldKey = `${existing.track.id}-${existing.played_at}`;
+            setExitingKeys((s) => new Set(s).add(oldKey));
+
+            // Safety timeout for exit animation
+            const timer = setTimeout(() => {
+              setExitingKeys((s) => {
+                const n = new Set(s);
+                n.delete(oldKey);
+                return n;
+              });
+              setItems((prev) =>
+                prev.filter((x) => `${x.track.id}-${x.played_at}` !== oldKey),
+              );
+              exitTimers.current.delete(oldKey);
+            }, 500);
+            exitTimers.current.set(oldKey, timer);
+          }
+
+          const newEntry: HistoryEntry = {
+            track: detail.track,
+            played_at: new Date().toISOString(),
+            user_id: detail.user_id,
+            play_count: (existing?.play_count ?? 0) + 1,
+          };
+          const newKey = `${newEntry.track.id}-${newEntry.played_at}`;
+          setEnteringKeys((s) => new Set(s).add(newKey));
+
+          // Keep old entry in place for exit animation
+          return [newEntry, ...prev];
         });
       } else {
-        setHasNewTrack(true);
+        // Scrolled down: buffer to pending
+        setPendingRecords((prev) => {
+          const filtered = prev.filter((r) => r.track.id !== detail.track.id);
+          return [
+            ...filtered,
+            { track: detail.track, user_id: detail.user_id },
+          ];
+        });
       }
     };
     window.addEventListener("history-added", handler);
     return () => window.removeEventListener("history-added", handler);
   }, [isFirstPage, setItems]);
+
+  // Auto-merge when user scrolls back to top
+  useEffect(() => {
+    const el = scrollRoot;
+    if (!el || pendingRecords.length === 0) return;
+    const onScroll = () => {
+      if (el.scrollTop < 50) mergePendingRecords();
+    };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onScroll);
+  }, [scrollRoot, pendingRecords.length, mergePendingRecords]);
+
+  // Cleanup exit timers on unmount
+  useEffect(() => {
+    const timers = exitTimers.current;
+    return () => {
+      for (const timer of timers.values()) clearTimeout(timer);
+    };
+  }, []);
 
   const [addingIds, setAddingIds] = useState<Set<string>>(new Set());
   const [addedIds, setAddedIds] = useState<Set<string>>(new Set());
@@ -171,17 +271,28 @@ export function History() {
         </div>
       ) : (
         <>
-          {hasNewTrack && (
-            <button
-              onClick={handleReload}
-              className="w-full py-2 text-sm text-[var(--color-text)] bg-[var(--color-accent)]/10 rounded-lg hover:bg-[var(--color-accent)]/20 transition-colors"
-              style={{
-                animation:
-                  "fadeInUp var(--duration-normal) var(--ease-out-soft)",
-              }}
-            >
-              {s.history.newTrackPlayed}
-            </button>
+          {pendingRecords.length > 0 && (
+            <div className="sticky top-3 z-10 flex justify-center pointer-events-none">
+              <button
+                onClick={() => {
+                  mergePendingRecords();
+                  scrollRoot?.scrollTo({ top: 0, behavior: "smooth" });
+                }}
+                className="pointer-events-auto flex items-center gap-1.5 px-4 py-1.5 min-h-[32px] rounded-full bg-[var(--color-accent)] text-[#1a1a1a] text-xs font-semibold tracking-wide cursor-pointer"
+                style={{
+                  animation:
+                    "fadeInUp var(--duration-normal) var(--ease-out-soft), badgePulse 2s ease-in-out 400ms infinite",
+                  boxShadow:
+                    "0 4px 20px color-mix(in srgb, var(--color-accent) 28%, transparent)",
+                }}
+              >
+                <ArrowUp size={11} />
+                {s.history.newRecordsBadge.replace(
+                  "{n}",
+                  String(pendingRecords.length),
+                )}
+              </button>
+            </div>
           )}
           <ul
             className="flex flex-col"
@@ -189,77 +300,133 @@ export function History() {
               animation: "fadeIn var(--duration-normal) var(--ease-out-soft)",
             }}
           >
-            {items.map((entry) => (
-              <li
-                key={`${entry.track.id}-${entry.played_at}`}
-                className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-[var(--color-bg-hover)] transition-colors duration-100 group"
-              >
-                <TrackThumbnail
-                  track={entry.track}
-                  sizeClass="w-12 h-12"
-                  iconSize={18}
-                  className="rounded"
-                />
-                <div className="min-w-0 flex-1">
-                  <div className="text-sm font-medium text-[var(--color-text)] truncate">
-                    {entry.track.title}
-                  </div>
-                  <div className="text-xs text-[var(--color-text-secondary)] truncate">
-                    {entry.track.artist ?? s.history.unknownArtist}
-                    <span className="text-[var(--color-text-tertiary)] ml-2">
-                      {formatDate(entry.played_at)}
-                    </span>
-                    {entry.track.duration_ms > 0 && (
-                      <span className="text-[var(--color-text-tertiary)] ml-1">
-                        · {formatTime(entry.track.duration_ms)}
+            {items.map((entry) => {
+              const key = `${entry.track.id}-${entry.played_at}`;
+              const isExiting = exitingKeys.has(key);
+              const isEntering = enteringKeys.has(key);
+
+              return (
+                <li
+                  key={key}
+                  className={clsx(
+                    "flex items-center gap-3 px-3 py-2 rounded-lg",
+                    "hover:bg-[var(--color-bg-hover)] transition-colors duration-100 group",
+                    isEntering && "border-l-2 border-[var(--color-accent)]",
+                  )}
+                  style={
+                    isExiting
+                      ? {
+                          animation:
+                            "collapseOut var(--duration-slow) var(--ease-out-soft) forwards",
+                          pointerEvents: "none",
+                        }
+                      : isEntering
+                        ? {
+                            animation:
+                              "expandIn var(--duration-slow) var(--ease-out-soft) forwards, fadeInUp var(--duration-slow) var(--ease-out-soft) forwards",
+                          }
+                        : undefined
+                  }
+                  onAnimationEnd={
+                    isExiting || isEntering
+                      ? (e) => {
+                          if (e.currentTarget !== e.target) return;
+                          if (isExiting && e.animationName === "collapseOut") {
+                            // Clear safety timeout
+                            const timer = exitTimers.current.get(key);
+                            if (timer) {
+                              clearTimeout(timer);
+                              exitTimers.current.delete(key);
+                            }
+                            setExitingKeys((s) => {
+                              const n = new Set(s);
+                              n.delete(key);
+                              return n;
+                            });
+                            setItems((prev) =>
+                              prev.filter(
+                                (x) => `${x.track.id}-${x.played_at}` !== key,
+                              ),
+                            );
+                          }
+                          if (isEntering && e.animationName === "expandIn") {
+                            setEnteringKeys((s) => {
+                              const n = new Set(s);
+                              n.delete(key);
+                              return n;
+                            });
+                          }
+                        }
+                      : undefined
+                  }
+                >
+                  <TrackThumbnail
+                    track={entry.track}
+                    sizeClass="w-12 h-12"
+                    iconSize={18}
+                    className="rounded"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-medium text-[var(--color-text)] truncate">
+                      {entry.track.title}
+                    </div>
+                    <div className="text-xs text-[var(--color-text-secondary)] truncate">
+                      {entry.track.artist ?? s.history.unknownArtist}
+                      <span className="text-[var(--color-text-tertiary)] ml-2">
+                        {formatDate(entry.played_at)}
                       </span>
-                    )}
-                  </div>
-                </div>
-                {(() => {
-                  const isDone = addedIds.has(entry.track.id);
-                  const isPending = addingIds.has(entry.track.id);
-                  return (
-                    <button
-                      onClick={() => handleAdd(entry.track)}
-                      disabled={isPending || isDone}
-                      className={clsx(
-                        "flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium",
-                        "transition-[color,background-color,opacity] duration-150 cursor-pointer",
-                        isDone
-                          ? "bg-[var(--color-bg-tertiary)] text-[var(--color-success)] cursor-default"
-                          : isPending
-                            ? "bg-[var(--color-accent)] text-[#1a1a1a] cursor-not-allowed opacity-0 group-hover:opacity-100 [@media(hover:none)]:opacity-100"
-                            : "bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] text-[#1a1a1a] opacity-0 group-hover:opacity-100 [@media(hover:none)]:opacity-100",
+                      {entry.track.duration_ms > 0 && (
+                        <span className="text-[var(--color-text-tertiary)] ml-1">
+                          · {formatTime(entry.track.duration_ms)}
+                        </span>
                       )}
-                      aria-label={`Add ${entry.track.title} to queue`}
-                    >
-                      <span className="relative w-3 h-3 flex-shrink-0">
-                        <Plus
-                          size={12}
-                          className={clsx(
-                            "absolute inset-0 transition-[opacity,transform] duration-150",
-                            isDone
-                              ? "opacity-0 scale-75"
-                              : "opacity-100 scale-100",
-                          )}
-                        />
-                        <Check
-                          size={12}
-                          className={clsx(
-                            "absolute inset-0 transition-[opacity,transform] duration-150",
-                            isDone
-                              ? "opacity-100 scale-100"
-                              : "opacity-0 scale-75",
-                          )}
-                        />
-                      </span>
-                      {s.history.add}
-                    </button>
-                  );
-                })()}
-              </li>
-            ))}
+                    </div>
+                  </div>
+                  {(() => {
+                    const isDone = addedIds.has(entry.track.id);
+                    const isPending = addingIds.has(entry.track.id);
+                    return (
+                      <button
+                        onClick={() => handleAdd(entry.track)}
+                        disabled={isPending || isDone}
+                        className={clsx(
+                          "flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium",
+                          "transition-[color,background-color,opacity] duration-150 cursor-pointer",
+                          isDone
+                            ? "bg-[var(--color-bg-tertiary)] text-[var(--color-success)] cursor-default"
+                            : isPending
+                              ? "bg-[var(--color-accent)] text-[#1a1a1a] cursor-not-allowed opacity-0 group-hover:opacity-100 [@media(hover:none)]:opacity-100"
+                              : "bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] text-[#1a1a1a] opacity-0 group-hover:opacity-100 [@media(hover:none)]:opacity-100",
+                        )}
+                        aria-label={`Add ${entry.track.title} to queue`}
+                      >
+                        <span className="relative w-3 h-3 flex-shrink-0">
+                          <Plus
+                            size={12}
+                            className={clsx(
+                              "absolute inset-0 transition-[opacity,transform] duration-150",
+                              isDone
+                                ? "opacity-0 scale-75"
+                                : "opacity-100 scale-100",
+                            )}
+                          />
+                          <Check
+                            size={12}
+                            className={clsx(
+                              "absolute inset-0 transition-[opacity,transform] duration-150",
+                              isDone
+                                ? "opacity-100 scale-100"
+                                : "opacity-0 scale-75",
+                            )}
+                          />
+                        </span>
+                        {s.history.add}
+                      </button>
+                    );
+                  })()}
+                </li>
+              );
+            })}
           </ul>
 
           {/* Sentinel + skeleton loading */}

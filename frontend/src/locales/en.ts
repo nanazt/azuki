@@ -173,7 +173,7 @@ export const en: Translations = {
     title: "History",
     empty: "No play history",
     emptyAction: "Start listening!",
-    newTrackPlayed: "New track played \u2014 click to refresh",
+    newRecordsBadge: "{n} new",
     unknownArtist: "Unknown artist",
     add: "Add",
     adding: "Adding",

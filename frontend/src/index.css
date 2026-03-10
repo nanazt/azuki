@@ -60,6 +60,11 @@
   to { opacity: 0; max-height: 0; overflow: hidden; }
 }
 
+@keyframes badgePulse {
+  0%, 100% { transform: scale(1); }
+  50%       { transform: scale(1.04); }
+}
+
 @keyframes eq-bounce {
   0%,
   100% {
