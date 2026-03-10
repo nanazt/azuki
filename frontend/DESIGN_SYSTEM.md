@@ -56,8 +56,8 @@ Defined in `src/index.css` `:root` block.
 | Token                  | Value   | Usage                        |
 | ---------------------- | ------- | ---------------------------- |
 | --color-text           | #e5e5e5 | Titles, body text            |
-| --color-text-secondary | #999    | Subtitles, artist names      |
-| --color-text-tertiary  | #666    | Hints, timestamps, meta info |
+| --color-text-secondary | #a8a8a8 | Subtitles, artist names      |
+| --color-text-tertiary  | #888888 | Hints, timestamps, meta info |
 
 #### Semantic
 
@@ -86,8 +86,8 @@ Defined in `src/index.css` `:root` block.
 | Token                  | Value   | Usage             |
 | ---------------------- | ------- | ----------------- |
 | --color-text           | #111111 | Titles, body text |
-| --color-text-secondary | #555555 | Subtitles         |
-| --color-text-tertiary  | #888888 | Hints, meta info  |
+| --color-text-secondary | #4a4a4a | Subtitles         |
+| --color-text-tertiary  | #6b6b6b | Hints, meta info  |
 
 #### Semantic
 
