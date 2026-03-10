@@ -40,6 +40,7 @@ export function History() {
   const s = t();
   const [hasNewTrack, setHasNewTrack] = useState(false);
   const [isFirstPage, setIsFirstPage] = useState(true);
+  const [showSkeleton, setShowSkeleton] = useState(true);
 
   const {
     items,
@@ -60,6 +61,13 @@ export function History() {
     setIsFirstPage(true);
     reload();
   }, [reload]);
+
+  useEffect(() => {
+    if (!loading) {
+      const timer = setTimeout(() => setShowSkeleton(false), 120);
+      return () => clearTimeout(timer);
+    }
+  }, [loading]);
 
   useEffect(() => {
     if (loadingMore) setIsFirstPage(false);
@@ -133,7 +141,7 @@ export function History() {
         </h1>
       </div>
 
-      {loading ? (
+      {showSkeleton ? (
         <div className="flex flex-col">
           {Array.from({ length: 8 }).map((_, i) => (
             <div key={i} className="flex items-center gap-3 px-3 py-2">

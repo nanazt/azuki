@@ -20,6 +20,7 @@ export function Home() {
   const s = t();
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showSkeleton, setShowSkeleton] = useState(true);
   const playState = usePlayerStore((s) => s.playState);
 
   const currentTrack = playState.status !== "idle" ? playState.track : null;
@@ -31,6 +32,13 @@ export function Home() {
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    if (!loading) {
+      const timer = setTimeout(() => setShowSkeleton(false), 120);
+      return () => clearTimeout(timer);
+    }
+  }, [loading]);
 
   const handlePlay = (track: TrackInfo) => {
     api.addToQueue(track.source_url).catch(() => {});
@@ -92,7 +100,7 @@ export function Home() {
         <h2 className="text-lg font-semibold text-[var(--color-text)] mb-4">
           {s.home.recentlyPlayed}
         </h2>
-        {loading ? (
+        {showSkeleton ? (
           <div className="flex flex-col gap-3">
             {Array.from({ length: 5 }).map((_, i) => (
               <div key={i} className="flex items-center gap-3">

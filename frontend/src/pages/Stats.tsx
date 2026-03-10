@@ -69,6 +69,60 @@ function StatChip({
   );
 }
 
+function HeatmapSkeleton() {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [cellSize, setCellSize] = useState(11);
+  const gap = 2;
+  const numWeeks = CHART_CONFIG.heatmapWeeks + 1;
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const measure = () => {
+      const available = el.clientWidth - 28;
+      const size = Math.floor((available - gap * (numWeeks - 1)) / numWeeks);
+      setCellSize(Math.max(size, CHART_CONFIG.heatmapMinCellSize));
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <div className="p-5 rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border)] flex flex-col gap-4">
+      <Skeleton className="h-5 w-24 rounded" />
+      <div ref={containerRef}>
+        <div
+          className="flex flex-col"
+          style={{ marginTop: 20, gap, paddingLeft: 24 }}
+        >
+          {Array.from({ length: 7 }).map((_, i) => (
+            <Skeleton key={i} className="w-full rounded-sm" height={cellSize} />
+          ))}
+        </div>
+        <div className="flex items-center gap-1.5 justify-end mt-1">
+          <Skeleton className="h-2 w-6 rounded" />
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Skeleton key={i} className="w-2 h-2 rounded-sm" />
+          ))}
+          <Skeleton className="h-2 w-6 rounded" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StatChipSkeleton() {
+  return (
+    <div className="flex items-center gap-1.5 px-3 py-2 rounded-full bg-[var(--color-bg-secondary)] border border-[var(--color-border)] animate-pulse">
+      <div className="w-3 h-3 rounded-full bg-[var(--color-bg-hover)]" />
+      <div className="h-3.5 w-10 rounded bg-[var(--color-bg-hover)]" />
+      <div className="h-3 w-8 rounded bg-[var(--color-bg-hover)]" />
+    </div>
+  );
+}
+
 // ─── Contribution Heatmap ───
 
 const HEATMAP_COLORS = {
@@ -553,6 +607,7 @@ export function Stats() {
   const s = t();
   const [stats, setStats] = useState<StatsData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showSkeleton, setShowSkeleton] = useState(true);
   const [error, setError] = useState(false);
   const [activeTab, setActiveTab] = useState<"tracks" | "artists">("tracks");
 
@@ -583,6 +638,14 @@ export function Stats() {
     fetchStats();
   }, [fetchStats]);
 
+  // Hold skeleton briefly for smooth transition
+  useEffect(() => {
+    if (!loading) {
+      const timer = setTimeout(() => setShowSkeleton(false), 120);
+      return () => clearTimeout(timer);
+    }
+  }, [loading]);
+
   // Refresh on track-ended
   useEffect(() => {
     const handler = () => {
@@ -594,19 +657,61 @@ export function Stats() {
     return () => window.removeEventListener("track-ended", handler);
   }, [fetchStats, tracks.reload, artists.reload]);
 
-  if (loading) {
+  if (showSkeleton) {
     return (
       <div className="p-4 md:p-6 max-w-3xl mx-auto flex flex-col gap-6">
-        <Skeleton className="h-8 w-32 rounded" />
-        <div className="flex flex-wrap gap-2">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <Skeleton key={i} className="h-8 w-28 rounded-full" />
-          ))}
+        <Skeleton className="h-7 w-28 rounded" />
+        <div className="flex flex-wrap justify-center gap-3">
+          <StatChipSkeleton />
+          <StatChipSkeleton />
+          <StatChipSkeleton />
+          <StatChipSkeleton />
+          <StatChipSkeleton />
         </div>
-        <Skeleton className="h-40 rounded-xl" />
+        <HeatmapSkeleton />
+        {/* Charts skeleton — matches TrendChart / DowChart structure */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <Skeleton className="h-48 rounded-xl" />
-          <Skeleton className="h-48 rounded-xl" />
+          <div className="flex-1 p-5 rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border)] flex flex-col gap-4">
+            <Skeleton className="h-5 w-20 rounded" />
+            <Skeleton className="h-40 w-full rounded" />
+          </div>
+          <div className="flex-1 p-5 rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border)] flex flex-col gap-4">
+            <Skeleton className="h-5 w-24 rounded" />
+            <div className="flex flex-col gap-1.5">
+              {Array.from({ length: 7 }).map((_, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <Skeleton className="w-7 h-3 rounded" />
+                  <Skeleton className="flex-1 h-5 rounded" />
+                  <Skeleton className="w-12 h-3 rounded" />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+        {/* Ranking section skeleton */}
+        <div>
+          <div className="border-b border-[var(--color-border)]">
+            <div className="flex">
+              <div className="flex-1 py-3 flex justify-center">
+                <Skeleton className="h-4 w-20 rounded" />
+              </div>
+              <div className="flex-1 py-3 flex justify-center">
+                <Skeleton className="h-4 w-20 rounded" />
+              </div>
+            </div>
+          </div>
+          <div className="divide-y divide-[var(--color-border)]">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="flex items-center gap-3 py-2">
+                <Skeleton className="w-5 h-4 rounded" />
+                <Skeleton className="w-9 h-9 rounded-md" />
+                <div className="flex-1 flex flex-col gap-1">
+                  <Skeleton className="h-4 w-3/4 rounded" />
+                  <Skeleton className="h-3 w-1/2 rounded" />
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     );
@@ -614,7 +719,12 @@ export function Stats() {
 
   if (error || !stats) {
     return (
-      <div className="p-6 max-w-3xl mx-auto flex flex-col items-center gap-4 mt-20">
+      <div
+        className="p-6 max-w-3xl mx-auto flex flex-col items-center gap-4 mt-20"
+        style={{
+          animation: "fadeIn var(--duration-slow) var(--ease-out-soft)",
+        }}
+      >
         <p className="text-[var(--color-text-secondary)]">
           {s.stats.failedToLoad}
         </p>
@@ -630,7 +740,12 @@ export function Stats() {
 
   if (stats.total_plays === 0) {
     return (
-      <div className="p-4 md:p-6 max-w-3xl mx-auto flex flex-col gap-6">
+      <div
+        className="p-4 md:p-6 max-w-3xl mx-auto flex flex-col gap-6"
+        style={{
+          animation: "fadeIn var(--duration-slow) var(--ease-out-soft)",
+        }}
+      >
         <div className="flex items-center justify-between">
           <h1 className="text-xl font-bold text-[var(--color-text)]">
             {s.stats.title}
@@ -682,9 +797,7 @@ export function Stats() {
   return (
     <div
       className="p-4 md:p-6 max-w-3xl mx-auto flex flex-col gap-6 pb-32"
-      style={{
-        animation: "fadeIn var(--duration-normal) var(--ease-out-soft)",
-      }}
+      style={{ animation: "fadeIn var(--duration-slow) var(--ease-out-soft)" }}
     >
       {/* Title */}
       <div className="flex items-center justify-between">
@@ -695,17 +808,13 @@ export function Stats() {
 
       {/* Stat Chips */}
       <div className="flex flex-wrap justify-center gap-3">
-        {statChips.map((chip, i) => (
-          <div
+        {statChips.map((chip) => (
+          <StatChip
             key={chip.label}
-            style={{
-              animation: `fadeInUp var(--duration-normal) var(--ease-out-spring)`,
-              animationDelay: `${i * 40}ms`,
-              animationFillMode: "backwards",
-            }}
-          >
-            <StatChip label={chip.label} value={chip.value} icon={chip.icon} />
-          </div>
+            label={chip.label}
+            value={chip.value}
+            icon={chip.icon}
+          />
         ))}
       </div>
 

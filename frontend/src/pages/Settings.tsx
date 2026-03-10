@@ -74,6 +74,7 @@ export function Settings() {
 
   // Preferences state (loading gate only)
   const [prefsLoaded, setPrefsLoaded] = useState(false);
+  const [showSkeleton, setShowSkeleton] = useState(true);
 
   // Admin state
   const [ytInfo, setYtInfo] = useState<{
@@ -181,6 +182,13 @@ export function Settings() {
       .catch(() => {});
   }, []);
 
+  useEffect(() => {
+    if (prefsLoaded || !adminLoading) {
+      const timer = setTimeout(() => setShowSkeleton(false), 120);
+      return () => clearTimeout(timer);
+    }
+  }, [prefsLoaded, adminLoading]);
+
   const handleCheck = async () => {
     setChecking(true);
     setAdminError(null);
@@ -219,7 +227,7 @@ export function Settings() {
     await logout();
   };
 
-  if (!prefsLoaded && adminLoading) {
+  if (showSkeleton) {
     return (
       <div className="p-4 md:p-6 max-w-3xl mx-auto flex flex-col gap-8 pb-32 md:pb-6">
         <Skeleton className="h-8 w-40 rounded" />

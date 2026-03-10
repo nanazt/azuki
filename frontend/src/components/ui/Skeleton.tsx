@@ -23,7 +23,7 @@ export function Skeleton({
   return (
     <div
       className={clsx(
-        "bg-[var(--color-bg-tertiary)]",
+        "bg-[var(--color-bg-tertiary)] animate-pulse",
         variant === "text" && "rounded h-4",
         variant === "circle" && "rounded-full",
         variant === "rect" && "rounded-md",
