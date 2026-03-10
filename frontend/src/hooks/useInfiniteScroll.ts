@@ -35,7 +35,7 @@ export function useInfiniteScroll<
   },
 >(options: UseInfiniteScrollOptions<T, R>): UseInfiniteScrollReturn<T> {
   const [items, setItems] = useState<T[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(false);
   const [sentinelNode, setSentinelNode] = useState<HTMLDivElement | null>(null);
