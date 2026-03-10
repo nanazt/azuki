@@ -1,12 +1,12 @@
 import { useState, useCallback } from "react";
 import { Upload, Plus, Loader2, Trash2 } from "lucide-react";
 import clsx from "clsx";
-import { api } from "../../../lib/api";
-import { useToast } from "../../../hooks/useToast";
-import { useLocale, t } from "../../../hooks/useLocale";
-import { useAuthStore } from "../../../stores/authStore";
-import type { TrackInfo, UploadsResponse } from "../../../lib/types";
-import { useInfiniteScroll } from "../../../hooks/useInfiniteScroll";
+import { api } from "../lib/api";
+import { useToast } from "../hooks/useToast";
+import { useLocale, t } from "../hooks/useLocale";
+import { useAuthStore } from "../stores/authStore";
+import type { TrackInfo, UploadsResponse } from "../lib/types";
+import { useInfiniteScroll } from "../hooks/useInfiniteScroll";
 
 function formatDuration(ms: number): string {
   const s = Math.floor(ms / 1000);

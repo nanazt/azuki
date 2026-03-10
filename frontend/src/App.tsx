@@ -22,9 +22,9 @@ import { History } from "./pages/History";
 import { Stats } from "./pages/Stats";
 import { Settings } from "./pages/Settings";
 import { Help } from "./pages/Help";
-import { SearchPage } from "./components/features/search/SearchPage";
+import { SearchPage } from "./pages/Search";
 import { QueuePanel } from "./components/features/queue";
-import { UploadsPage } from "./components/features/uploads/UploadsPage";
+import { UploadsPage } from "./pages/Uploads";
 import { WelcomeModal } from "./components/features/onboarding/WelcomeModal";
 
 function ProtectedRoute() {

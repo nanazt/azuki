@@ -1,12 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import clsx from "clsx";
 import { Search, Loader2 } from "lucide-react";
-import { api } from "../../../lib/api";
-import type { TrackInfo } from "../../../lib/types";
-import { SearchResult } from "./SearchResult";
-import { useToast } from "../../../hooks/useToast";
-import { useLocale, t } from "../../../hooks/useLocale";
-import { useInfiniteScroll } from "../../../hooks/useInfiniteScroll";
+import { api } from "../lib/api";
+import type { TrackInfo } from "../lib/types";
+import { SearchResult } from "../components/features/search/SearchResult";
+import { useToast } from "../hooks/useToast";
+import { useLocale, t } from "../hooks/useLocale";
+import { useInfiniteScroll } from "../hooks/useInfiniteScroll";
 
 type SearchSource = "youtube" | "history";
 
