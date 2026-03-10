@@ -35,6 +35,14 @@ pub struct Messages {
     pub loop_off: &'static str,
     pub loop_one: &'static str,
     pub loop_all: &'static str,
+    // error / fallback
+    pub error_prefix: &'static str,
+    pub unknown: &'static str,
+    pub no_results: &'static str,
+    pub youtube_key_missing: &'static str,
+    // now playing status
+    pub paused_at: &'static str,
+    pub volume_label: &'static str,
 }
 
 pub static KO: Messages = Messages {
@@ -66,6 +74,12 @@ pub static KO: Messages = Messages {
     loop_off: "➡️ 반복 끄기",
     loop_one: "🔂 한 곡 반복",
     loop_all: "🔁 전체 반복",
+    error_prefix: "오류",
+    unknown: "알 수 없어요",
+    no_results: "검색 결과가 없어요",
+    youtube_key_missing: "YouTube API 키가 설정되지 않았어요",
+    paused_at: "일시정지 중",
+    volume_label: "볼륨",
 };
 
 pub static EN: Messages = Messages {
@@ -97,6 +111,12 @@ pub static EN: Messages = Messages {
     loop_off: "➡️ Loop off",
     loop_one: "🔂 Loop one",
     loop_all: "🔁 Loop all",
+    error_prefix: "Error",
+    unknown: "Unknown",
+    no_results: "No results found",
+    youtube_key_missing: "YouTube API key not configured",
+    paused_at: "paused at",
+    volume_label: "Volume",
 };
 
 /// 0 = ko (default), 1 = en

@@ -185,7 +185,8 @@ async fn handle_play(
         let _ = cmd
             .edit_response(
                 &ctx.http,
-                serenity::all::EditInteractionResponse::new().content(format!("Error: {e}")),
+                serenity::all::EditInteractionResponse::new()
+                    .content(format!("{}: {e}", msg(state).error_prefix)),
             )
             .await;
     }
@@ -299,7 +300,7 @@ async fn handle_play_inner(
                 (
                     r.youtube_id.clone().unwrap_or_default(),
                     r.title.clone(),
-                    r.artist.clone().unwrap_or_else(|| "Unknown".to_string()),
+                    r.artist.clone().unwrap_or_else(|| m.unknown.to_string()),
                     format_duration(r.duration_ms),
                 )
             })
@@ -426,7 +427,7 @@ async fn handle_now(
             respond(
                 ctx,
                 cmd,
-                &format!("⏸️ {title} — paused at {pos}/{total}"),
+                &format!("⏸️ {title} — {} {pos}/{total}", m.paused_at),
                 is_history,
             )
             .await
@@ -459,7 +460,14 @@ async fn handle_volume(
             .await
             .ok();
     }
-    respond(ctx, cmd, &format!("🔊 Volume: {level}%"), is_history).await
+    let m = msg(state);
+    respond(
+        ctx,
+        cmd,
+        &format!("🔊 {}: {level}%", m.volume_label),
+        is_history,
+    )
+    .await
 }
 
 async fn handle_loop(
@@ -548,6 +556,21 @@ fn player_error_message(m: &Messages, err: &PlayerError) -> &'static str {
         PlayerError::InvalidPosition => m.invalid_position,
         PlayerError::QueueFull => m.queue_full,
         PlayerError::Duplicate => m.duplicate,
+    }
+}
+
+/// BotError → localized user-facing message
+pub fn bot_error_message(m: &Messages, err: &crate::BotError) -> String {
+    match err {
+        crate::BotError::Player(e) => player_error_message(m, e).to_string(),
+        crate::BotError::NotInVoice => m.join_voice_first.to_string(),
+        crate::BotError::NoResults => m.no_results.to_string(),
+        crate::BotError::NoYouTubeKey => m.youtube_key_missing.to_string(),
+        crate::BotError::Serenity(e) => format!("{}: {e}", m.error_prefix),
+        crate::BotError::Media(e) => format!("{}: {e}", m.error_prefix),
+        crate::BotError::Db(e) => format!("{}: {e}", m.error_prefix),
+        crate::BotError::Voice(e) => format!("{}: {e}", m.error_prefix),
+        crate::BotError::InvalidInput(e) => format!("{}: {e}", m.error_prefix),
     }
 }
 

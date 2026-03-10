@@ -25,7 +25,7 @@ pub fn build_track_embed(
         .field(m.embed_volume, format!("{volume} / 100"), true)
         .footer(CreateEmbedFooter::new(format!(
             "{} • {}",
-            source_label(&track.source_type),
+            source_label(&track.source_type, locale),
             display_name,
         )))
         .timestamp(Timestamp::now());
@@ -89,10 +89,10 @@ fn embed_color(source_type: &str) -> Colour {
     }
 }
 
-fn source_label(source_type: &str) -> &'static str {
+fn source_label(source_type: &str, locale: &AtomicU8) -> &'static str {
     match source_type {
         "youtube" => "YouTube",
         "soundcloud" => "SoundCloud",
-        _ => "Unknown",
+        _ => crate::messages::get(locale).unknown,
     }
 }

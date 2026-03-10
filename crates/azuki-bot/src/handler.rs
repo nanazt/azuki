@@ -73,8 +73,9 @@ impl EventHandler for Handler {
 
                 if let Err(e) = result {
                     error!("command error: {e}");
+                    let m = crate::messages::get(&self.state.locale);
                     let msg = CreateInteractionResponseMessage::new()
-                        .content(format!("Error: {e}"))
+                        .content(commands::bot_error_message(m, &e))
                         .ephemeral(true);
                     let response = CreateInteractionResponse::Message(msg);
                     let _ = cmd.create_response(&ctx.http, response).await;
