@@ -3,7 +3,7 @@ import { api } from "../lib/api";
 import type { TrackInfo } from "../lib/types";
 import { Skeleton } from "../components/ui/Skeleton";
 import { TrackThumbnail } from "../components/ui/TrackThumbnail";
-import { Clock, Plus, Loader2 } from "lucide-react";
+import { Clock, Plus, Check } from "lucide-react";
 import { formatTime } from "../lib/utils";
 import { useToast } from "../components/ui/Toast";
 import { useInfiniteScroll } from "../hooks/useInfiniteScroll";
@@ -98,6 +98,7 @@ export function History() {
   }, [isFirstPage, setItems]);
 
   const [addingIds, setAddingIds] = useState<Set<string>>(new Set());
+  const [addedIds, setAddedIds] = useState<Set<string>>(new Set());
   const { showToast } = useToast();
 
   const handleAdd = async (track: TrackInfo) => {
@@ -105,6 +106,14 @@ export function History() {
     setAddingIds((prev) => new Set(prev).add(track.id));
     try {
       await api.addToQueue(track.source_url);
+      setAddedIds((prev) => new Set(prev).add(track.id));
+      setTimeout(() => {
+        setAddedIds((prev) => {
+          const next = new Set(prev);
+          next.delete(track.id);
+          return next;
+        });
+      }, 1500);
     } catch {
       showToast(t().toast.failedToAddToQueue, "error");
     } finally {
@@ -152,11 +161,20 @@ export function History() {
             <button
               onClick={handleReload}
               className="w-full py-2 text-sm text-[var(--color-text)] bg-[var(--color-accent)]/10 rounded-lg hover:bg-[var(--color-accent)]/20 transition-colors"
+              style={{
+                animation:
+                  "fadeInUp var(--duration-normal) var(--ease-out-soft)",
+              }}
             >
               {s.history.newTrackPlayed}
             </button>
           )}
-          <ul className="flex flex-col">
+          <ul
+            className="flex flex-col"
+            style={{
+              animation: "fadeIn var(--duration-normal) var(--ease-out-soft)",
+            }}
+          >
             {items.map((entry) => (
               <li
                 key={`${entry.track.id}-${entry.played_at}`}
@@ -184,27 +202,48 @@ export function History() {
                     )}
                   </div>
                 </div>
-                <button
-                  onClick={() => handleAdd(entry.track)}
-                  disabled={addingIds.has(entry.track.id)}
-                  className={clsx(
-                    "flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium",
-                    "transition-[color,background-color,opacity] duration-150 cursor-pointer",
-                    addingIds.has(entry.track.id)
-                      ? "bg-[var(--color-bg-tertiary)] text-[var(--color-text-tertiary)] cursor-not-allowed"
-                      : "bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] text-[#1a1a1a] opacity-0 group-hover:opacity-100 [@media(hover:none)]:opacity-100",
-                  )}
-                  aria-label={`Add ${entry.track.title} to queue`}
-                >
-                  {addingIds.has(entry.track.id) ? (
-                    <Loader2 size={12} className="animate-spin" />
-                  ) : (
-                    <Plus size={12} />
-                  )}
-                  {addingIds.has(entry.track.id)
-                    ? s.history.adding
-                    : s.history.add}
-                </button>
+                {(() => {
+                  const isDone = addedIds.has(entry.track.id);
+                  const isPending = addingIds.has(entry.track.id);
+                  return (
+                    <button
+                      onClick={() => handleAdd(entry.track)}
+                      disabled={isPending || isDone}
+                      className={clsx(
+                        "flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium",
+                        "transition-[color,background-color,opacity] duration-150 cursor-pointer",
+                        isDone
+                          ? "bg-[var(--color-bg-tertiary)] text-[var(--color-success)] cursor-default"
+                          : isPending
+                            ? "bg-[var(--color-accent)] text-[#1a1a1a] cursor-not-allowed opacity-0 group-hover:opacity-100 [@media(hover:none)]:opacity-100"
+                            : "bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] text-[#1a1a1a] opacity-0 group-hover:opacity-100 [@media(hover:none)]:opacity-100",
+                      )}
+                      aria-label={`Add ${entry.track.title} to queue`}
+                    >
+                      <span className="relative w-3 h-3 flex-shrink-0">
+                        <Plus
+                          size={12}
+                          className={clsx(
+                            "absolute inset-0 transition-[opacity,transform] duration-150",
+                            isDone
+                              ? "opacity-0 scale-75"
+                              : "opacity-100 scale-100",
+                          )}
+                        />
+                        <Check
+                          size={12}
+                          className={clsx(
+                            "absolute inset-0 transition-[opacity,transform] duration-150",
+                            isDone
+                              ? "opacity-100 scale-100"
+                              : "opacity-0 scale-75",
+                          )}
+                        />
+                      </span>
+                      {s.history.add}
+                    </button>
+                  );
+                })()}
               </li>
             ))}
           </ul>

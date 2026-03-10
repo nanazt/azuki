@@ -138,7 +138,13 @@ export function QueuePanel({ onOpenSearch }: QueuePanelProps) {
       <div className="flex-1 overflow-y-auto py-2">
         {/* Now playing */}
         {currentTrack && (
-          <div className="mb-3">
+          <div
+            className="mb-3"
+            key={currentTrack.id}
+            style={{
+              animation: "fadeIn var(--duration-normal) var(--ease-out-soft)",
+            }}
+          >
             <div className="px-4 py-1">
               <span className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">
                 {s.queue.nowPlaying}
@@ -254,7 +260,12 @@ export function QueuePanel({ onOpenSearch }: QueuePanelProps) {
             </DndContext>
           </div>
         ) : (
-          <div className="flex flex-col items-center justify-center gap-2 px-4 py-10 text-center">
+          <div
+            className="flex flex-col items-center justify-center gap-2 px-4 py-10 text-center"
+            style={{
+              animation: "fadeIn var(--duration-normal) var(--ease-out-soft)",
+            }}
+          >
             <ListMusic
               size={28}
               className="text-[var(--color-text-tertiary)]"

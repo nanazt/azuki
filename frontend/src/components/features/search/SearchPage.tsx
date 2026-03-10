@@ -34,6 +34,7 @@ export function SearchPage() {
   const [source, setSource] = useState<SearchSource>("youtube");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [addingIds, setAddingIds] = useState<Set<string>>(new Set());
+  const [addedIds, setAddedIds] = useState<Set<string>>(new Set());
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -80,6 +81,14 @@ export function SearchPage() {
       setAddingIds((prev) => new Set(prev).add(track.id));
       try {
         await api.addToQueue(track.source_url);
+        setAddedIds((prev) => new Set(prev).add(track.id));
+        setTimeout(() => {
+          setAddedIds((prev) => {
+            const next = new Set(prev);
+            next.delete(track.id);
+            return next;
+          });
+        }, 1500);
       } catch (err) {
         console.error("Failed to add to queue", err);
         showToast(t().toast.failedToAddToQueue, "error");
@@ -148,7 +157,12 @@ export function SearchPage() {
       {/* Results */}
       <div ref={containerRef} className="flex-1 overflow-y-auto py-2 px-1">
         {loading && results.length === 0 && (
-          <div className="space-y-1">
+          <div
+            className="space-y-1"
+            style={{
+              animation: "fadeIn var(--duration-normal) var(--ease-out-soft)",
+            }}
+          >
             {Array.from({ length: 5 }).map((_, i) => (
               <SkeletonRow key={i} />
             ))}
@@ -156,7 +170,12 @@ export function SearchPage() {
         )}
 
         {!loading && !hasQuery && (
-          <div className="flex flex-col items-center justify-center gap-2 py-10 text-center">
+          <div
+            className="flex flex-col items-center justify-center gap-2 py-10 text-center"
+            style={{
+              animation: "fadeIn var(--duration-normal) var(--ease-out-soft)",
+            }}
+          >
             <Search size={28} className="text-[var(--color-text-tertiary)]" />
             <p className="text-sm text-[var(--color-text-secondary)]">
               {s.search.searchPrompt}
@@ -165,7 +184,12 @@ export function SearchPage() {
         )}
 
         {!loading && hasQuery && results.length === 0 && (
-          <div className="flex flex-col items-center justify-center gap-2 py-10 text-center">
+          <div
+            className="flex flex-col items-center justify-center gap-2 py-10 text-center"
+            style={{
+              animation: "fadeIn var(--duration-normal) var(--ease-out-soft)",
+            }}
+          >
             <Search size={28} className="text-[var(--color-text-tertiary)]" />
             <p className="text-sm text-[var(--color-text-secondary)]">
               {s.search.noResults}
@@ -177,13 +201,19 @@ export function SearchPage() {
         )}
 
         {hasQuery && results.length > 0 && (
-          <div>
+          <div
+            key={`${source}-${debouncedQuery}`}
+            style={{
+              animation: "fadeIn var(--duration-normal) var(--ease-out-soft)",
+            }}
+          >
             {results.map((track) => (
               <SearchResult
                 key={track.id}
                 track={track}
                 onAdd={handleAdd}
                 adding={addingIds.has(track.id)}
+                added={addedIds.has(track.id)}
               />
             ))}
 

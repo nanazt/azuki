@@ -65,8 +65,9 @@ export function useInfiniteScroll<
   const reload = useCallback(async () => {
     setLoading(true);
     cursorRef.current = null;
+    const minDelay = new Promise((r) => setTimeout(r, 120));
     try {
-      const res = await fetcherRef.current();
+      const [res] = await Promise.all([fetcherRef.current(), minDelay]);
       onResponseRef.current?.(res);
       setItems(res.items);
       cursorRef.current = res.next_cursor;

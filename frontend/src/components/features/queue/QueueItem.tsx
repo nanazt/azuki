@@ -13,6 +13,8 @@ interface QueueItemProps {
   index: number;
   onRemove: (index: number) => void;
   onPlayAt: (index: number) => void;
+  animationStyle?: React.CSSProperties;
+  onAnimationEnd?: () => void;
 }
 
 export function QueueItem({
@@ -20,6 +22,8 @@ export function QueueItem({
   index,
   onRemove,
   onPlayAt,
+  animationStyle,
+  onAnimationEnd,
 }: QueueItemProps) {
   const {
     attributes,
@@ -44,6 +48,8 @@ export function QueueItem({
       onPlayAt={onPlayAt}
       isDragging={isDragging}
       style={style}
+      animationStyle={animationStyle}
+      onAnimationEnd={onAnimationEnd}
       dragHandleProps={{ ...attributes, ...listeners }}
     />
   );
@@ -57,6 +63,8 @@ interface QueueItemContentProps {
   isDragging?: boolean;
   isOverlay?: boolean;
   style?: React.CSSProperties;
+  animationStyle?: React.CSSProperties;
+  onAnimationEnd?: () => void;
   dragHandleProps?: Record<string, unknown>;
 }
 
@@ -72,6 +80,8 @@ export const QueueItemContent = forwardRef<
     isDragging,
     isOverlay,
     style,
+    animationStyle,
+    onAnimationEnd,
     dragHandleProps,
   },
   ref,
@@ -81,7 +91,8 @@ export const QueueItemContent = forwardRef<
   return (
     <div
       ref={ref}
-      style={style}
+      style={{ ...style, ...animationStyle }}
+      onAnimationEnd={onAnimationEnd}
       className={clsx(
         "flex items-center py-2 rounded-lg",
         "hover:bg-[var(--color-bg-hover)] transition-colors duration-100 group",

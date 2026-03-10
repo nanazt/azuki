@@ -647,8 +647,45 @@ export function Stats() {
     );
   }
 
+  const statChips = [
+    {
+      label: s.stats.plays,
+      value: stats.total_plays.toLocaleString(),
+      icon: <BarChart2 size={12} />,
+    },
+    {
+      label: s.stats.listened,
+      value: formatListeningTime(stats.total_time_ms),
+      icon: <Music size={12} />,
+    },
+    {
+      label: s.stats.tracks,
+      value: stats.unique_tracks.toLocaleString(),
+      icon: <Disc size={12} />,
+    },
+    {
+      label: s.stats.streak,
+      value: `${stats.streak.current}d`,
+      icon: <Flame size={12} />,
+    },
+    ...(stats.peak_day
+      ? [
+          {
+            label: s.stats.peak,
+            value: `${stats.peak_day.play_count}`,
+            icon: <Trophy size={12} />,
+          },
+        ]
+      : []),
+  ];
+
   return (
-    <div className="p-4 md:p-6 max-w-3xl mx-auto flex flex-col gap-6 pb-32">
+    <div
+      className="p-4 md:p-6 max-w-3xl mx-auto flex flex-col gap-6 pb-32"
+      style={{
+        animation: "fadeIn var(--duration-normal) var(--ease-out-soft)",
+      }}
+    >
       {/* Title */}
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold text-[var(--color-text)]">
@@ -658,33 +695,18 @@ export function Stats() {
 
       {/* Stat Chips */}
       <div className="flex flex-wrap justify-center gap-3">
-        <StatChip
-          label={s.stats.plays}
-          value={stats.total_plays.toLocaleString()}
-          icon={<BarChart2 size={12} />}
-        />
-        <StatChip
-          label={s.stats.listened}
-          value={formatListeningTime(stats.total_time_ms)}
-          icon={<Music size={12} />}
-        />
-        <StatChip
-          label={s.stats.tracks}
-          value={stats.unique_tracks.toLocaleString()}
-          icon={<Disc size={12} />}
-        />
-        <StatChip
-          label={s.stats.streak}
-          value={`${stats.streak.current}d`}
-          icon={<Flame size={12} />}
-        />
-        {stats.peak_day && (
-          <StatChip
-            label={s.stats.peak}
-            value={`${stats.peak_day.play_count}`}
-            icon={<Trophy size={12} />}
-          />
-        )}
+        {statChips.map((chip, i) => (
+          <div
+            key={chip.label}
+            style={{
+              animation: `fadeInUp var(--duration-normal) var(--ease-out-spring)`,
+              animationDelay: `${i * 40}ms`,
+              animationFillMode: "backwards",
+            }}
+          >
+            <StatChip label={chip.label} value={chip.value} icon={chip.icon} />
+          </div>
+        ))}
       </div>
 
       {/* Contribution Heatmap */}

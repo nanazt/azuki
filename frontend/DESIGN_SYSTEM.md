@@ -229,10 +229,91 @@ Inner card: bg-[var(--color-bg-secondary)]/80 rounded-2xl border-dashed border-[
 
 ## Animation
 
+**Principle**: All state transitions must have smooth animations. Hard-coded instant transitions are prohibited. Exceptions (e.g., progress bar reset) require explicit confirmation.
+
+### Design Tokens
+
+Defined as CSS custom properties in `index.css`:
+
+| Token | Value | Usage |
+|-------|-------|-------|
+| `--duration-quick` | 150ms | Hover, button feedback |
+| `--duration-normal` | 220ms | Element enter/exit |
+| `--duration-slow` | 350ms | Page-level, list reorder |
+| `--ease-out-soft` | `cubic-bezier(0.25, 0, 0, 1)` | General enter |
+| `--ease-out-spring` | `cubic-bezier(0.34, 1.4, 0.64, 1)` | List item enter (subtle overshoot) |
+| `--ease-in-soft` | `cubic-bezier(0.4, 0, 1, 1)` | Exit |
+
+### Available Keyframes
+
+| Name | Effect | Usage |
+|------|--------|-------|
+| `fadeIn` | opacity 0→1 | Skeleton→content, empty states |
+| `fadeOut` | opacity 1→0 | Element removal |
+| `fadeInUp` | opacity 0→1, translateY 8px→0 | Banners, notifications |
+| `slideIn` | opacity 0→1, translateX -8px→0 | Real-time list insertions |
+| `expandIn` | opacity 0→1, max-height 0→120px | List item enter |
+| `collapseOut` | opacity 1→0, max-height→0 | List item exit |
+
+### Usage Pattern
+
+```tsx
+// Skeleton → content fadeIn
+<div style={{ animation: "fadeIn var(--duration-normal) var(--ease-out-soft)" }}>
+
+// Crossfade on track change (key triggers remount)
+<div key={track.id} style={{ animation: "fadeIn var(--duration-normal) var(--ease-out-soft)" }}>
+
+// Stagger animation
+<div style={{
+  animation: "fadeInUp var(--duration-normal) var(--ease-out-spring)",
+  animationDelay: `${i * 40}ms`,
+  animationFillMode: "backwards",
+}}>
+```
+
+### `useAnimatedList` Hook
+
+Display-layer wrapper for list enter/exit animations. Does not replace data source hooks.
+
+```tsx
+import { useAnimatedList } from "../hooks/useAnimatedList";
+
+const { displayItems, handleAnimationEnd } = useAnimatedList(items, getKey);
+
+// Render:
+{displayItems.map(({ item, status, key }) => (
+  <li
+    key={key}
+    style={
+      status === "entering" ? { animation: "slideIn ..." }
+      : status === "exiting" ? { animation: "collapseOut ... forwards" }
+      : undefined
+    }
+    onAnimationEnd={() => handleAnimationEnd(key)}
+  >
+    ...
+  </li>
+))}
+```
+
+### Existing Animations (unchanged)
+
 - Hover: `transition-colors duration-100`
 - Opacity: `transition-opacity`
 - Loading spinner: `animate-spin` (Loader2 icon)
 - Equalizer: custom `eq-bounce` keyframes
+
+### Accessibility: `prefers-reduced-motion`
+
+All custom keyframe animations are disabled when `prefers-reduced-motion: reduce` is active. Functional Tailwind animations (`animate-spin`, `animate-pulse`, `animate-ping`) are preserved as they serve as status indicators.
+
+### Performance Guidelines
+
+- Prefer `transform` and `opacity` properties (GPU-composited, no layout trigger)
+- `collapseOut`/`expandIn` use `max-height` which triggers layout — acceptable for single-item exit/enter; batch if removing multiple items simultaneously
+- Keep concurrent animations to 6-8 or fewer
+- During dnd-kit drag operations, suppress enter/exit animations to avoid conflicts
 
 ## Scrollbar
 

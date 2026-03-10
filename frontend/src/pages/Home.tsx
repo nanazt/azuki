@@ -40,7 +40,13 @@ export function Home() {
     <div className="p-4 md:p-6 max-w-3xl mx-auto flex flex-col gap-8">
       {/* Now Playing banner */}
       {currentTrack ? (
-        <div className="flex items-center gap-4 p-4 rounded-xl bg-[var(--color-accent)]/10 border border-[var(--color-accent)]/30">
+        <div
+          key={currentTrack.id}
+          className="flex items-center gap-4 p-4 rounded-xl bg-[var(--color-accent)]/10 border border-[var(--color-accent)]/30"
+          style={{
+            animation: "fadeIn var(--duration-normal) var(--ease-out-soft)",
+          }}
+        >
           <TrackThumbnail
             track={currentTrack}
             sizeClass="w-14 h-14"
@@ -103,7 +109,12 @@ export function Home() {
             {s.home.noHistory}
           </p>
         ) : (
-          <ul className="flex flex-col gap-1">
+          <ul
+            className="flex flex-col gap-1"
+            style={{
+              animation: "fadeIn var(--duration-normal) var(--ease-out-soft)",
+            }}
+          >
             {history
               .filter((entry) => entry.track.id !== currentTrack?.id)
               .map((entry, i) => (

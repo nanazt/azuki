@@ -230,7 +230,12 @@ export function Settings() {
   }
 
   return (
-    <div className="p-4 md:p-6 max-w-3xl mx-auto flex flex-col gap-10 pb-32 md:pb-6">
+    <div
+      className="p-4 md:p-6 max-w-3xl mx-auto flex flex-col gap-10 pb-32 md:pb-6"
+      style={{
+        animation: "fadeIn var(--duration-normal) var(--ease-out-soft)",
+      }}
+    >
       <h1 className="text-lg font-semibold text-[var(--color-text)] flex items-center gap-2">
         <SettingsIcon
           size={20}
