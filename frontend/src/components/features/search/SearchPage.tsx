@@ -176,7 +176,7 @@ export function SearchPage() {
           </div>
         )}
 
-        {results.length > 0 && (
+        {hasQuery && results.length > 0 && (
           <div>
             {results.map((track) => (
               <SearchResult

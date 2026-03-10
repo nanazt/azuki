@@ -7,7 +7,25 @@ import { TrackThumbnail } from "../components/ui/TrackThumbnail";
 import { useInfiniteScroll } from "../hooks/useInfiniteScroll";
 import { useLocale, t } from "../hooks/useLocale";
 
+// ─── Chart Configuration ───
+// Edit these values to adjust chart display criteria.
+const CHART_CONFIG = {
+  /** Heatmap: number of weeks to display */
+  heatmapWeeks: 26,
+  /** Heatmap: minimum cell size in pixels */
+  heatmapMinCellSize: 8,
+  /** Heatmap: color thresholds as fraction of max (relative scale) */
+  heatmapThresholds: [0.2, 0.4, 0.6, 0.8] as const,
+  /** TrendChart: show X-axis label every N data points */
+  trendLabelInterval: 7,
+  /** DowChart: minimum bar width percentage (visibility floor) */
+  dowMinBarPct: 4,
+} as const;
+
 // ─── Helpers ───
+
+const fmtDate = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
 function formatDuration(ms: number): string {
   const totalMin = Math.floor(ms / 60000);
@@ -116,9 +134,9 @@ function ContributionHeatmap({
 
   // Build 26-week × 7-day grid
   const today = new Date();
-  const todayStr = today.toISOString().slice(0, 10);
+  const todayStr = fmtDate(today);
   const todayDow = (today.getDay() + 6) % 7; // Mon=0
-  const totalDays = 26 * 7 + todayDow + 1;
+  const totalDays = CHART_CONFIG.heatmapWeeks * 7 + todayDow + 1;
   const startDate = new Date(today);
   startDate.setDate(startDate.getDate() - totalDays + 1);
 
@@ -135,7 +153,7 @@ function ContributionHeatmap({
   for (let i = 0; i < totalDays; i++) {
     const d = new Date(startDate);
     d.setDate(d.getDate() + i);
-    const dateStr = d.toISOString().slice(0, 10);
+    const dateStr = fmtDate(d);
     const dow = (d.getDay() + 6) % 7;
     if (dow === 0 && currentWeek.length > 0) {
       weeks.push(currentWeek);
@@ -150,10 +168,10 @@ function ContributionHeatmap({
   const getColor = (ms: number) => {
     if (ms === 0) return heatmap.empty;
     const ratio = ms / maxMs;
-    if (ratio < 0.2) return heatmap.colors[1];
-    if (ratio < 0.4) return heatmap.colors[2];
-    if (ratio < 0.6) return heatmap.colors[3];
-    if (ratio < 0.8) return heatmap.colors[4];
+    if (ratio < CHART_CONFIG.heatmapThresholds[0]) return heatmap.colors[1];
+    if (ratio < CHART_CONFIG.heatmapThresholds[1]) return heatmap.colors[2];
+    if (ratio < CHART_CONFIG.heatmapThresholds[2]) return heatmap.colors[3];
+    if (ratio < CHART_CONFIG.heatmapThresholds[3]) return heatmap.colors[4];
     return heatmap.colors[5];
   };
 
@@ -180,7 +198,7 @@ function ContributionHeatmap({
       const size = Math.floor(
         (available - gap * (weeks.length - 1)) / weeks.length,
       );
-      setCellSize(Math.max(size, 8));
+      setCellSize(Math.max(size, CHART_CONFIG.heatmapMinCellSize));
     };
     measure();
     const observer = new ResizeObserver(measure);
@@ -258,11 +276,10 @@ function ContributionHeatmap({
                           width: cellSize,
                           height: cellSize,
                           backgroundColor: getColor(cell.ms),
-                          outline:
+                          boxShadow:
                             cell.dateStr === todayStr
-                              ? "1px solid var(--color-accent)"
+                              ? "inset 0 0 0 1.5px var(--color-accent)"
                               : "none",
-                          outlineOffset: "1px",
                         }}
                         onMouseEnter={(e) => {
                           const rect = e.currentTarget.getBoundingClientRect();
@@ -359,7 +376,7 @@ function TrendChart({
 
   // X-axis labels: show every 7 days
   const xLabels = points.filter(
-    (_, i) => i % 7 === 0 || i === points.length - 1,
+    (_, i) => i % CHART_CONFIG.trendLabelInterval === 0,
   );
 
   return (
@@ -367,7 +384,7 @@ function TrendChart({
       <h3 className="text-sm font-semibold text-[var(--color-text)]">
         {s.stats.last30Days}
       </h3>
-      <svg viewBox={`0 0 ${w} ${h + 12}`} className="w-full h-40">
+      <svg viewBox={`0 0 ${w} ${h + 16}`} className="w-full h-40">
         <defs>
           <linearGradient id="trendFill" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor={accent} stopOpacity={0.25} />
@@ -396,10 +413,10 @@ function TrendChart({
           <text
             key={i}
             x={p.x}
-            y={h + 8}
+            y={h + 11}
             textAnchor="middle"
-            fill="var(--color-text-secondary)"
-            fontSize="2.5"
+            fill="var(--color-text-tertiary)"
+            fontSize="3"
           >
             {p.date.slice(5)}
           </text>
@@ -445,7 +462,7 @@ function DowChart({ data }: { data: number[] }) {
                 <div
                   className="h-full rounded transition-all"
                   style={{
-                    width: `${Math.max(pct, 4)}%`,
+                    width: `${Math.max(pct, CHART_CONFIG.dowMinBarPct)}%`,
                     backgroundColor: "var(--color-accent)",
                   }}
                 />
