@@ -50,6 +50,7 @@ new Workflow({
           .add(
             buildPush({
               with: {
+                context: ".",
                 push: true,
                 tags: "${{ steps.meta.outputs.tags }}",
                 labels: "${{ steps.meta.outputs.labels }}",

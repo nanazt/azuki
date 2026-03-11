@@ -93,6 +93,7 @@ Discord music bot with web dashboard. Rust workspace backend (6 crates) + React 
 
 - **gaji**: TypeScript-based GitHub Actions workflow tool. `npx gaji dev` (type generation), `npx gaji build` (TS→YAML compilation)
 - **Docker image**: `ghcr.io/nanazt/azuki` — built by GitHub Actions on `v*` tag push
-- **Workflow source**: `workflows/docker.ts` → `.github/workflows/docker.yml` (do not edit YAML directly)
+- **Workflow source**: `workflows/docker.ts` → `.github/workflows/docker.yml`
+- **CRITICAL**: NEVER edit `.github/workflows/*.yml` directly. Always edit the TypeScript source in `workflows/` first, then run `npx gaji build` to regenerate the YAML. Direct YAML edits will be overwritten.
 
 <!-- MANUAL: -->
