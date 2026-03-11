@@ -226,46 +226,6 @@ async fn history_channel_invalid() {
 }
 
 #[tokio::test]
-async fn web_base_url_get() {
-    let app = TestApp::new().await;
-    let cookie = create_test_user(&app, "admin1", "adminuser", true).await;
-    let resp = send(&app.router, get("/api/admin/web-base-url", &cookie)).await;
-    assert_eq!(resp.status(), StatusCode::OK);
-}
-
-#[tokio::test]
-async fn web_base_url_set() {
-    let app = TestApp::new().await;
-    let cookie = create_test_user(&app, "admin1", "adminuser", true).await;
-    let resp = send(
-        &app.router,
-        put_json(
-            "/api/admin/web-base-url",
-            &cookie,
-            serde_json::json!({"url": "https://azuki.example.com"}),
-        ),
-    )
-    .await;
-    assert_eq!(resp.status(), StatusCode::OK);
-}
-
-#[tokio::test]
-async fn web_base_url_invalid() {
-    let app = TestApp::new().await;
-    let cookie = create_test_user(&app, "admin1", "adminuser", true).await;
-    let resp = send(
-        &app.router,
-        put_json(
-            "/api/admin/web-base-url",
-            &cookie,
-            serde_json::json!({"url": "ftp://a"}),
-        ),
-    )
-    .await;
-    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
-}
-
-#[tokio::test]
 async fn timezone_get() {
     let app = TestApp::new().await;
     let cookie = create_test_user(&app, "admin1", "adminuser", true).await;

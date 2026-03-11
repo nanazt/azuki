@@ -415,6 +415,7 @@ async fn run_normal(config: Config, pool: SqlitePool) -> anyhow::Result<()> {
     let bridge_guild_id = serenity::all::GuildId::new(config.discord_guild_id);
     let bridge_http_rx = http_rx;
     let bridge_locale = Arc::clone(&bot_locale);
+    let bridge_web_origin = config.web_origin.clone();
     let seq_counter = Arc::new(AtomicU64::new(0));
     tokio::spawn({
         let seq = Arc::clone(&seq_counter);
@@ -494,10 +495,7 @@ async fn run_normal(config: Config, pool: SqlitePool) -> anyhow::Result<()> {
                                                     };
 
                                                     // Build thumbnail URL
-                                                    let web_base_url = azuki_db::config::get_config(&bridge_db, "web_base_url").await.ok().flatten();
-                                                    let thumbnail_url = web_base_url.as_ref().map(|base| {
-                                                        format!("{base}/media/thumbnails/{}.jpg", track.id)
-                                                    });
+                                                    let thumbnail_url = Some(format!("{}/media/thumbnails/{}.jpg", bridge_web_origin, track.id));
 
                                                     let embed = azuki_bot::embed::build_track_embed(
                                                         &bridge_locale, track, track.volume, &display_name, thumbnail_url.as_deref(),
@@ -562,10 +560,7 @@ async fn run_normal(config: Config, pool: SqlitePool) -> anyhow::Result<()> {
                                     if let Some((channel_id, message_id, history_id, ref track, ref display_name, volume)) = current_history {
                                         let http = bridge_http_rx.borrow().clone();
                                         if let Some(ref http) = http {
-                                            let web_base_url = azuki_db::config::get_config(&bridge_db, "web_base_url").await.ok().flatten();
-                                            let thumbnail_url = web_base_url.as_ref().map(|base| {
-                                                format!("{base}/media/thumbnails/{}.jpg", track.id)
-                                            });
+                                            let thumbnail_url = Some(format!("{}/media/thumbnails/{}.jpg", bridge_web_origin, track.id));
                                             let embed = azuki_bot::embed::build_track_embed(&bridge_locale, track, volume, display_name, thumbnail_url.as_deref());
                                             let button = azuki_bot::embed::build_play_button(&bridge_locale, &track.id);
                                             let edit = serenity::all::EditMessage::new()
@@ -626,10 +621,7 @@ async fn run_normal(config: Config, pool: SqlitePool) -> anyhow::Result<()> {
                         if let Some((channel_id, message_id, history_id, ref track, ref display_name, volume)) = current_history {
                             let http = bridge_http_rx.borrow().clone();
                             if let Some(ref http) = http {
-                                let web_base_url = azuki_db::config::get_config(&bridge_db, "web_base_url").await.ok().flatten();
-                                let thumbnail_url = web_base_url.as_ref().map(|base| {
-                                    format!("{base}/media/thumbnails/{}.jpg", track.id)
-                                });
+                                let thumbnail_url = Some(format!("{}/media/thumbnails/{}.jpg", bridge_web_origin, track.id));
                                 let embed = azuki_bot::embed::build_track_embed(&bridge_locale, track, volume, display_name, thumbnail_url.as_deref());
                                 let button = azuki_bot::embed::build_play_button(&bridge_locale, &track.id);
                                 let edit = serenity::all::EditMessage::new()
