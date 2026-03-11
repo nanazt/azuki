@@ -96,6 +96,13 @@ pub async fn run_setup(
         .route("/setup/status", get(get_status))
         .route("/setup/info", get(get_setup_info))
         .route("/setup/config", get(get_setup_config))
+        .route(
+            "/api/{*rest}",
+            get(api_unavailable)
+                .post(api_unavailable)
+                .put(api_unavailable)
+                .delete(api_unavailable),
+        )
         .layer(middleware::from_fn(csrf_check))
         .layer(cors)
         .layer(middleware::map_response(add_security_headers))
@@ -174,6 +181,13 @@ async fn csrf_check(req: Request, next: Next) -> Result<Response, StatusCode> {
 
 async fn get_status() -> Json<serde_json::Value> {
     Json(serde_json::json!({"status": "setup"}))
+}
+
+async fn api_unavailable() -> (StatusCode, Json<serde_json::Value>) {
+    (
+        StatusCode::SERVICE_UNAVAILABLE,
+        Json(serde_json::json!({"error": "server is in setup mode"})),
+    )
 }
 
 async fn get_setup_info(

@@ -28,6 +28,36 @@ import { QueuePanel } from "./components/features/queue";
 import { UploadsPage } from "./pages/Uploads";
 import { WelcomeModal } from "./components/features/onboarding/WelcomeModal";
 
+function SetupGuard() {
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    fetch("/setup/status")
+      .then((r) => r.json())
+      .then((data: { status: string }) => {
+        if (data.status === "setup") {
+          window.location.href = "/setup";
+        } else {
+          setReady(true);
+        }
+      })
+      .catch(() => {
+        // /setup/status unavailable — server is in normal mode
+        setReady(true);
+      });
+  }, []);
+
+  if (!ready) {
+    return (
+      <div className="flex items-center justify-center h-dvh bg-[var(--color-bg)]">
+        <div className="text-[var(--color-text-secondary)]">Loading...</div>
+      </div>
+    );
+  }
+
+  return <Outlet />;
+}
+
 function ProtectedRoute() {
   const { authenticated, checking, setAuthenticated, setChecking, setIsAdmin } =
     useAuthStore();
@@ -41,16 +71,6 @@ function ProtectedRoute() {
           res
             .json()
             .then((me: { is_admin: boolean }) => setIsAdmin(me.is_admin));
-        } else {
-          // Check if server is in setup mode
-          fetch("/setup/status")
-            .then((r) => r.json())
-            .then((data: { status: string }) => {
-              if (data.status === "setup") {
-                window.location.href = "/setup";
-              }
-            })
-            .catch(() => {});
         }
       })
       .catch(() => {
@@ -105,19 +125,21 @@ export default function App() {
       <BrowserRouter>
         <ToastContainer />
         <Routes>
-          <Route path="/login" element={<Login />} />
           <Route path="/setup" element={<Setup />} />
-          <Route element={<ProtectedRoute />}>
-            <Route path="/" element={<Home />} />
-            <Route path="/search" element={<SearchPage />} />
-            <Route path="/history" element={<History />} />
-            <Route path="/uploads" element={<UploadsPage />} />
-            <Route path="/stats" element={<Stats />} />
-            <Route path="/settings" element={<Settings />} />
-            <Route path="/help" element={<Help />} />
-            <Route path="/queue" element={<QueuePanel />} />
+          <Route element={<SetupGuard />}>
+            <Route path="/login" element={<Login />} />
+            <Route element={<ProtectedRoute />}>
+              <Route path="/" element={<Home />} />
+              <Route path="/search" element={<SearchPage />} />
+              <Route path="/history" element={<History />} />
+              <Route path="/uploads" element={<UploadsPage />} />
+              <Route path="/stats" element={<Stats />} />
+              <Route path="/settings" element={<Settings />} />
+              <Route path="/help" element={<Help />} />
+              <Route path="/queue" element={<QueuePanel />} />
+            </Route>
+            <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
-          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
     </ToastProvider>
