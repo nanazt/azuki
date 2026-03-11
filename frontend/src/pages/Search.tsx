@@ -1,12 +1,13 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import clsx from "clsx";
-import { Search, Loader2 } from "lucide-react";
+import { Search, Loader2, Link, X } from "lucide-react";
 import { api } from "../lib/api";
 import type { TrackInfo } from "../lib/types";
 import { SearchResult } from "../components/features/search/SearchResult";
 import { useToast } from "../hooks/useToast";
 import { useLocale, t } from "../hooks/useLocale";
 import { useInfiniteScroll } from "../hooks/useInfiniteScroll";
+import { isHttpUrl } from "../lib/url";
 
 type SearchSource = "youtube" | "history";
 
@@ -32,29 +33,11 @@ export function SearchPage() {
   const { showToast } = useToast();
   const [query, setQuery] = useState("");
   const [source, setSource] = useState<SearchSource>("youtube");
-  const [debouncedQuery, setDebouncedQuery] = useState("");
+  const [submittedQuery, setSubmittedQuery] = useState("");
+  const [urlAdding, setUrlAdding] = useState(false);
   const [addingIds, setAddingIds] = useState<Set<string>>(new Set());
   const [addedIds, setAddedIds] = useState<Set<string>>(new Set());
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-
-  // Debounce query input
-  useEffect(() => {
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-
-    if (!query.trim()) {
-      setDebouncedQuery("");
-      return;
-    }
-
-    debounceRef.current = setTimeout(() => {
-      setDebouncedQuery(query);
-    }, 300);
-
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-    };
-  }, [query]);
 
   const {
     items: results,
@@ -65,16 +48,45 @@ export function SearchPage() {
     reload,
     loadMore,
   } = useInfiniteScroll<TrackInfo>({
-    fetcher: (cursor) => api.search(debouncedQuery, source, cursor),
-    enabled: debouncedQuery.trim().length > 0,
+    fetcher: (cursor) => api.search(submittedQuery, source, cursor),
+    enabled: submittedQuery.trim().length > 0,
     scrollRoot: containerRef.current,
   });
 
-  // Reload when debouncedQuery or source changes
+  // Reload when submittedQuery or source changes
   useEffect(() => {
     if (containerRef.current) containerRef.current.scrollTop = 0;
-    if (debouncedQuery.trim()) reload();
-  }, [debouncedQuery, source]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (submittedQuery.trim()) reload();
+  }, [submittedQuery, source]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleSubmit = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault();
+      const trimmed = query.trim();
+      if (!trimmed) return;
+
+      if (isHttpUrl(trimmed)) {
+        setUrlAdding(true);
+        try {
+          await api.addToQueue(trimmed);
+          showToast(t().toast.urlAddedToQueue, "success");
+          setQuery("");
+        } catch (err) {
+          const msg = err instanceof Error ? err.message.toLowerCase() : "";
+          if (msg.includes("duplicate") || msg.includes("already")) {
+            showToast(t().toast.duplicateInQueue, "error");
+          } else {
+            showToast(t().toast.failedToAddToQueue, "error");
+          }
+        } finally {
+          setUrlAdding(false);
+        }
+      } else {
+        setSubmittedQuery(trimmed);
+      }
+    },
+    [query, showToast],
+  );
 
   const handleAdd = useCallback(
     async (track: TrackInfo) => {
@@ -103,38 +115,61 @@ export function SearchPage() {
     [showToast],
   );
 
-  const hasQuery = debouncedQuery.trim().length > 0;
+  const hasQuery = submittedQuery.trim().length > 0;
+  const isUrl = isHttpUrl(query.trim());
 
   return (
     <div className="flex flex-col h-full">
       {/* Search header */}
       <div className="px-4 pt-4 pb-3 border-b border-[var(--color-border)]">
-        <div className="relative">
-          <Search
-            size={16}
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-text-tertiary)] pointer-events-none"
-          />
-          <input
-            type="text"
-            autoFocus
-            data-search-input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder={s.search.placeholder}
-            className={clsx(
-              "w-full pl-9 pr-4 py-2.5 md:py-2 rounded-lg text-base md:text-sm",
-              "bg-[var(--color-bg-tertiary)] border border-[var(--color-border)]",
-              "text-[var(--color-text)] placeholder:text-[var(--color-text-tertiary)]",
-              "outline-none focus:border-[var(--color-accent)] transition-colors duration-150",
-            )}
-          />
-          {(loading || loadingMore) && (
-            <Loader2
-              size={14}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--color-text-tertiary)] animate-spin"
+        <form onSubmit={handleSubmit}>
+          <div className="relative">
+            <button
+              type="submit"
+              className={clsx(
+                "absolute left-3 top-1/2 -translate-y-1/2 cursor-pointer",
+                query.trim()
+                  ? "text-[var(--color-accent)]"
+                  : "text-[var(--color-text-tertiary)]",
+              )}
+            >
+              {isUrl ? <Link size={16} /> : <Search size={16} />}
+            </button>
+            <input
+              type="text"
+              autoFocus
+              data-search-input
+              enterKeyHint="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={s.search.placeholder}
+              className={clsx(
+                "w-full pl-9 pr-10 py-2.5 md:py-2 rounded-lg text-base md:text-sm",
+                "bg-[var(--color-bg-tertiary)] border border-[var(--color-border)]",
+                "text-[var(--color-text)] placeholder:text-[var(--color-text-tertiary)]",
+                "outline-none focus:border-[var(--color-accent)] transition-colors duration-150",
+              )}
             />
-          )}
-        </div>
+            {(loading || loadingMore || urlAdding) && (
+              <Loader2
+                size={14}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--color-text-tertiary)] animate-spin"
+              />
+            )}
+            {query && !loading && !loadingMore && !urlAdding && (
+              <button
+                type="button"
+                onClick={() => {
+                  setQuery("");
+                  setSubmittedQuery("");
+                }}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)] cursor-pointer"
+              >
+                <X size={14} />
+              </button>
+            )}
+          </div>
+        </form>
 
         {/* Source tabs */}
         <div className="flex gap-1 mt-3">
@@ -203,7 +238,7 @@ export function SearchPage() {
 
         {hasQuery && results.length > 0 && (
           <div
-            key={`${source}-${debouncedQuery}`}
+            key={`${source}-${submittedQuery}`}
             style={{
               animation: "fadeIn var(--duration-normal) var(--ease-out-soft)",
             }}

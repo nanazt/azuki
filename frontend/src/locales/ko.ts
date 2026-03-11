@@ -19,7 +19,7 @@ export const ko = {
   },
 
   search: {
-    placeholder: "음악 검색…",
+    placeholder: "노래 또는 URL 검색 후 Enter",
     searchForMusic: "음악 검색",
     searchPrompt: "노래, 아티스트 또는 URL을 검색해 주세요",
     noResults: "검색 결과 없어요",
@@ -268,6 +268,8 @@ export const ko = {
     apiKeySaved: "API 키가 저장됐어요",
     failedToSave: "저장 실패했어요",
     failedToCheckForUpdates: "업데이트 확인 실패했어요",
+    duplicateInQueue: "이미 대기열에 있어요",
+    urlAddedToQueue: "대기열에 추가했어요",
   },
 
   status: {

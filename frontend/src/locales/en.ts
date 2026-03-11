@@ -21,7 +21,7 @@ export const en: Translations = {
   },
 
   search: {
-    placeholder: "Search music\u2026",
+    placeholder: "Search songs or paste URL, then Enter",
     searchForMusic: "Search Music",
     searchPrompt: "Search for songs, artists, or URLs",
     noResults: "No results",
@@ -271,6 +271,8 @@ export const en: Translations = {
     apiKeySaved: "API key saved",
     failedToSave: "Failed to save",
     failedToCheckForUpdates: "Failed to check for updates",
+    duplicateInQueue: "Already in queue",
+    urlAddedToQueue: "Added to queue",
   },
 
   status: {
