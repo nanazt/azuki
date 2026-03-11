@@ -4,7 +4,7 @@ services:
     container_name: azuki
     restart: unless-stopped
     ports:
-      - "127.0.0.1:3000:3000" # only accessible through nginx
+      - "127.0.0.1:3000:3000" # reverse proxy recommended
     volumes:
       - /opt/azuki/data:/app/data
       - /opt/azuki/media:/app/media

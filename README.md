@@ -30,12 +30,12 @@ WEB_ORIGIN=http://localhost:3000
 
 ### Commands
 
-| Command | Description |
-| --- | --- |
-| `just run` | Build frontend + cargo run |
+| Command             | Description                  |
+| ------------------- | ---------------------------- |
+| `just run`          | Build frontend + cargo run   |
 | `just frontend-dev` | Vite dev server (hot reload) |
-| `just check` | Clippy with SQLX_OFFLINE |
-| `just test` | Run workspace tests |
+| `just check`        | Clippy with SQLX_OFFLINE     |
+| `just test`         | Run workspace tests          |
 
 ### First Run
 
@@ -43,44 +43,37 @@ On first launch, a setup wizard opens at http://127.0.0.1:3000. Enter your Disco
 
 ## Deployment
 
-### Architecture
-
-```
-Internet → Cloudflare (SSL, DDoS) → UFW (Cloudflare IPs only) → nginx (Origin SSL) → Docker (localhost:3000)
-```
-
 ### Prerequisites
 
-1. AWS Lightsail instance (Ubuntu, 2 vCPU / 1 GB RAM+)
-2. Docker + Docker Compose
-3. nginx
-4. Domain with Cloudflare DNS (A record → server IP, SSL mode: Full Strict)
-5. Cloudflare Origin Certificate placed at `/etc/nginx/ssl/origin.pem` and `/etc/nginx/ssl/origin-key.pem`
+1. Docker + Docker Compose
+2. Reverse proxy (nginx, Caddy, etc.) — configured separately
 
 ### Setup
 
 ```bash
-git clone <repo> /opt/azuki-repo && cd /opt/azuki-repo
-sudo ./deploy/setup.sh <domain>
+git clone https://github.com/nanazt/azuki.git  && cd azuki
+cp .env.example .env
+# Edit .env — set WEB_ORIGIN to your public URL
+docker compose up -d
 ```
 
-Then open `https://<domain>` to complete the setup wizard (Discord bot token, OAuth credentials, JWT secret, optional YouTube API key).
+Then open your configured URL to complete the setup wizard (Discord bot token, OAuth credentials, JWT secret, optional YouTube API key).
 
 ### Updating
 
 ```bash
-sudo ./deploy/update.sh <domain>
+docker compose pull && docker compose up -d
 ```
 
 ## Environment Variables
 
 Infrastructure-only — all Discord/OAuth credentials are configured through the web setup wizard.
 
-These are docker-compose defaults. Local dev defaults may differ.
+See `.env.example` for a template. These are docker-compose defaults; local dev defaults may differ.
 
-| Variable | Default | Description |
-| --- | --- | --- |
-| `WEB_ORIGIN` | `http://localhost:3000` | Public URL (set by deploy scripts) |
-| `MAX_UPLOAD_SIZE_MB` | `100` | Max file upload size |
-| `MAX_CACHE_SIZE_GB` | `30` | Media cache size limit |
-| `RUST_LOG` | `azuki=info,...` | Log level filter |
+| Variable             | Default                 | Description                        |
+| -------------------- | ----------------------- | ---------------------------------- |
+| `WEB_ORIGIN`         | `http://localhost:3000` | Public URL (set by deploy scripts) |
+| `MAX_UPLOAD_SIZE_MB` | `100`                   | Max file upload size               |
+| `MAX_CACHE_SIZE_GB`  | `30`                    | Media cache size limit             |
+| `RUST_LOG`           | `azuki=info,...`        | Log level filter                   |

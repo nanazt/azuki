@@ -263,3 +263,4 @@ data/
 generated/
 .gaji-cache.json
 gaji.config.local.ts
+deploy/nginx/
