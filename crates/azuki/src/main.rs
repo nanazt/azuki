@@ -62,14 +62,7 @@ impl Config {
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(10),
-            static_dir: env_var("STATIC_DIR").ok().or_else(|| {
-                let default = "frontend/dist";
-                if std::path::Path::new(default).join("index.html").exists() {
-                    Some(default.to_string())
-                } else {
-                    None
-                }
-            }),
+            static_dir: resolve_static_dir(),
             youtube_api_key: map
                 .get("youtube_api_key")
                 .map(|s| SecretString::from(s.clone())),
@@ -79,6 +72,17 @@ impl Config {
 
 fn env_var(key: &str) -> anyhow::Result<String> {
     std::env::var(key).with_context(|| format!("missing env var: {key}"))
+}
+
+fn resolve_static_dir() -> Option<String> {
+    env_var("STATIC_DIR").ok().or_else(|| {
+        let default = "frontend/dist";
+        if std::path::Path::new(default).join("index.html").exists() {
+            Some(default.to_string())
+        } else {
+            None
+        }
+    })
 }
 
 #[tokio::main]
@@ -104,16 +108,25 @@ async fn main() -> anyhow::Result<()> {
     azuki_db::run_migrations(&pool).await?;
     info!("database ready");
 
-    if azuki_db::config::is_configured(&pool).await? {
+    let force_setup = std::env::args().any(|a| a == "--setup");
+    let is_configured = azuki_db::config::is_configured(&pool).await?;
+
+    if !force_setup && is_configured {
         let config = Config::load(&pool).await?;
         run_normal(config, pool).await
     } else {
+        let is_reconfigure = is_configured;
         let port = std::env::var("WEB_PORT")
             .ok()
             .and_then(|v| v.parse().ok())
             .unwrap_or(3000u16);
-        info!("no configuration found — starting setup wizard at http://127.0.0.1:{port}");
-        let config = setup::run_setup(port, pool.clone()).await?;
+        let mode = if is_reconfigure {
+            "reconfigure"
+        } else {
+            "setup"
+        };
+        info!("starting {mode} wizard at http://127.0.0.1:{port}");
+        let config = setup::run_setup(port, pool.clone(), is_reconfigure).await?;
         run_normal(config, pool).await
     }
 }

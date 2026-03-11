@@ -2,14 +2,18 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use axum::Json;
-use axum::extract::State;
-use axum::http::{HeaderValue, StatusCode};
+use axum::extract::{Request, State};
+use axum::http::HeaderMap;
+use axum::http::{HeaderName, HeaderValue, Method, StatusCode};
+use axum::middleware::{self, Next};
 use axum::response::{Html, IntoResponse, Response};
-use axum::routing::get;
+use axum::routing::{get, post};
 use rand::RngExt;
 use serde::Deserialize;
 use sqlx::SqlitePool;
 use tokio::sync::Mutex;
+use tower_http::cors::{AllowOrigin, CorsLayer};
+use tower_http::services::{ServeDir, ServeFile};
 use tracing::info;
 
 use crate::Config;
@@ -19,6 +23,8 @@ struct SetupState {
     tx: Mutex<Option<tokio::sync::oneshot::Sender<Config>>>,
     setup_token: String,
     submitted: AtomicBool,
+    is_reconfigure: bool,
+    port: u16,
 }
 
 #[derive(Deserialize)]
@@ -33,14 +39,24 @@ struct SetupForm {
     youtube_api_key: Option<String>,
 }
 
-pub async fn run_setup(port: u16, pool: SqlitePool) -> anyhow::Result<Config> {
+pub async fn run_setup(
+    port: u16,
+    pool: SqlitePool,
+    is_reconfigure: bool,
+) -> anyhow::Result<Config> {
     let mut token_bytes = [0u8; 16];
     rand::rng().fill(&mut token_bytes);
     let setup_token = hex::encode(token_bytes);
 
+    let mode = if is_reconfigure {
+        "reconfigure"
+    } else {
+        "setup"
+    };
     info!("============================================");
     info!("  SETUP TOKEN: {setup_token}");
-    info!("  Open http://127.0.0.1:{port} in your browser");
+    info!("  Mode: {mode}");
+    info!("  Open http://127.0.0.1:{port}/setup in your browser");
     info!("============================================");
 
     let (tx, rx) = tokio::sync::oneshot::channel();
@@ -50,16 +66,62 @@ pub async fn run_setup(port: u16, pool: SqlitePool) -> anyhow::Result<Config> {
         tx: Mutex::new(Some(tx)),
         setup_token,
         submitted: AtomicBool::new(false),
+        is_reconfigure,
+        port,
     });
 
-    let app = axum::Router::new()
-        .route("/", get(get_setup_page))
-        .route("/setup", get(get_status).post(post_setup))
+    let web_origin =
+        crate::env_var("WEB_ORIGIN").unwrap_or_else(|_| "http://localhost:5173".to_string());
+
+    let origins: Vec<HeaderValue> = [
+        format!("http://127.0.0.1:{port}"),
+        format!("http://localhost:{port}"),
+        web_origin,
+    ]
+    .iter()
+    .filter_map(|o| o.parse().ok())
+    .collect();
+
+    let cors = CorsLayer::new()
+        .allow_origin(AllowOrigin::list(origins))
+        .allow_methods([Method::GET, Method::POST])
+        .allow_headers([
+            axum::http::header::CONTENT_TYPE,
+            HeaderName::from_static("x-requested-with"),
+        ])
+        .allow_credentials(true);
+
+    let mut app = axum::Router::new()
+        .route("/setup/submit", post(post_setup))
         .route("/setup/status", get(get_status))
-        .layer(axum::middleware::map_response(add_security_headers))
+        .route("/setup/info", get(get_setup_info))
+        .route("/setup/config", get(get_setup_config))
+        .layer(middleware::from_fn(csrf_check))
+        .layer(cors)
+        .layer(middleware::map_response(add_security_headers))
         .with_state(state);
 
-    let listener = tokio::net::TcpListener::bind(("0.0.0.0", port)).await?;
+    if let Some(dir) = crate::resolve_static_dir() {
+        let index_path = format!("{dir}/index.html");
+        let serve_dir = ServeDir::new(&dir);
+        let index_fallback = ServeFile::new(&index_path);
+        app = app.fallback_service(serve_dir.fallback(index_fallback));
+        info!("setup: serving SPA from {dir}");
+    } else {
+        app = app.fallback(|| async { Html(NO_FRONTEND_HTML) });
+    }
+
+    let listener = tokio::net::TcpListener::bind(("0.0.0.0", port))
+        .await
+        .map_err(|e| {
+            if e.kind() == std::io::ErrorKind::AddrInUse {
+                anyhow::anyhow!(
+                    "port {port} is already in use — stop the running server first, then retry --setup"
+                )
+            } else {
+                e.into()
+            }
+        })?;
     let server = axum::serve(listener, app);
 
     let config = tokio::select! {
@@ -82,7 +144,7 @@ async fn add_security_headers(response: Response) -> Response {
     headers.insert(
         "content-security-policy",
         HeaderValue::from_static(
-            "default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'",
+            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self'; connect-src 'self'",
         ),
     );
     headers.insert(
@@ -92,12 +154,80 @@ async fn add_security_headers(response: Response) -> Response {
     response
 }
 
-async fn get_setup_page() -> Html<&'static str> {
-    Html(SETUP_HTML)
+async fn csrf_check(req: Request, next: Next) -> Result<Response, StatusCode> {
+    let is_mutating = matches!(
+        *req.method(),
+        Method::POST | Method::PUT | Method::DELETE | Method::PATCH
+    );
+    if is_mutating {
+        let has_header = req
+            .headers()
+            .get("x-requested-with")
+            .and_then(|v| v.to_str().ok())
+            == Some("XMLHttpRequest");
+        if !has_header {
+            return Err(StatusCode::FORBIDDEN);
+        }
+    }
+    Ok(next.run(req).await)
 }
 
 async fn get_status() -> Json<serde_json::Value> {
     Json(serde_json::json!({"status": "setup"}))
+}
+
+async fn get_setup_info(
+    State(state): State<Arc<SetupState>>,
+    headers: HeaderMap,
+) -> Json<serde_json::Value> {
+    let default_redirect_uri = if let Ok(origin) = crate::env_var("WEB_ORIGIN") {
+        format!("{origin}/auth/callback")
+    } else if let Some(host) = headers.get("host").and_then(|v| v.to_str().ok()) {
+        if host.contains(':') {
+            format!("http://{host}/auth/callback")
+        } else {
+            format!("http://{host}:{}/auth/callback", state.port)
+        }
+    } else {
+        format!("http://localhost:{}/auth/callback", state.port)
+    };
+
+    Json(serde_json::json!({
+        "default_redirect_uri": default_redirect_uri,
+        "is_reconfigure": state.is_reconfigure,
+    }))
+}
+
+fn mask_secret(value: &str) -> serde_json::Value {
+    if value.len() >= 8 {
+        serde_json::Value::String(format!("***{}", &value[value.len() - 4..]))
+    } else {
+        serde_json::Value::String("***".to_string())
+    }
+}
+
+async fn get_setup_config(
+    State(state): State<Arc<SetupState>>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    if !state.is_reconfigure {
+        return Err(StatusCode::NOT_FOUND);
+    }
+
+    let config = azuki_db::config::load_config(&state.pool)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let get = |key: &str| config.get(key).map(|s| s.as_str()).unwrap_or("");
+
+    Ok(Json(serde_json::json!({
+        "discord_client_id": get("discord_client_id"),
+        "discord_guild_id": get("discord_guild_id"),
+        "discord_redirect_uri": get("discord_redirect_uri"),
+        "discord_token": mask_secret(get("discord_token")),
+        "discord_client_secret": mask_secret(get("discord_client_secret")),
+        "jwt_secret": mask_secret(get("jwt_secret")),
+        "youtube_api_key": config.get("youtube_api_key").map(|s| mask_secret(s)),
+    })))
 }
 
 async fn post_setup(
@@ -120,13 +250,54 @@ async fn post_setup(
             .into_response());
     }
 
+    // In reconfigure mode, merge empty fields with existing config values
+    let (discord_token, guild_id, client_id, client_secret, redirect_uri, jwt_secret) =
+        if state.is_reconfigure {
+            let existing = azuki_db::config::load_config(&state.pool)
+                .await
+                .map_err(|e| {
+                    tracing::error!("failed to load existing config: {e}");
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(serde_json::json!({"error": "failed to load existing configuration"})),
+                    )
+                        .into_response()
+                })?;
+
+            let merge = |submitted: &str, key: &str| -> String {
+                if submitted.is_empty() {
+                    existing.get(key).cloned().unwrap_or_default()
+                } else {
+                    submitted.to_string()
+                }
+            };
+
+            (
+                merge(&form.discord_token, "discord_token"),
+                merge(&form.guild_id, "discord_guild_id"),
+                merge(&form.client_id, "discord_client_id"),
+                merge(&form.client_secret, "discord_client_secret"),
+                merge(&form.redirect_uri, "discord_redirect_uri"),
+                merge(&form.jwt_secret, "jwt_secret"),
+            )
+        } else {
+            (
+                form.discord_token.clone(),
+                form.guild_id.clone(),
+                form.client_id.clone(),
+                form.client_secret.clone(),
+                form.redirect_uri.clone(),
+                form.jwt_secret.clone(),
+            )
+        };
+
     let fields = [
-        ("discord_token", &form.discord_token),
-        ("discord_guild_id", &form.guild_id),
-        ("discord_client_id", &form.client_id),
-        ("discord_client_secret", &form.client_secret),
-        ("discord_redirect_uri", &form.redirect_uri),
-        ("jwt_secret", &form.jwt_secret),
+        ("discord_token", &discord_token),
+        ("discord_guild_id", &guild_id),
+        ("discord_client_id", &client_id),
+        ("discord_client_secret", &client_secret),
+        ("discord_redirect_uri", &redirect_uri),
+        ("jwt_secret", &jwt_secret),
     ];
 
     for (key, value) in &fields {
@@ -146,7 +317,7 @@ async fn post_setup(
         }
     }
 
-    if form.guild_id.parse::<u64>().is_err() {
+    if guild_id.parse::<u64>().is_err() {
         return Err((
             StatusCode::BAD_REQUEST,
             Json(serde_json::json!({"error": "guild_id must be a numeric Discord server ID"})),
@@ -166,19 +337,33 @@ async fn post_setup(
                 .into_response()
         })?;
 
-    if let Some(ref yt_key) = form.youtube_api_key
-        && !yt_key.is_empty()
-    {
-        azuki_db::config::save_config(&state.pool, &[("youtube_api_key", yt_key)])
-            .await
-            .map_err(|e| {
-                tracing::error!("failed to save youtube api key: {e}");
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(serde_json::json!({"error": "failed to save configuration"})),
-                )
-                    .into_response()
-            })?;
+    // Handle youtube_api_key: empty = keep existing, "CLEAR" = delete, other = save
+    match form.youtube_api_key.as_deref() {
+        Some("CLEAR") => {
+            azuki_db::config::delete_config(&state.pool, "youtube_api_key")
+                .await
+                .map_err(|e| {
+                    tracing::error!("failed to delete youtube api key: {e}");
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(serde_json::json!({"error": "failed to save configuration"})),
+                    )
+                        .into_response()
+                })?;
+        }
+        Some(yt_key) if !yt_key.is_empty() => {
+            azuki_db::config::save_config(&state.pool, &[("youtube_api_key", yt_key)])
+                .await
+                .map_err(|e| {
+                    tracing::error!("failed to save youtube api key: {e}");
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(serde_json::json!({"error": "failed to save configuration"})),
+                    )
+                        .into_response()
+                })?;
+        }
+        _ => {} // empty or None — keep existing value
     }
 
     let config = Config::load(&state.pool).await.map_err(|e| {
@@ -211,7 +396,7 @@ fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
     diff == 0
 }
 
-const SETUP_HTML: &str = r#"<!DOCTYPE html>
+const NO_FRONTEND_HTML: &str = r#"<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -220,150 +405,16 @@ const SETUP_HTML: &str = r#"<!DOCTYPE html>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:#0f0f0f;color:#e0e0e0;font-family:system-ui,-apple-system,sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:1rem}
-.container{max-width:520px;width:100%}
-h1{font-size:1.5rem;margin-bottom:.25rem;color:#fff}
-.subtitle{color:#888;margin-bottom:1.5rem;font-size:.9rem}
-.section{margin-bottom:1.5rem}
-.section-title{font-size:.85rem;text-transform:uppercase;letter-spacing:.05em;color:#7c5cff;margin-bottom:.75rem;font-weight:600}
-label{display:block;margin-bottom:.5rem}
-.label-text{font-family:'SF Mono',Monaco,Consolas,monospace;font-size:.8rem;color:#aaa;margin-bottom:.25rem;display:block}
-.input-wrap{position:relative;display:flex}
-input{width:100%;background:#1a1a1a;border:1px solid #333;border-radius:6px;padding:.6rem .75rem;color:#fff;font-size:.9rem;outline:none;transition:border-color .2s}
-input:focus{border-color:#7c5cff}
-input::placeholder{color:#555}
-.toggle-btn{position:absolute;right:.5rem;top:50%;transform:translateY(-50%);background:none;border:none;color:#666;cursor:pointer;font-size:.75rem;padding:.25rem}
-.toggle-btn:hover{color:#aaa}
-.gen-row{display:flex;gap:.5rem}
-.gen-row input{flex:1}
-.gen-btn{background:#1a1a1a;border:1px solid #333;border-radius:6px;padding:.6rem .75rem;color:#7c5cff;cursor:pointer;font-size:.8rem;white-space:nowrap;transition:border-color .2s}
-.gen-btn:hover{border-color:#7c5cff}
-.token-section{margin-top:1.5rem;padding-top:1.5rem;border-top:1px solid #222}
-.submit-btn{width:100%;background:#7c5cff;color:#fff;border:none;border-radius:6px;padding:.75rem;font-size:1rem;font-weight:600;cursor:pointer;transition:opacity .2s;margin-top:1rem}
-.submit-btn:hover{opacity:.9}
-.submit-btn:disabled{opacity:.5;cursor:not-allowed}
-.status{text-align:center;margin-top:1rem;font-size:.9rem;display:none}
-.status.error{color:#ff5c5c;display:block}
-.status.success{color:#5cff7c;display:block}
-.spinner{display:inline-block;width:16px;height:16px;border:2px solid #fff;border-top-color:transparent;border-radius:50%;animation:spin .6s linear infinite;vertical-align:middle;margin-right:.5rem}
-@keyframes spin{to{transform:rotate(360deg)}}
+.container{max-width:480px;text-align:center}
+h1{font-size:1.5rem;color:#fff;margin-bottom:.5rem}
+p{color:#888;margin-bottom:1rem;font-size:.9rem;line-height:1.5}
+code{background:#1a1a1a;border:1px solid #333;border-radius:4px;padding:.15rem .4rem;font-size:.85rem;color:#ffb7c9}
 </style>
 </head>
 <body>
 <div class="container">
-<h1>Azuki setup</h1>
-<p class="subtitle">Configure your Discord music bot</p>
-<form id="form">
-<div class="section">
-<div class="section-title">Discord Credentials</div>
-<label>
-<span class="label-text">DISCORD_TOKEN</span>
-<div class="input-wrap">
-<input type="password" name="discord_token" required placeholder="Bot token from Discord Developer Portal" autocomplete="off">
-<button type="button" class="toggle-btn" onclick="toggleVis(this)">show</button>
+<h1>Frontend not built</h1>
+<p>Run <code>npm run build</code> in the <code>frontend/</code> directory first, then restart.</p>
 </div>
-</label>
-<label>
-<span class="label-text">DISCORD_GUILD_ID</span>
-<input type="text" name="guild_id" required placeholder="Server ID (right-click server → Copy ID)" autocomplete="off">
-</label>
-<label>
-<span class="label-text">DISCORD_CLIENT_ID</span>
-<input type="text" name="client_id" required placeholder="Application ID from Discord Developer Portal" autocomplete="off">
-</label>
-<label>
-<span class="label-text">DISCORD_CLIENT_SECRET</span>
-<div class="input-wrap">
-<input type="password" name="client_secret" required placeholder="OAuth2 client secret" autocomplete="off">
-<button type="button" class="toggle-btn" onclick="toggleVis(this)">show</button>
-</div>
-</label>
-<label>
-<span class="label-text">DISCORD_REDIRECT_URI</span>
-<input type="text" name="redirect_uri" required value="http://localhost:3000/auth/callback" autocomplete="off">
-</label>
-</div>
-<div class="section">
-<div class="section-title">Session Security</div>
-<label>
-<span class="label-text">JWT_SECRET</span>
-<div class="gen-row">
-<div class="input-wrap" style="flex:1">
-<input type="password" name="jwt_secret" required placeholder="Random secret for JWT signing" autocomplete="off">
-<button type="button" class="toggle-btn" onclick="toggleVis(this)">show</button>
-</div>
-<button type="button" class="gen-btn" onclick="generateSecret()">Generate</button>
-</div>
-</label>
-</div>
-<div class="section">
-<div class="section-title">YouTube API (Optional)</div>
-<label>
-<span class="label-text">YOUTUBE_API_KEY</span>
-<div class="input-wrap">
-<input type="password" name="youtube_api_key" placeholder="YouTube Data API v3 key (can set later in Settings)" autocomplete="off">
-<button type="button" class="toggle-btn" onclick="toggleVis(this)">show</button>
-</div>
-</label>
-</div>
-<div class="token-section">
-<label>
-<span class="label-text">SETUP TOKEN (from terminal)</span>
-<input type="text" name="setup_token" required placeholder="Paste the token shown in your terminal" autocomplete="off">
-</label>
-</div>
-<button type="submit" class="submit-btn" id="submitBtn">Complete Setup</button>
-<div id="status" class="status"></div>
-</form>
-</div>
-<script>
-function toggleVis(btn){
-  const inp=btn.parentElement.querySelector('input');
-  if(inp.type==='password'){inp.type='text';btn.textContent='hide'}
-  else{inp.type='password';btn.textContent='show'}
-}
-function generateSecret(){
-  const arr=new Uint8Array(32);
-  crypto.getRandomValues(arr);
-  const hex=Array.from(arr,b=>b.toString(16).padStart(2,'0')).join('');
-  document.querySelector('input[name="jwt_secret"]').value=hex;
-}
-document.getElementById('form').addEventListener('submit',async e=>{
-  e.preventDefault();
-  const btn=document.getElementById('submitBtn');
-  const status=document.getElementById('status');
-  btn.disabled=true;
-  btn.textContent='Saving...';
-  status.className='status';status.textContent='';
-  const fd=new FormData(e.target);
-  const body=Object.fromEntries(fd.entries());
-  try{
-    const res=await fetch('/setup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-    const data=await res.json();
-    if(!res.ok){
-      status.className='status error';
-      status.textContent=data.error||'Setup failed';
-      btn.disabled=false;btn.textContent='Complete Setup';
-      return;
-    }
-    status.className='status success';
-    status.textContent='Starting Azuki...';
-    setTimeout(()=>{
-      const poll=setInterval(async()=>{
-        try{
-          const r=await fetch('/setup/status');
-          if(!r.ok)throw new Error();
-        }catch{
-          clearInterval(poll);
-          window.location.href='/';
-        }
-      },500);
-    },1000);
-  }catch(err){
-    status.className='status error';
-    status.textContent='Connection error — check terminal';
-    btn.disabled=false;btn.textContent='Complete Setup';
-  }
-});
-</script>
 </body>
 </html>"#;

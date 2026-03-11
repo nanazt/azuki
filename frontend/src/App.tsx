@@ -17,6 +17,7 @@ import { AppShell } from "./components/layout/AppShell";
 import { DropOverlay } from "./components/ui/DropOverlay";
 import { UploadMetadataModal } from "./components/features/upload/UploadMetadataModal";
 import { Login } from "./pages/Login";
+import { Setup } from "./pages/Setup";
 import { Home } from "./pages/Home";
 import { History } from "./pages/History";
 import { Stats } from "./pages/Stats";
@@ -40,6 +41,16 @@ function ProtectedRoute() {
           res
             .json()
             .then((me: { is_admin: boolean }) => setIsAdmin(me.is_admin));
+        } else {
+          // Check if server is in setup mode
+          fetch("/setup/status")
+            .then((r) => r.json())
+            .then((data: { status: string }) => {
+              if (data.status === "setup") {
+                window.location.href = "/setup";
+              }
+            })
+            .catch(() => {});
         }
       })
       .catch(() => {
@@ -95,6 +106,7 @@ export default function App() {
         <ToastContainer />
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/setup" element={<Setup />} />
           <Route element={<ProtectedRoute />}>
             <Route path="/" element={<Home />} />
             <Route path="/search" element={<SearchPage />} />

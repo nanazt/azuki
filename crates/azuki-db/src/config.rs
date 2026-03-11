@@ -40,6 +40,14 @@ pub async fn get_config(pool: &SqlitePool, key: &str) -> DbResult<Option<String>
     Ok(row.filter(|v| !v.is_empty()))
 }
 
+pub async fn delete_config(pool: &SqlitePool, key: &str) -> DbResult<()> {
+    sqlx::query("DELETE FROM app_config WHERE key = ?")
+        .bind(key)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
 pub async fn is_configured(pool: &SqlitePool) -> DbResult<bool> {
     for key in REQUIRED_KEYS {
         let row = sqlx::query_scalar::<_, String>(r#"SELECT value FROM app_config WHERE key = ?"#)
