@@ -52,6 +52,12 @@ On first launch, a setup wizard opens at http://127.0.0.1:3000. Enter your Disco
 
 ```bash
 git clone https://github.com/nanazt/azuki.git  && cd azuki
+
+# Create host directories for volume mounts
+# The container runs as UID 10001 — directories must be writable by that user
+sudo mkdir -p /opt/azuki/data /opt/azuki/media
+sudo chown 10001:10001 /opt/azuki/data /opt/azuki/media
+
 cp .env.example .env
 # Edit .env — set WEB_ORIGIN to your public URL
 docker compose up -d
