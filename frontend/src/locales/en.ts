@@ -221,6 +221,8 @@ export const en: Translations = {
     topArtists: "Top Artists",
     playsCount: "{n} plays",
     tracksCount: "{n} tracks",
+    durationHM: "{h}h {m}m",
+    durationM: "{m}m",
     less: "Less",
     more: "More",
     dow: {

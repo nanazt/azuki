@@ -28,19 +28,27 @@ const fmtDate = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
 function formatDuration(ms: number): string {
+  const s = t();
   const totalMin = Math.floor(ms / 60000);
   const hours = Math.floor(totalMin / 60);
   const minutes = totalMin % 60;
-  if (hours > 0) return `${hours}h ${minutes}m`;
-  return `${minutes}m`;
+  if (hours > 0)
+    return s.stats.durationHM
+      .replace("{h}", String(hours))
+      .replace("{m}", String(minutes));
+  return s.stats.durationM.replace("{m}", String(minutes));
 }
 
 function formatListeningTime(ms: number): string {
+  const s = t();
   const totalSeconds = Math.floor(ms / 1000);
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
-  if (hours > 0) return `${hours}h ${minutes}m`;
-  return `${minutes}m`;
+  if (hours > 0)
+    return s.stats.durationHM
+      .replace("{h}", String(hours))
+      .replace("{m}", String(minutes));
+  return s.stats.durationM.replace("{m}", String(minutes));
 }
 
 // ─── StatCard ───
@@ -498,6 +506,8 @@ function getDowFullLabels() {
 function DowChart({ data }: { data: number[] }) {
   const DOW_FULL_LABELS = getDowFullLabels();
   const max = Math.max(...data, 1);
+  const durations = data.map(formatDuration);
+  const maxDurLen = Math.max(...durations.map((d) => d.length));
 
   return (
     <div className="flex-1 p-5 rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border)] flex flex-col gap-4">
@@ -509,7 +519,7 @@ function DowChart({ data }: { data: number[] }) {
           const pct = (data[i] / max) * 100;
           return (
             <div key={i} className="flex items-center gap-2">
-              <span className="text-xs text-[var(--color-text-secondary)] w-7 text-left">
+              <span className="text-xs text-[var(--color-text-secondary)] w-5 text-left">
                 {label}
               </span>
               <div className="flex-1 h-5 bg-[var(--color-bg)] rounded overflow-hidden relative">
@@ -521,8 +531,11 @@ function DowChart({ data }: { data: number[] }) {
                   }}
                 />
               </div>
-              <span className="text-xs text-[var(--color-text-secondary)] w-16 text-right">
-                {formatDuration(data[i])}
+              <span
+                className="text-xs text-[var(--color-text-secondary)] text-right flex-shrink-0"
+                style={{ minWidth: `${maxDurLen}ch` }}
+              >
+                {durations[i]}
               </span>
             </div>
           );

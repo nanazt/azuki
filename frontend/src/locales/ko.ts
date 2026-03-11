@@ -218,6 +218,8 @@ export const ko = {
     topArtists: "인기 아티스트",
     playsCount: "{n}회 재생",
     tracksCount: "{n}개 트랙",
+    durationHM: "{h}시간 {m}분",
+    durationM: "{m}분",
     less: "적음",
     more: "많음",
     dow: {
