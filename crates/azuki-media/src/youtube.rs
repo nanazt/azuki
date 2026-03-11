@@ -6,6 +6,17 @@ use url::Url;
 use crate::MediaError;
 use crate::types::TrackMeta;
 
+#[derive(Deserialize)]
+struct YouTubeApiError {
+    error: YouTubeApiErrorBody,
+}
+
+#[derive(Deserialize)]
+struct YouTubeApiErrorBody {
+    code: u16,
+    message: String,
+}
+
 pub struct YouTubeClient {
     client: reqwest::Client,
     api_key: String,
@@ -18,6 +29,37 @@ impl YouTubeClient {
             .build()
             .expect("failed to build reqwest client");
         Self { client, api_key }
+    }
+
+    async fn fetch_json<T: serde::de::DeserializeOwned>(&self, url: Url) -> Result<T, MediaError> {
+        let body = self
+            .client
+            .get(url)
+            .send()
+            .await
+            .map_err(|e| MediaError::YouTube(sanitize_error(e)))?
+            .error_for_status()
+            .map_err(|e| MediaError::YouTube(sanitize_error(e)))?
+            .text()
+            .await
+            .map_err(|e| MediaError::YouTube(format!("failed to read response body: {e}")))?;
+
+        if let Ok(api_err) = serde_json::from_str::<YouTubeApiError>(&body) {
+            return Err(MediaError::YouTube(format!(
+                "API error {}: {}",
+                api_err.error.code, api_err.error.message
+            )));
+        }
+
+        serde_json::from_str::<T>(&body).map_err(|e| {
+            let preview = if body.len() > 200 {
+                &body[..200]
+            } else {
+                &body
+            };
+            tracing::warn!(error = %e, body_preview = preview, "YouTube API response decode failed");
+            MediaError::YouTube(format!("failed to decode response: {e}"))
+        })
     }
 
     pub fn api_key_masked(&self) -> String {
@@ -50,17 +92,7 @@ impl YouTubeClient {
             Url::parse_with_params("https://www.googleapis.com/youtube/v3/search", &params)
                 .map_err(|e| MediaError::YouTube(format!("failed to build search URL: {e}")))?;
 
-        let search_resp: SearchResponse = self
-            .client
-            .get(search_url)
-            .send()
-            .await
-            .map_err(|e| MediaError::YouTube(sanitize_error(e)))?
-            .error_for_status()
-            .map_err(|e| MediaError::YouTube(sanitize_error(e)))?
-            .json()
-            .await
-            .map_err(|e| MediaError::YouTube(sanitize_error(e)))?;
+        let search_resp: SearchResponse = self.fetch_json(search_url).await?;
 
         if search_resp.items.is_empty() {
             return Ok((Vec::new(), None));
@@ -71,7 +103,7 @@ impl YouTubeClient {
         let ids: String = search_resp
             .items
             .iter()
-            .map(|item| item.id.video_id.as_str())
+            .filter_map(|item| item.id.video_id.as_deref())
             .collect::<Vec<_>>()
             .join(",");
 
@@ -85,17 +117,7 @@ impl YouTubeClient {
         )
         .map_err(|e| MediaError::YouTube(format!("failed to build video URL: {e}")))?;
 
-        let video_resp: VideoResponse = self
-            .client
-            .get(video_url)
-            .send()
-            .await
-            .map_err(|e| MediaError::YouTube(sanitize_error(e)))?
-            .error_for_status()
-            .map_err(|e| MediaError::YouTube(sanitize_error(e)))?
-            .json()
-            .await
-            .map_err(|e| MediaError::YouTube(sanitize_error(e)))?;
+        let video_resp: VideoResponse = self.fetch_json(video_url).await?;
 
         let durations: HashMap<&str, u64> = video_resp
             .items
@@ -111,20 +133,18 @@ impl YouTubeClient {
         let results = search_resp
             .items
             .into_iter()
-            .map(|item| {
-                let duration_ms = durations
-                    .get(item.id.video_id.as_str())
-                    .copied()
-                    .unwrap_or(0);
+            .filter_map(|item| {
+                let video_id = item.id.video_id?;
+                let duration_ms = durations.get(video_id.as_str()).copied().unwrap_or(0);
                 let thumbnail_url = item.snippet.thumbnails.default.map(|t| t.url);
-                TrackMeta {
-                    youtube_id: Some(item.id.video_id.clone()),
+                Some(TrackMeta {
+                    youtube_id: Some(video_id.clone()),
                     title: item.snippet.title,
                     artist: Some(item.snippet.channel_title),
                     duration_ms,
                     thumbnail_url,
-                    source_url: format!("https://www.youtube.com/watch?v={}", item.id.video_id),
-                }
+                    source_url: format!("https://www.youtube.com/watch?v={video_id}"),
+                })
             })
             .collect();
 
@@ -150,17 +170,7 @@ impl YouTubeClient {
         )
         .map_err(|e| MediaError::YouTube(format!("failed to build playlist URL: {e}")))?;
 
-        let resp: PlaylistResponse = self
-            .client
-            .get(url)
-            .send()
-            .await
-            .map_err(|e| MediaError::YouTube(sanitize_error(e)))?
-            .error_for_status()
-            .map_err(|e| MediaError::YouTube(sanitize_error(e)))?
-            .json()
-            .await
-            .map_err(|e| MediaError::YouTube(sanitize_error(e)))?;
+        let resp: PlaylistResponse = self.fetch_json(url).await?;
 
         let item = resp
             .items
@@ -222,17 +232,7 @@ impl YouTubeClient {
             )
             .map_err(|e| MediaError::YouTube(format!("failed to build playlistItems URL: {e}")))?;
 
-            let resp: PlaylistItemsResponse = self
-                .client
-                .get(url)
-                .send()
-                .await
-                .map_err(|e| MediaError::YouTube(sanitize_error(e)))?
-                .error_for_status()
-                .map_err(|e| MediaError::YouTube(sanitize_error(e)))?
-                .json()
-                .await
-                .map_err(|e| MediaError::YouTube(sanitize_error(e)))?;
+            let resp: PlaylistItemsResponse = self.fetch_json(url).await?;
 
             // Batch fetch video details for duration and status
             let video_ids: Vec<&str> = resp
@@ -255,17 +255,7 @@ impl YouTubeClient {
                 )
                 .map_err(|e| MediaError::YouTube(format!("failed to build videos URL: {e}")))?;
 
-                let vresp: VideoStatusResponse = self
-                    .client
-                    .get(vurl)
-                    .send()
-                    .await
-                    .map_err(|e| MediaError::YouTube(sanitize_error(e)))?
-                    .error_for_status()
-                    .map_err(|e| MediaError::YouTube(sanitize_error(e)))?
-                    .json()
-                    .await
-                    .map_err(|e| MediaError::YouTube(sanitize_error(e)))?;
+                let vresp: VideoStatusResponse = self.fetch_json(vurl).await?;
 
                 vresp
                     .items
@@ -324,17 +314,7 @@ impl YouTubeClient {
         )
         .map_err(|e| MediaError::YouTube(format!("failed to build video URL: {e}")))?;
 
-        let resp: VideoSnippetResponse = self
-            .client
-            .get(snippet_url)
-            .send()
-            .await
-            .map_err(|e| MediaError::YouTube(sanitize_error(e)))?
-            .error_for_status()
-            .map_err(|e| MediaError::YouTube(sanitize_error(e)))?
-            .json()
-            .await
-            .map_err(|e| MediaError::YouTube(sanitize_error(e)))?;
+        let resp: VideoSnippetResponse = self.fetch_json(snippet_url).await?;
 
         let item = resp
             .items
@@ -406,8 +386,6 @@ fn sanitize_error(e: reqwest::Error) -> String {
             e.status()
                 .map_or("unknown".to_string(), |s| s.as_str().to_string())
         )
-    } else if e.is_decode() {
-        "failed to decode response".to_string()
     } else {
         "request failed".to_string()
     }
@@ -452,6 +430,7 @@ fn parse_iso8601_duration(s: &str) -> u64 {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct SearchResponse {
+    #[serde(default)]
     items: Vec<SearchItem>,
     next_page_token: Option<String>,
 }
@@ -465,7 +444,7 @@ struct SearchItem {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct SearchItemId {
-    video_id: String,
+    video_id: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -488,6 +467,7 @@ struct ThumbnailInfo {
 
 #[derive(Deserialize)]
 struct VideoResponse {
+    #[serde(default)]
     items: Vec<VideoItem>,
 }
 
@@ -505,6 +485,7 @@ struct ContentDetails {
 
 #[derive(Deserialize)]
 struct VideoSnippetResponse {
+    #[serde(default)]
     items: Vec<VideoSnippetItem>,
 }
 
@@ -519,6 +500,7 @@ struct VideoSnippetItem {
 
 #[derive(Deserialize)]
 struct PlaylistResponse {
+    #[serde(default)]
     items: Vec<PlaylistItem>,
 }
 
@@ -547,6 +529,7 @@ struct PlaylistContentDetails {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct PlaylistItemsResponse {
+    #[serde(default)]
     items: Vec<PlaylistItemEntry>,
     next_page_token: Option<String>,
 }
@@ -574,6 +557,7 @@ struct ResourceId {
 
 #[derive(Deserialize)]
 struct VideoStatusResponse {
+    #[serde(default)]
     items: Vec<VideoStatusItem>,
 }
 
