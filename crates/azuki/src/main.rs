@@ -312,6 +312,10 @@ async fn run_normal(config: Config, pool: SqlitePool) -> anyhow::Result<()> {
             if !origins.contains(&self_origin) {
                 origins.push(self_origin);
             }
+            let loopback_origin = format!("http://127.0.0.1:{}", config.web_port);
+            if !origins.contains(&loopback_origin) {
+                origins.push(loopback_origin);
+            }
             origins
         },
         static_dir: config.static_dir.clone(),
