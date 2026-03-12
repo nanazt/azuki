@@ -41,7 +41,7 @@ export function Home() {
   }, [loading]);
 
   const handlePlay = (track: TrackInfo) => {
-    api.addToQueue(track.source_url).catch(() => {});
+    api.addToQueue({ track_id: track.id }).catch(() => {});
   };
 
   return (

@@ -68,7 +68,7 @@ export function SearchPage() {
       if (isHttpUrl(trimmed)) {
         setUrlAdding(true);
         try {
-          await api.addToQueue(trimmed);
+          await api.addToQueue({ query_or_url: trimmed });
           showToast(t().toast.urlAddedToQueue, "success");
           setQuery("");
         } catch (err) {
@@ -92,7 +92,11 @@ export function SearchPage() {
     async (track: TrackInfo) => {
       setAddingIds((prev) => new Set(prev).add(track.id));
       try {
-        await api.addToQueue(track.source_url);
+        if (source == "youtube") {
+          await api.addToQueue({ query_or_url: track.source_url });
+        } else if (source == "history") {
+          await api.addToQueue({ track_id: track.id });
+        }
         setAddedIds((prev) => new Set(prev).add(track.id));
         setTimeout(() => {
           setAddedIds((prev) => {

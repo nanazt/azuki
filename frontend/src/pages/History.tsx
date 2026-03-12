@@ -219,7 +219,7 @@ export function History() {
     if (addingIds.has(track.id)) return;
     setAddingIds((prev) => new Set(prev).add(track.id));
     try {
-      await api.addToQueue(track.source_url);
+      await api.addToQueue({ track_id: track.id });
       setAddedIds((prev) => new Set(prev).add(track.id));
       setTimeout(() => {
         setAddedIds((prev) => {

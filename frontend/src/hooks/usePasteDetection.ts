@@ -35,7 +35,7 @@ export function usePasteDetection() {
       const handleAdd = async () => {
         removeToast(toastId);
         try {
-          await api.addToQueue(text);
+          await api.addToQueue({ query_or_url: text });
           showToast(t().toast.addedToQueue, "success");
         } catch (err) {
           showToast(

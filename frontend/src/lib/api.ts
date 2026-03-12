@@ -71,10 +71,8 @@ export const api = {
   // Queue
   getQueue: () =>
     get<{ now_playing: TrackInfo | null; queue: QueueEntry[] }>("/api/queue"),
-  addToQueue: (query_or_url: string) =>
-    post<{ download_id: string } | undefined>("/api/queue/add", {
-      query_or_url,
-    }),
+  addToQueue: (params: { track_id: string } | { query_or_url: string }) =>
+    post<{ download_id: string } | undefined>("/api/queue/add", params),
   removeFromQueue: (position: number) => del<void>(`/api/queue/${position}`),
   playAt: (position: number) => post<void>(`/api/queue/${position}/play`),
   moveInQueue: (from: number, to: number) =>
@@ -175,8 +173,6 @@ export const api = {
     }
     return res.json() as Promise<UploadResponse>;
   },
-  addTrackToQueue: (trackId: string) =>
-    post<void>("/api/queue/add-track", { track_id: trackId }),
   getUploads: (cursor?: string, limit = 20) => {
     const params = new URLSearchParams({ limit: String(limit) });
     if (cursor) params.set("cursor", cursor);

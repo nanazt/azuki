@@ -180,7 +180,7 @@ async fn queue_add_track_not_found() {
     let resp = send(
         &app.router,
         post_json(
-            "/api/queue/add-track",
+            "/api/queue/add",
             &cookie,
             serde_json::json!({"track_id": "nonexistent"}),
         ),
@@ -199,7 +199,7 @@ async fn queue_add_track_no_file_path() {
     let resp = send(
         &app.router,
         post_json(
-            "/api/queue/add-track",
+            "/api/queue/add",
             &cookie,
             serde_json::json!({"track_id": "track1"}),
         ),
@@ -217,7 +217,7 @@ async fn queue_add_track_success() {
     let resp = send(
         &app.router,
         post_json(
-            "/api/queue/add-track",
+            "/api/queue/add",
             &cookie,
             serde_json::json!({"track_id": "track1"}),
         ),

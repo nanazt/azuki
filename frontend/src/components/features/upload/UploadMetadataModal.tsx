@@ -60,7 +60,7 @@ export function UploadMetadataModal({ file, onClose }: Props) {
 
       if (result.duplicate) {
         showToast(t().uploadModal.fileAlreadyUploaded, "info");
-        api.addTrackToQueue(result.track_id).then(
+        api.addToQueue({ track_id: result.track_id }).then(
           () => showToast(t().toast.addedToQueue, "success"),
           (err) =>
             showToast(
@@ -165,7 +165,7 @@ export function UploadMetadataModal({ file, onClose }: Props) {
       }
 
       // Add to queue
-      await api.addTrackToQueue(result.track_id);
+      await api.addToQueue({ track_id: result.track_id });
       showToast(s.toast.addedToQueue, "success");
     } catch (err) {
       showToast(

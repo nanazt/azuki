@@ -64,7 +64,7 @@ function UploadRow({
   const handleAddToQueue = async () => {
     setAdding(true);
     try {
-      await api.addTrackToQueue(track.id);
+      await api.addToQueue({ track_id: track.id });
       showToast(t().toast.addedToQueue, "success");
     } catch (err) {
       showToast(err instanceof Error ? err.message : t().toast.failed, "error");
