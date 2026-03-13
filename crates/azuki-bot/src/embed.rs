@@ -19,7 +19,6 @@ pub fn build_track_embed(
     let m = crate::messages::get(locale);
     let mut embed = CreateEmbed::new()
         .title(&track.title)
-        .url(&track.source_url)
         .color(embed_color(&track.source_type))
         .field(m.embed_duration, format_duration(track.duration_ms), true)
         .field(m.embed_volume, format!("{volume} / 100"), true)
@@ -30,12 +29,17 @@ pub fn build_track_embed(
         )))
         .timestamp(Timestamp::now());
 
+    if track.source_type != "upload" {
+        embed = embed.url(&track.source_url);
+    }
+
     if let Some(ref artist) = track.artist {
         embed = embed.author(CreateEmbedAuthor::new(artist));
     }
 
     if let Some(thumb) = thumbnail_url {
-        embed = embed.thumbnail(thumb);
+        // NOT .thumbnail()
+        embed = embed.image(thumb);
     }
 
     embed
