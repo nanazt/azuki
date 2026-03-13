@@ -1,0 +1,7 @@
+[env]
+CMAKE_aarch64_apple_darwin = { value = "cmake", relative = true }
+CMAKE_x86_64_unknown_linux_musl = { value = "cmake", relative = true }
+CMAKE_x86_64_unknown_linux_gnu = { value = "cmake", relative = true }
+
+[target.x86_64-unknown-linux-musl]
+linker = "x86_64-linux-musl-gcc"

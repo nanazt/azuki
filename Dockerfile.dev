@@ -1,0 +1,29 @@
+FROM ubuntu:24.04
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates python3 ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
+ADD --chmod=755 https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp /usr/local/bin/yt-dlp
+
+WORKDIR /app
+
+COPY target/x86_64-unknown-linux-musl/debug/azuki /usr/local/bin/azuki
+COPY frontend/dist /app/frontend/dist
+
+RUN groupadd -r -g 10001 azuki && useradd -r -u 10001 -g azuki -d /app azuki \
+    && mkdir -p /app/data /app/media \
+    && chown -R azuki:azuki /app/data /app/media
+
+USER azuki
+
+ENV STATIC_DIR=/app/frontend/dist \
+    MEDIA_DIR=/app/media \
+    DATA_DIR=/app/data \
+    DATABASE_URL=sqlite:/app/data/azuki.db \
+    WEB_PORT=3000 \
+    RUST_LOG=azuki=info,azuki_bot=info,azuki_web=info,azuki_media=info,sqlx=warn
+
+EXPOSE 3000
+VOLUME ["/app/data", "/app/media"]
+ENTRYPOINT ["azuki"]
