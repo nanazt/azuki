@@ -198,7 +198,7 @@ export function PlayerBar({ onToggleQueue, queueDrawerOpen }: PlayerBarProps) {
               onClick={togglePlay}
               disabled={!track}
               className={clsx(
-                "p-2.5 text-[#1a1a1a] rounded-full transition-colors",
+                "p-2.5 text-[var(--color-text)] rounded-full transition-colors",
                 track
                   ? "bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] cursor-pointer"
                   : "bg-[var(--color-accent)] opacity-40 cursor-default",
