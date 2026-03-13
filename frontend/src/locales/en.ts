@@ -181,6 +181,7 @@ export const en: Translations = {
     unknownArtist: "Unknown artist",
     add: "Add",
     adding: "Adding",
+    playCount: "{n} plays",
     tracksCount: "{n} tracks",
     loadMore: "Load more",
     loadingMoreTracks: "Loading more tracks",

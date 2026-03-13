@@ -372,6 +372,15 @@ export function History() {
                     </div>
                     <div className="text-xs text-[var(--color-text-secondary)] truncate">
                       {entry.track.artist ?? s.history.unknownArtist}
+                      {entry.play_count > 1 && (
+                        <span className="text-[var(--color-text-tertiary)] ml-1">
+                          ·{" "}
+                          {s.history.playCount.replace(
+                            "{n}",
+                            String(entry.play_count),
+                          )}
+                        </span>
+                      )}
                       <span className="text-[var(--color-text-tertiary)] ml-2">
                         {formatDate(entry.played_at)}
                       </span>

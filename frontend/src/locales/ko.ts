@@ -178,6 +178,7 @@ export const ko = {
     unknownArtist: "알 수 없는 아티스트",
     add: "추가",
     adding: "추가 중이에요",
+    playCount: "{n}회 재생",
     tracksCount: "{n}개 트랙",
     loadMore: "더 보기",
     loadingMoreTracks: "트랙 더 불러오는 중이에요",
