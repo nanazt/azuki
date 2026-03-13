@@ -458,6 +458,16 @@ async fn run_normal(config: Config, pool: SqlitePool) -> anyhow::Result<()> {
                             Ok(player_seq_event) => {
                                 // Record play history, persist now_playing, send embed when a track starts
                                 if let azuki_player::PlayerEvent::TrackStarted { ref track, added_by: ref user_info, .. } = player_seq_event.event {
+                                    // Ensure user exists in DB (Discord users may not have logged in via web OAuth)
+                                    if let Err(e) = azuki_db::queries::users::upsert_user(
+                                        &bridge_db,
+                                        &user_info.id,
+                                        &user_info.username,
+                                        user_info.avatar_url.as_deref(),
+                                    ).await {
+                                        tracing::warn!("failed to upsert user {}: {e}", user_info.id);
+                                    }
+
                                     let history_result = azuki_db::queries::history::record_play(
                                         &bridge_db,
                                         &track.id,
@@ -478,6 +488,8 @@ async fn run_normal(config: Config, pool: SqlitePool) -> anyhow::Result<()> {
 
                                     if let Ok(ref history_record) = history_result {
                                         current_history_id = Some(history_record.id);
+                                    } else if let Err(ref e) = history_result {
+                                        tracing::warn!("failed to record play history for track {}: {e}", track.id);
                                     }
 
                                     // Send Discord embed to history channel
