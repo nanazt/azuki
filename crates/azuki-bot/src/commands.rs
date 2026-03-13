@@ -725,9 +725,12 @@ pub async fn handle_smart_play_button(
 
     match action {
         Ok(act) if in_history => {
-            let _ = state
+            if let Err(e) = state
                 .history_delete_tx
-                .try_send((track_id.to_string(), component.message.id.get()));
+                .try_send((track_id.to_string(), component.message.id.get()))
+            {
+                tracing::warn!("history_delete_tx send failed: {e}");
+            }
             let msg_text = match act {
                 PlayAction::PlayedNow => m.playing_now,
                 PlayAction::Enqueued => m.enqueued,
