@@ -7,7 +7,7 @@ pub mod youtube;
 pub mod ytdlp;
 pub mod ytdlp_updater;
 
-pub use metadata::{AudioMetadata, parse_audio_metadata};
+pub use metadata::{AudioMetadata, parse_audio_metadata, parse_audio_metadata_from_file};
 pub use store::MediaStore;
 pub use types::TrackMeta;
 pub use url_detect::{DetectedUrl, detect_url};

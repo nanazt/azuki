@@ -257,8 +257,10 @@ pub async fn upload(
 
     let file_path_str = file_path.to_string_lossy().to_string();
 
-    // Parse metadata with lofty
-    let parsed = azuki_media::parse_audio_metadata(data.to_vec()).await.ok();
+    // Parse metadata (matroska for WebM, lofty for others, symphonia fallback)
+    let parsed = azuki_media::parse_audio_metadata_from_file(&file_path)
+        .await
+        .ok();
 
     let title = provided_title
         .or_else(|| parsed.as_ref().and_then(|p| p.title.clone()))

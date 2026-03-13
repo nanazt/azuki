@@ -17,3 +17,5 @@ url.workspace = true
 infer.workspace = true
 sqlx.workspace = true
 lofty = "0.22"
+matroska = "0.30"
+symphonia.workspace = true
