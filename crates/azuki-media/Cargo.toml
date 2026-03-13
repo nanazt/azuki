@@ -16,6 +16,6 @@ hex.workspace = true
 url.workspace = true
 infer.workspace = true
 sqlx.workspace = true
-lofty = "0.22"
+lofty = "0.23"
 matroska = "0.30"
 symphonia.workspace = true
