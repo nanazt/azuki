@@ -28,6 +28,8 @@ pub struct BotState {
     pub history_channel_id: Arc<AtomicU64>,
     pub locale: Arc<AtomicU8>,
     pub web_url: String,
+    /// Side-channel for history button handler → bridge task: (track_id, discord_message_id)
+    pub history_delete_tx: tokio::sync::mpsc::Sender<(String, u64)>,
 }
 
 #[derive(Debug, thiserror::Error)]

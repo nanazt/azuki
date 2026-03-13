@@ -12,7 +12,8 @@ RUN cargo install cargo-chef
 WORKDIR /app
 
 FROM chef AS planner
-COPY . .
+COPY Cargo.toml Cargo.lock ./
+COPY crates/ crates/
 RUN cargo chef prepare --recipe-path recipe.json
 
 FROM chef AS rust-builder
@@ -25,11 +26,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Cook dependencies (re-runs only when Cargo.toml/Cargo.lock change)
 COPY --from=planner /app/recipe.json recipe.json
 ENV SQLX_OFFLINE=true
-RUN cargo chef cook --release --recipe-path recipe.json
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/usr/local/cargo/git \
+    cargo chef cook --release --recipe-path recipe.json
 
 # Build application (only recompiles source changes)
-COPY . .
-RUN cargo build --release --bin azuki \
+COPY Cargo.toml Cargo.lock ./
+COPY crates/ crates/
+COPY migrations/ migrations/
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/usr/local/cargo/git \
+    cargo build --release --bin azuki \
     && cp target/release/azuki /usr/local/bin/azuki
 
 # Stage 3: Runtime

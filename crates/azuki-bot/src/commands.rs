@@ -610,7 +610,12 @@ pub async fn handle_smart_play_button(
 ) {
     let m = msg(state);
 
-    if track_id.len() != 16 || !track_id.chars().all(|c| c.is_ascii_hexdigit()) {
+    let valid = if let Some(hex_part) = track_id.strip_prefix("upload_") {
+        hex_part.len() == 16 && hex_part.chars().all(|c| c.is_ascii_hexdigit())
+    } else {
+        track_id.len() == 16 && track_id.chars().all(|c| c.is_ascii_hexdigit())
+    };
+    if !valid {
         let _ = component
             .create_response(
                 &ctx.http,
@@ -720,6 +725,9 @@ pub async fn handle_smart_play_button(
 
     match action {
         Ok(act) if in_history => {
+            let _ = state
+                .history_delete_tx
+                .try_send((track_id.to_string(), component.message.id.get()));
             let msg_text = match act {
                 PlayAction::PlayedNow => m.playing_now,
                 PlayAction::Enqueued => m.enqueued,

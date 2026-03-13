@@ -97,6 +97,7 @@ fn source_label(source_type: &str, locale: &AtomicU8) -> &'static str {
     match source_type {
         "youtube" => "YouTube",
         "soundcloud" => "SoundCloud",
+        "upload" => "Upload",
         _ => crate::messages::get(locale).unknown,
     }
 }

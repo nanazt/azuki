@@ -1,8 +1,8 @@
 [profile.release]
 strip = true      # Automatically strip symbols from the binary.
 opt-level = "z"   # Optimize for size.
-lto = true
-codegen-units = 1
+lto = "thin"      # thin LTO: much faster linking, nearly identical performance
+codegen-units = 2 # allow some parallel codegen
 
 [workspace]
 members = [
@@ -37,6 +37,7 @@ anyhow = "1.0.102"
 
 # Database
 sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite", "migrate"] }
+libsqlite3-sys = { version = "0.30", features = ["bundled"] }
 
 # Web
 axum = { version = "0.8.8", features = ["macros", "ws", "multipart"] }

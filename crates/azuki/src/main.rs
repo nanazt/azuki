@@ -338,6 +338,9 @@ async fn run_normal(config: Config, pool: SqlitePool) -> anyhow::Result<()> {
     // Http watch channel for embed sending for embed sending
     let (http_tx, http_rx) = tokio::sync::watch::channel::<Option<Arc<serenity::all::Http>>>(None);
 
+    // History button direct-delete side-channel
+    let (history_delete_tx, history_delete_rx) = tokio::sync::mpsc::channel::<(String, u64)>(16);
+
     // Bot state
     let bot_state = Arc::new(azuki_bot::BotState {
         player: player.clone(),
@@ -352,6 +355,7 @@ async fn run_normal(config: Config, pool: SqlitePool) -> anyhow::Result<()> {
         history_channel_id: Arc::clone(&history_channel_id),
         locale: Arc::clone(&bot_locale),
         web_url: config.web_origin.clone(),
+        history_delete_tx,
     });
 
     // Spawn services
@@ -415,6 +419,7 @@ async fn run_normal(config: Config, pool: SqlitePool) -> anyhow::Result<()> {
     let bridge_guild_id = serenity::all::GuildId::new(config.discord_guild_id);
     let bridge_http_rx = http_rx;
     let bridge_locale = Arc::clone(&bot_locale);
+    let mut bridge_history_delete_rx = history_delete_rx;
     let bridge_web_origin = config.web_origin.clone();
     let seq_counter = Arc::new(AtomicU64::new(0));
     tokio::spawn({
@@ -435,12 +440,18 @@ async fn run_normal(config: Config, pool: SqlitePool) -> anyhow::Result<()> {
                 u8,
             )> = None;
 
+            // Pending direct-delete from history button click: (track_id, discord_message_id)
+            let mut pending_history_delete: Option<(String, u64)> = None;
+
             // Volume debounce timer (starts far in the future)
             let debounce_delay = tokio::time::sleep(std::time::Duration::from_secs(86400));
             tokio::pin!(debounce_delay);
 
             loop {
                 tokio::select! {
+                    Some(pair) = bridge_history_delete_rx.recv() => {
+                        pending_history_delete = Some(pair);
+                    }
                     result = player_rx.recv() => {
                         match result {
                             Ok(player_seq_event) => {
@@ -512,21 +523,57 @@ async fn run_normal(config: Config, pool: SqlitePool) -> anyhow::Result<()> {
                                                             ).await;
 
                                                             // Delete previous embeds for the same track
-                                                            if let Ok(old_ids) = azuki_db::queries::history::get_previous_message_ids(
-                                                                &bridge_db, &track.id, history_record.id,
-                                                            ).await {
-                                                                for old_id_str in &old_ids {
-                                                                    if let Ok(old_id) = old_id_str.parse::<u64>()
-                                                                        && let Err(e) = channel_id.delete_message(
-                                                                            http.as_ref(), serenity::all::MessageId::new(old_id),
-                                                                        ).await
-                                                                    {
-                                                                        tracing::debug!("failed to delete old history embed: {e}");
+                                                            if let Some((ref pending_track_id, pending_msg_id)) = pending_history_delete {
+                                                                if pending_track_id == &track.id {
+                                                                    // Direct deletion: delete the clicked message
+                                                                    if let Err(e) = channel_id.delete_message(
+                                                                        http.as_ref(), serenity::all::MessageId::new(pending_msg_id),
+                                                                    ).await {
+                                                                        tracing::debug!("failed to delete history embed directly: {e}");
+                                                                    }
+                                                                    pending_history_delete = None;
+                                                                    // Still clean up DB message_ids for consistency
+                                                                    let _ = azuki_db::queries::history::clear_old_message_ids(
+                                                                        &bridge_db, &track.id, history_record.id,
+                                                                    ).await;
+                                                                } else {
+                                                                    // track_id mismatch: fall back to DB-based deletion
+                                                                    pending_history_delete = None;
+                                                                    if let Ok(old_ids) = azuki_db::queries::history::get_previous_message_ids(
+                                                                        &bridge_db, &track.id, history_record.id,
+                                                                    ).await {
+                                                                        for old_id_str in &old_ids {
+                                                                            if let Ok(old_id) = old_id_str.parse::<u64>()
+                                                                                && let Err(e) = channel_id.delete_message(
+                                                                                    http.as_ref(), serenity::all::MessageId::new(old_id),
+                                                                                ).await
+                                                                            {
+                                                                                tracing::debug!("failed to delete old history embed: {e}");
+                                                                            }
+                                                                        }
+                                                                        let _ = azuki_db::queries::history::clear_old_message_ids(
+                                                                            &bridge_db, &track.id, history_record.id,
+                                                                        ).await;
                                                                     }
                                                                 }
-                                                                let _ = azuki_db::queries::history::clear_old_message_ids(
+                                                            } else {
+                                                                // No pending direct delete: use DB-based deletion
+                                                                if let Ok(old_ids) = azuki_db::queries::history::get_previous_message_ids(
                                                                     &bridge_db, &track.id, history_record.id,
-                                                                ).await;
+                                                                ).await {
+                                                                    for old_id_str in &old_ids {
+                                                                        if let Ok(old_id) = old_id_str.parse::<u64>()
+                                                                            && let Err(e) = channel_id.delete_message(
+                                                                                http.as_ref(), serenity::all::MessageId::new(old_id),
+                                                                            ).await
+                                                                        {
+                                                                            tracing::debug!("failed to delete old history embed: {e}");
+                                                                        }
+                                                                    }
+                                                                    let _ = azuki_db::queries::history::clear_old_message_ids(
+                                                                        &bridge_db, &track.id, history_record.id,
+                                                                    ).await;
+                                                                }
                                                             }
 
                                                             current_history = Some((
