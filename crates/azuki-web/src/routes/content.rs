@@ -580,6 +580,92 @@ pub async fn oembed_proxy(
     Ok(Json(data))
 }
 
+/// One-time rescan: re-parse metadata for uploaded tracks missing duration.
+pub async fn rescan_metadata(
+    State(state): State<WebState>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    // Find all uploaded tracks with duration_ms = 0
+    let rows = sqlx::query_as::<_, azuki_db::models::Track>(
+        "SELECT id, title, artist, duration_ms, thumbnail_url, source_url, source_type, file_path, youtube_id, volume, uploaded_by, created_at
+         FROM tracks
+         WHERE source_type = 'upload' AND duration_ms = 0 AND file_path IS NOT NULL",
+    )
+    .fetch_all(&state.db)
+    .await
+    .map_err(|e| ApiError::Internal(format!("query error: {e}")))?;
+
+    let total = rows.len();
+    let mut updated = 0u64;
+
+    for track in &rows {
+        let Some(ref fp) = track.file_path else {
+            continue;
+        };
+        let path = std::path::PathBuf::from(fp);
+        if !path.exists() {
+            tracing::warn!("rescan: file not found for track {}: {fp}", track.id);
+            continue;
+        }
+
+        let parsed = match azuki_media::parse_audio_metadata_from_file(&path).await {
+            Ok(m) => m,
+            Err(e) => {
+                tracing::warn!("rescan: parse failed for track {}: {e}", track.id);
+                continue;
+            }
+        };
+
+        if parsed.duration_ms == 0 {
+            continue;
+        }
+
+        let title = parsed.title.as_deref().unwrap_or(&track.title);
+        let artist = parsed.artist.as_deref().or(track.artist.as_deref());
+
+        // Save cover art if found
+        let thumbnail_url = if let Some(ref bytes) = parsed.cover_art {
+            match async {
+                tokio::fs::create_dir_all("media/thumbnails").await?;
+                tokio::fs::write(format!("media/thumbnails/{}.jpg", track.id), bytes).await
+            }
+            .await
+            {
+                Ok(()) => Some("local"),
+                Err(e) => {
+                    tracing::warn!("rescan: failed to save cover art for {}: {e}", track.id);
+                    track.thumbnail_url.as_deref()
+                }
+            }
+        } else {
+            track.thumbnail_url.as_deref()
+        };
+
+        sqlx::query(
+            "UPDATE tracks SET duration_ms = ?1, title = ?2, artist = ?3, thumbnail_url = ?4 WHERE id = ?5",
+        )
+        .bind(parsed.duration_ms as i64)
+        .bind(title)
+        .bind(artist)
+        .bind(thumbnail_url)
+        .bind(&track.id)
+        .execute(&state.db)
+        .await
+        .map_err(|e| ApiError::Internal(format!("update error: {e}")))?;
+
+        updated += 1;
+        tracing::info!(
+            "rescan: updated track {} — duration={}ms",
+            track.id,
+            parsed.duration_ms
+        );
+    }
+
+    Ok(Json(serde_json::json!({
+        "total_candidates": total,
+        "updated": updated,
+    })))
+}
+
 pub fn content_routes(max_upload_size_mb: u64) -> axum::Router<WebState> {
     let max_bytes = (max_upload_size_mb as usize) * 1024 * 1024;
     axum::Router::new()
@@ -596,4 +682,5 @@ pub fn content_routes(max_upload_size_mb: u64) -> axum::Router<WebState> {
             axum::routing::put(update_track).delete(delete_track),
         )
         .route("/api/oembed", axum::routing::get(oembed_proxy))
+        .route("/api/rescan-metadata", axum::routing::post(rescan_metadata))
 }
