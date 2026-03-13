@@ -127,8 +127,12 @@ export function useWebSocket() {
         state.setPlayState({ status: "loading", track: ev.track });
         break;
       case "track_ended":
-        state.setPlayState({ status: "idle" });
-        state.setCurrentAddedBy(null);
+        // Backend sends TrackStarted after TrackEnded when queue has items or loopMode is "one" (replay).
+        // Only set idle when truly stopping: empty queue AND not in single-track loop.
+        if (state.queue.length === 0 && state.loopMode !== "one") {
+          state.setPlayState({ status: "idle" });
+          state.setCurrentAddedBy(null);
+        }
         window.dispatchEvent(new CustomEvent("track-ended"));
         break;
       case "track_error":
