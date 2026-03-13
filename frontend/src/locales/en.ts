@@ -214,6 +214,7 @@ export const en: Translations = {
     listened: "listened",
     tracks: "tracks",
     streak: "streak",
+    streakDays: "{n}d",
     peak: "peak",
     listeningActivity: "Listening Activity",
     last30Days: "Last 30 Days",

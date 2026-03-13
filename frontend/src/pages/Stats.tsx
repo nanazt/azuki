@@ -793,7 +793,7 @@ export function Stats() {
     },
     {
       label: s.stats.streak,
-      value: `${stats.streak.current}d`,
+      value: s.stats.streakDays.replace("{n}", String(stats.streak.current)),
       icon: <Flame size={12} />,
     },
     ...(stats.peak_day

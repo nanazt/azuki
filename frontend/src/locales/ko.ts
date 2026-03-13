@@ -211,6 +211,7 @@ export const ko = {
     listened: "청취",
     tracks: "트랙",
     streak: "연속",
+    streakDays: "{n}일",
     peak: "최고",
     listeningActivity: "청취 활동",
     last30Days: "최근 30일",
