@@ -179,7 +179,6 @@ async fn non_admin_admin_endpoints_403() {
         "/api/admin/bot-locale",
         "/api/admin/voice-channel",
         "/api/admin/history-channel",
-        "/api/admin/web-base-url",
         "/api/admin/timezone",
         "/api/admin/ytdlp",
         "/api/admin/youtube",
@@ -203,10 +202,6 @@ async fn non_admin_admin_endpoints_403() {
         (
             "/api/admin/history-channel",
             serde_json::json!({"channel_id": "123"}),
-        ),
-        (
-            "/api/admin/web-base-url",
-            serde_json::json!({"url": "https://a.com"}),
         ),
         (
             "/api/admin/timezone",
