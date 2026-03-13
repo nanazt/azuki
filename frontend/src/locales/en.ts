@@ -198,6 +198,7 @@ export const en: Translations = {
     deleteTrack: "Delete track",
     cancel: "Cancel",
     deleteConfirm: "Delete?",
+    newFilesBadge: "{n} new",
     tracksCount: "{n} tracks",
     loadMore: "Load more",
     loadingMoreTracks: "Loading more tracks",

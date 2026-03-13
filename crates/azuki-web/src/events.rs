@@ -91,6 +91,10 @@ pub enum WebEvent {
     HistoryUpdated {
         history: Vec<azuki_player::QueueEntry>,
     },
+    UploadAdded {
+        track: TrackInfo,
+        user_id: String,
+    },
 }
 
 #[derive(Debug, Clone, Serialize)]

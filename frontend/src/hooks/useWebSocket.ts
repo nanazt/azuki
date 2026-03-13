@@ -205,6 +205,13 @@ export function useWebSocket() {
         break;
       case "history_updated":
         break;
+      case "upload_added":
+        window.dispatchEvent(
+          new CustomEvent("upload-added", {
+            detail: { track: ev.track, user_id: ev.user_id },
+          }),
+        );
+        break;
       case "download_started":
         useDownloadStore
           .getState()

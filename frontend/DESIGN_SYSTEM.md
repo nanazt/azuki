@@ -318,3 +318,50 @@ All custom keyframe animations are disabled when `prefers-reduced-motion: reduce
 ## Scrollbar
 
 Custom webkit: 6px width, `--color-border` thumb (dark), `#b0b0b0` thumb (light), transparent track
+
+## Real-Time List Updates
+
+When a page displays a list that receives real-time data via WebSocket, follow this pattern.
+
+### Principles
+
+1. **Data always updates immediately** — insert via `setItems(prev => [newEntry, ...prev])` regardless of scroll. Never buffer data behind a user interaction.
+2. **Badge is purely navigational** — shows only when list top is NOT in viewport. Click only scrolls to top. Does NOT trigger data operations.
+3. **IntersectionObserver for viewport detection** — zero-height sentinel at list top, not `scrollTop` checks.
+
+### State Pattern
+
+| State | Type | Purpose |
+|-------|------|---------|
+| `isTopVisible` | `useState(true)` | IO-driven, true when top sentinel is visible |
+| `isTopVisibleRef` | `useRef(true)` | Mirrors state for event handler closures |
+| `newCount` | `useState(0)` | New items since user last saw top; resets on IO |
+| `topSentinelRef` | `useRef` | Zero-height div before the list |
+| `scrollRoot` | `useState` | `document.querySelector("[data-main-scroll]")` |
+
+IO options: `{ root: scrollRoot, threshold: 0 }`
+
+### Badge Standard
+
+- Position: sticky top-3, centered, z-10
+- Style: `bg-[var(--color-accent)] text-[#1a1a1a]`, rounded-full
+- Animation: `fadeInUp` entrance + `badgePulse` infinite
+- Content: ArrowUp icon + count text
+- Container: `pointer-events-none` with `pointer-events-auto` button
+- onClick: `scrollRoot?.scrollTo({ top: 0, behavior: "smooth" })` only
+
+### Backend Pattern
+
+- Add a `WebEvent` variant in `events.rs` (e.g., `UploadAdded { track, user_id }`)
+- Broadcast via `state.web_tx.send(WebSeqEvent { seq: 0, event })` from route handlers (seq: 0 because route handlers lack the global seq counter; frontend skips dedup for seq=0)
+- WebSocket hook dispatches a `CustomEvent` (e.g., `"upload-added"`)
+- Page component listens for the CustomEvent
+
+### Animation
+
+Use `useAnimatedList` hook for enter/exit animations. For complex cases (duplicate handling, play_count), manage `enteringKeys`/`exitingKeys` Sets manually.
+
+### Reference Implementations
+
+- `src/pages/History.tsx` — real-time with duplicate handling + play_count (manual animation)
+- `src/pages/Uploads.tsx` — real-time insert (uses useAnimatedList)

@@ -195,6 +195,7 @@ export const ko = {
     deleteTrack: "트랙 삭제",
     cancel: "취소",
     deleteConfirm: "삭제 할까요?",
+    newFilesBadge: "새 파일 {n}건",
     tracksCount: "{n}개 트랙",
     loadMore: "더 보기",
     loadingMoreTracks: "트랙 더 불러오는 중이에요",

@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
 import { api } from "../lib/api";
 import type { TrackInfo } from "../lib/types";
 import { Skeleton } from "../components/ui/Skeleton";
@@ -40,10 +40,12 @@ export function History() {
   const s = t();
   const [exitingKeys, setExitingKeys] = useState<Set<string>>(new Set());
   const [enteringKeys, setEnteringKeys] = useState<Set<string>>(new Set());
-  const [pendingRecords, setPendingRecords] = useState<
-    Array<{ track: TrackInfo; user_id: string; play_count?: number }>
-  >([]);
-  const [isFirstPage, setIsFirstPage] = useState(true);
+  const [isTopVisible, setIsTopVisible] = useState(true);
+  const [newCount, setNewCount] = useState(0);
+  const topSentinelRef = useRef<HTMLDivElement | null>(null);
+  const isTopVisibleRef = useRef(true);
+  const playCountMap = useRef<Map<string, number>>(new Map());
+  const playCountInitialized = useRef(false);
   const [showSkeleton, setShowSkeleton] = useState(true);
   const [scrollRoot, setScrollRoot] = useState<Element | null>(null);
   const exitTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(
@@ -74,134 +76,91 @@ export function History() {
     }
   }, [loading]);
 
+  // Sync isTopVisibleRef with state
   useEffect(() => {
-    if (loadingMore) setIsFirstPage(false);
-  }, [loadingMore]);
+    isTopVisibleRef.current = isTopVisible;
+  }, [isTopVisible]);
 
-  // Merge pending records into items with entering animation
-  const mergePendingRecords = useCallback(() => {
-    if (pendingRecords.length === 0) return;
+  // Initialize playCountMap from fetched data
+  useEffect(() => {
+    if (!loading && items.length > 0 && !playCountInitialized.current) {
+      playCountInitialized.current = true;
+      for (const entry of items) {
+        playCountMap.current.set(entry.track.id, entry.play_count);
+      }
+    }
+  }, [loading, items]);
 
-    setItems((prev) => {
-      let updated = [...prev];
-      const newEntering = new Set<string>();
-      const newExiting = new Set<string>();
-
-      for (const record of pendingRecords) {
-        const existing = updated.find(
-          (entry) => entry.track.id === record.track.id,
-        );
-        if (existing) {
-          const oldKey = `${existing.track.id}-${existing.played_at}`;
-          newExiting.add(oldKey);
+  // IntersectionObserver for top sentinel
+  // showSkeleton in deps so effect re-runs when sentinel mounts after data loads
+  useEffect(() => {
+    const node = topSentinelRef.current;
+    if (!node) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setIsTopVisible(entry.isIntersecting);
+        if (entry.isIntersecting) {
+          setNewCount(0);
         }
+      },
+      { root: scrollRoot, threshold: 0 },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [scrollRoot, showSkeleton]);
 
-        const newEntry: HistoryEntry = {
-          track: record.track,
-          played_at: new Date().toISOString(),
-          user_id: record.user_id,
-          play_count: (existing?.play_count ?? record.play_count ?? 0) + 1,
-        };
-        const newKey = `${newEntry.track.id}-${newEntry.played_at}`;
-        newEntering.add(newKey);
-        updated = [newEntry, ...updated];
-      }
-
-      // Schedule exiting/entering state updates
-      setExitingKeys((prev) => new Set([...prev, ...newExiting]));
-      setEnteringKeys((prev) => new Set([...prev, ...newEntering]));
-
-      // Safety timeouts for exiting keys
-      for (const key of newExiting) {
-        const timer = setTimeout(() => {
-          setExitingKeys((s) => {
-            const n = new Set(s);
-            n.delete(key);
-            return n;
-          });
-          setItems((prev) =>
-            prev.filter((x) => `${x.track.id}-${x.played_at}` !== key),
-          );
-          exitTimers.current.delete(key);
-        }, 500);
-        exitTimers.current.set(key, timer);
-      }
-
-      return updated;
-    });
-    setPendingRecords([]);
-  }, [pendingRecords, setItems]);
-
-  // Real-time track insertion
+  // Real-time track insertion — always insert immediately
   useEffect(() => {
     const handler = (e: Event) => {
       const detail = (e as CustomEvent).detail;
-      const scrollTop =
-        document.querySelector("[data-main-scroll]")?.scrollTop ?? 0;
+      const trackId = detail.track.id;
 
-      if (isFirstPage && scrollTop < 50) {
-        // At top: animate transition in place
-        setItems((prev) => {
-          const existing = prev.find(
-            (entry) => entry.track.id === detail.track.id,
-          );
+      // Increment play_count in ref map (immune to animation timing)
+      const prevCount = playCountMap.current.get(trackId) ?? 0;
+      const nextCount = prevCount + 1;
+      playCountMap.current.set(trackId, nextCount);
 
-          if (existing) {
-            const oldKey = `${existing.track.id}-${existing.played_at}`;
-            setExitingKeys((s) => new Set(s).add(oldKey));
+      setItems((prev) => {
+        const existing = prev.find((entry) => entry.track.id === trackId);
 
-            // Safety timeout for exit animation
-            const timer = setTimeout(() => {
-              setExitingKeys((s) => {
-                const n = new Set(s);
-                n.delete(oldKey);
-                return n;
-              });
-              setItems((prev) =>
-                prev.filter((x) => `${x.track.id}-${x.played_at}` !== oldKey),
-              );
-              exitTimers.current.delete(oldKey);
-            }, 500);
-            exitTimers.current.set(oldKey, timer);
-          }
+        if (existing) {
+          const oldKey = `${existing.track.id}-${existing.played_at}`;
+          setExitingKeys((s) => new Set(s).add(oldKey));
 
-          const newEntry: HistoryEntry = {
-            track: detail.track,
-            played_at: new Date().toISOString(),
-            user_id: detail.user_id,
-            play_count: (existing?.play_count ?? 0) + 1,
-          };
-          const newKey = `${newEntry.track.id}-${newEntry.played_at}`;
-          setEnteringKeys((s) => new Set(s).add(newKey));
+          const timer = setTimeout(() => {
+            setExitingKeys((s) => {
+              const n = new Set(s);
+              n.delete(oldKey);
+              return n;
+            });
+            setItems((p) =>
+              p.filter((x) => `${x.track.id}-${x.played_at}` !== oldKey),
+            );
+            exitTimers.current.delete(oldKey);
+          }, 500);
+          exitTimers.current.set(oldKey, timer);
+        }
 
-          // Keep old entry in place for exit animation
-          return [newEntry, ...prev];
-        });
-      } else {
-        // Scrolled down: buffer to pending
-        setPendingRecords((prev) => {
-          const filtered = prev.filter((r) => r.track.id !== detail.track.id);
-          return [
-            ...filtered,
-            { track: detail.track, user_id: detail.user_id },
-          ];
-        });
+        const newEntry: HistoryEntry = {
+          track: detail.track,
+          played_at: new Date().toISOString(),
+          user_id: detail.user_id,
+          play_count: nextCount,
+        };
+        const newKey = `${newEntry.track.id}-${newEntry.played_at}`;
+        setEnteringKeys((s) => new Set(s).add(newKey));
+
+        return [newEntry, ...prev];
+      });
+
+      // Badge count: only increment when top is NOT visible
+      if (!isTopVisibleRef.current) {
+        setNewCount((c) => c + 1);
       }
     };
     window.addEventListener("history-added", handler);
     return () => window.removeEventListener("history-added", handler);
-  }, [isFirstPage, setItems]);
-
-  // Auto-merge when user scrolls back to top
-  useEffect(() => {
-    const el = scrollRoot;
-    if (!el || pendingRecords.length === 0) return;
-    const onScroll = () => {
-      if (el.scrollTop < 50) mergePendingRecords();
-    };
-    el.addEventListener("scroll", onScroll, { passive: true });
-    return () => el.removeEventListener("scroll", onScroll);
-  }, [scrollRoot, pendingRecords.length, mergePendingRecords]);
+  }, [setItems]);
 
   // Cleanup exit timers on unmount
   useEffect(() => {
@@ -271,13 +230,13 @@ export function History() {
         </div>
       ) : (
         <>
-          {pendingRecords.length > 0 && (
+          <div ref={topSentinelRef} aria-hidden="true" style={{ height: 0 }} />
+          {newCount > 0 && !isTopVisible && (
             <div className="sticky top-3 z-10 flex justify-center pointer-events-none">
               <button
-                onClick={() => {
-                  mergePendingRecords();
-                  scrollRoot?.scrollTo({ top: 0, behavior: "smooth" });
-                }}
+                onClick={() =>
+                  scrollRoot?.scrollTo({ top: 0, behavior: "smooth" })
+                }
                 className="pointer-events-auto flex items-center gap-1.5 px-4 py-1.5 min-h-[32px] rounded-full bg-[var(--color-accent)] text-[#1a1a1a] text-xs font-semibold tracking-wide cursor-pointer"
                 style={{
                   animation:
@@ -287,10 +246,7 @@ export function History() {
                 }}
               >
                 <ArrowUp size={11} />
-                {s.history.newRecordsBadge.replace(
-                  "{n}",
-                  String(pendingRecords.length),
-                )}
+                {s.history.newRecordsBadge.replace("{n}", String(newCount))}
               </button>
             </div>
           )}

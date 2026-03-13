@@ -1,5 +1,5 @@
-import { useState, useCallback } from "react";
-import { Upload, Plus, Loader2, Trash2 } from "lucide-react";
+import { useState, useCallback, useEffect, useRef } from "react";
+import { Upload, Plus, Loader2, Trash2, ArrowUp } from "lucide-react";
 import clsx from "clsx";
 import { api } from "../lib/api";
 import { useToast } from "../hooks/useToast";
@@ -7,6 +7,7 @@ import { useLocale, t } from "../hooks/useLocale";
 import { useAuthStore } from "../stores/authStore";
 import type { TrackInfo, UploadsResponse } from "../lib/types";
 import { useInfiniteScroll } from "../hooks/useInfiniteScroll";
+import { useAnimatedList } from "../hooks/useAnimatedList";
 
 function formatDuration(ms: number): string {
   const s = Math.floor(ms / 1000);
@@ -20,11 +21,15 @@ function UploadRow({
   onUpdate,
   isAdmin,
   onDelete,
+  animationStatus,
+  onAnimationEnd,
 }: {
   track: TrackInfo;
   onUpdate: () => void;
   isAdmin: boolean;
   onDelete: (id: string) => void;
+  animationStatus?: "entering" | "stable" | "exiting";
+  onAnimationEnd?: () => void;
 }) {
   const { showToast } = useToast();
   useLocale();
@@ -91,7 +96,38 @@ function UploadRow({
   };
 
   return (
-    <li className="flex items-center gap-3 px-3 py-2.5 hover:bg-[var(--color-bg-hover)] rounded-md group transition-colors">
+    <li
+      className="flex items-center gap-3 px-3 py-2.5 hover:bg-[var(--color-bg-hover)] rounded-md group transition-colors"
+      style={
+        animationStatus === "entering"
+          ? {
+              animation:
+                "expandIn var(--duration-slow) var(--ease-out-soft) forwards, fadeInUp var(--duration-slow) var(--ease-out-soft) forwards",
+            }
+          : animationStatus === "exiting"
+            ? {
+                animation:
+                  "collapseOut var(--duration-slow) var(--ease-out-soft) forwards",
+                pointerEvents: "none" as const,
+              }
+            : undefined
+      }
+      onAnimationEnd={
+        animationStatus !== "stable" && animationStatus
+          ? (e) => {
+              if (e.currentTarget !== e.target) return;
+              if (
+                (animationStatus === "entering" &&
+                  e.animationName === "expandIn") ||
+                (animationStatus === "exiting" &&
+                  e.animationName === "collapseOut")
+              ) {
+                onAnimationEnd?.();
+              }
+            }
+          : undefined
+      }
+    >
       {/* Icon */}
       <div className="w-10 h-10 rounded bg-[var(--color-bg-tertiary)] flex items-center justify-center flex-shrink-0">
         <Upload size={16} className="text-[var(--color-text-tertiary)]" />
@@ -216,6 +252,11 @@ export function UploadsPage() {
   const s = t();
   const [total, setTotal] = useState(0);
   const isAdmin = useAuthStore((st) => st.isAdmin);
+  const [isTopVisible, setIsTopVisible] = useState(true);
+  const [newCount, setNewCount] = useState(0);
+  const topSentinelRef = useRef<HTMLDivElement | null>(null);
+  const isTopVisibleRef = useRef(true);
+  const [scrollRoot, setScrollRoot] = useState<Element | null>(null);
 
   const {
     items: tracks,
@@ -231,6 +272,9 @@ export function UploadsPage() {
     onResponse: (res) => setTotal(res.total),
   });
 
+  const getKey = useCallback((t: TrackInfo) => t.id, []);
+  const { displayItems, handleAnimationEnd } = useAnimatedList(tracks, getKey);
+
   const handleDelete = useCallback(
     (id: string) => {
       setTracks((prev) => prev.filter((t) => t.id !== id));
@@ -238,6 +282,55 @@ export function UploadsPage() {
     },
     [setTracks],
   );
+
+  useEffect(() => {
+    setScrollRoot(document.querySelector("[data-main-scroll]"));
+  }, []);
+
+  // Sync isTopVisibleRef with state
+  useEffect(() => {
+    isTopVisibleRef.current = isTopVisible;
+  }, [isTopVisible]);
+
+  // IntersectionObserver for top sentinel
+  // loading in deps so effect re-runs when sentinel mounts after data loads
+  useEffect(() => {
+    const node = topSentinelRef.current;
+    if (!node) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setIsTopVisible(entry.isIntersecting);
+        if (entry.isIntersecting) setNewCount(0);
+      },
+      { root: scrollRoot, threshold: 0 },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [scrollRoot, loading]);
+
+  // Real-time upload-added event listener
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      const track: TrackInfo = detail.track;
+
+      let inserted = false;
+      setTracks((prev) => {
+        if (prev.some((t) => t.id === track.id)) return prev;
+        inserted = true;
+        return [track, ...prev];
+      });
+
+      if (!inserted) return;
+      setTotal((t) => t + 1);
+
+      if (!isTopVisibleRef.current) {
+        setNewCount((c) => c + 1);
+      }
+    };
+    window.addEventListener("upload-added", handler);
+    return () => window.removeEventListener("upload-added", handler);
+  }, [setTracks]);
 
   return (
     <div className="p-4 md:p-6 max-w-3xl mx-auto flex flex-col gap-6">
@@ -274,17 +367,41 @@ export function UploadsPage() {
       )}
 
       {tracks.length > 0 && (
-        <ul role="list" className="flex flex-col gap-0">
-          {tracks.map((track) => (
-            <UploadRow
-              key={track.id}
-              track={track}
-              onUpdate={reload}
-              isAdmin={isAdmin}
-              onDelete={handleDelete}
-            />
-          ))}
-        </ul>
+        <>
+          <div ref={topSentinelRef} aria-hidden="true" style={{ height: 0 }} />
+          {newCount > 0 && !isTopVisible && (
+            <div className="sticky top-3 z-10 flex justify-center pointer-events-none">
+              <button
+                onClick={() =>
+                  scrollRoot?.scrollTo({ top: 0, behavior: "smooth" })
+                }
+                className="pointer-events-auto flex items-center gap-1.5 px-4 py-1.5 min-h-[32px] rounded-full bg-[var(--color-accent)] text-[#1a1a1a] text-xs font-semibold tracking-wide cursor-pointer"
+                style={{
+                  animation:
+                    "fadeInUp var(--duration-normal) var(--ease-out-soft), badgePulse 2s ease-in-out 400ms infinite",
+                  boxShadow:
+                    "0 4px 20px color-mix(in srgb, var(--color-accent) 28%, transparent)",
+                }}
+              >
+                <ArrowUp size={11} />
+                {s.uploads.newFilesBadge.replace("{n}", String(newCount))}
+              </button>
+            </div>
+          )}
+          <ul role="list" className="flex flex-col gap-0">
+            {displayItems.map(({ item: track, status, key }) => (
+              <UploadRow
+                key={key}
+                track={track}
+                onUpdate={reload}
+                isAdmin={isAdmin}
+                onDelete={handleDelete}
+                animationStatus={status}
+                onAnimationEnd={() => handleAnimationEnd(key)}
+              />
+            ))}
+          </ul>
+        </>
       )}
 
       {/* Sentinel + skeleton loading */}

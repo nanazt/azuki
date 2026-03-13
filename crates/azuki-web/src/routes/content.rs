@@ -312,6 +312,28 @@ pub async fn upload(
     )
     .await?;
 
+    // Broadcast upload event to all connected clients
+    let track_info = azuki_player::TrackInfo {
+        id: track_id.clone(),
+        title: title.clone(),
+        artist: artist.clone(),
+        duration_ms: duration_ms as u64,
+        thumbnail_url: thumbnail_url.map(|s| s.to_string()),
+        source_url: format!("upload://{safe_filename}"),
+        source_type: "upload".to_string(),
+        file_path: Some(file_path_str.clone()),
+        youtube_id: None,
+        volume: 100,
+    };
+
+    let _ = state.web_tx.send(crate::events::WebSeqEvent {
+        seq: 0,
+        event: crate::events::WebEvent::UploadAdded {
+            track: track_info,
+            user_id: user_id.clone(),
+        },
+    });
+
     Ok(Json(serde_json::json!({
         "track_id": track_id,
         "filename": filename,
