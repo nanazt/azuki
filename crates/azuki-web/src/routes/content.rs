@@ -273,6 +273,25 @@ pub async fn upload(
     let artist = provided_artist.or_else(|| parsed.as_ref().and_then(|p| p.artist.clone()));
     let duration_ms = parsed.as_ref().map(|p| p.duration_ms as i64).unwrap_or(0);
 
+    // Save embedded cover art as thumbnail before DB upsert
+    let cover_art = parsed.as_ref().and_then(|p| p.cover_art.as_ref());
+    let thumbnail_url = if let Some(bytes) = cover_art {
+        match async {
+            tokio::fs::create_dir_all("media/thumbnails").await?;
+            tokio::fs::write(format!("media/thumbnails/{track_id}.jpg"), bytes).await
+        }
+        .await
+        {
+            Ok(()) => Some("local"),
+            Err(e) => {
+                tracing::warn!("failed to save cover art for {track_id}: {e}");
+                None
+            }
+        }
+    } else {
+        None
+    };
+
     // Sanitize source_url filename (remove control chars)
     let safe_filename: String = filename.chars().filter(|c| !c.is_control()).collect();
 
@@ -282,7 +301,7 @@ pub async fn upload(
         &title,
         artist.as_deref(),
         duration_ms,
-        None,
+        thumbnail_url,
         &format!("upload://{safe_filename}"),
         "upload",
         Some(&file_path_str),
@@ -469,6 +488,9 @@ pub async fn delete_track(
     {
         let _ = tokio::fs::remove_file(resolved).await;
     }
+
+    // Clean up thumbnail if it exists
+    let _ = tokio::fs::remove_file(format!("media/thumbnails/{track_id}.jpg")).await;
 
     Ok(Json(serde_json::json!({ "deleted": true })))
 }

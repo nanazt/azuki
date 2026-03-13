@@ -3,6 +3,7 @@ use std::time::Duration;
 
 use lofty::config::ParseOptions;
 use lofty::file::AudioFile;
+use lofty::picture::PictureType;
 use lofty::prelude::*;
 use lofty::probe::Probe;
 
@@ -12,6 +13,7 @@ pub struct AudioMetadata {
     pub title: Option<String>,
     pub artist: Option<String>,
     pub duration_ms: u64,
+    pub cover_art: Option<Vec<u8>>,
 }
 
 /// Parse audio metadata from bytes using lofty.
@@ -48,22 +50,33 @@ fn parse_metadata_inner(data: &[u8]) -> Result<AudioMetadata, MediaError> {
     let properties = tagged_file.properties();
     let duration_ms = properties.duration().as_millis() as u64;
 
-    let (title, artist) = tagged_file
+    let tag = tagged_file
         .primary_tag()
-        .or_else(|| tagged_file.first_tag())
-        .map(|tag| {
-            let title = tag.title().map(|s| s.to_string()).filter(|s| !s.is_empty());
-            let artist = tag
-                .artist()
-                .map(|s| s.to_string())
-                .filter(|s| !s.is_empty());
+        .or_else(|| tagged_file.first_tag());
+
+    let (title, artist) = tag
+        .map(|t| {
+            let title = t.title().map(|s| s.to_string()).filter(|s| !s.is_empty());
+            let artist = t.artist().map(|s| s.to_string()).filter(|s| !s.is_empty());
             (title, artist)
         })
         .unwrap_or((None, None));
+
+    let cover_art = tag.and_then(|t| {
+        let pic = t
+            .get_picture_type(PictureType::CoverFront)
+            .or_else(|| t.pictures().first())?;
+        let data = pic.data();
+        if data.is_empty() || data.len() > 5 * 1024 * 1024 {
+            return None;
+        }
+        Some(data.to_vec())
+    });
 
     Ok(AudioMetadata {
         title,
         artist,
         duration_ms,
+        cover_art,
     })
 }
