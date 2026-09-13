@@ -7,10 +7,13 @@ import {
   Outlet,
 } from "react-router-dom";
 import { ToastProvider, ToastContainer } from "./components/ui/Toast";
-import { useAuthStore } from "./stores/authStore";
+import {
+  startAuthCoordinator,
+  useAuthStore,
+} from "./stores/authStore";
 import { useWebSocket } from "./hooks/useWebSocket";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
-import { syncLocaleFromServer } from "./hooks/useLocale";
+import { syncLocaleFromServer, t, useLocale } from "./hooks/useLocale";
 import { usePasteDetection } from "./hooks/usePasteDetection";
 import { useFileDrop } from "./hooks/useFileDrop";
 import { AppShell } from "./components/layout/AppShell";
@@ -59,35 +62,47 @@ function SetupGuard() {
 }
 
 function ProtectedRoute() {
-  const { authenticated, checking, setAuthenticated, setChecking, setIsAdmin } =
-    useAuthStore();
+  useLocale();
+  const status = useAuthStore((state) => state.status);
+  const retry = useAuthStore((state) => state.retry);
+  const s = t();
 
-  useEffect(() => {
-    if (!checking) return;
-    fetch("/api/me", { credentials: "include" })
-      .then((res) => {
-        setAuthenticated(res.ok);
-        if (res.ok) {
-          res
-            .json()
-            .then((me: { is_admin: boolean }) => setIsAdmin(me.is_admin));
-        }
-      })
-      .catch(() => {
-        setAuthenticated(false);
-        setChecking(false);
-      });
-  }, [checking, setAuthenticated, setChecking, setIsAdmin]);
+  useEffect(() => startAuthCoordinator(), []);
 
-  if (checking) {
+  if (status === "checking") {
     return (
       <div className="flex items-center justify-center h-dvh bg-[var(--color-bg)]">
-        <div className="text-[var(--color-text-secondary)]">Loading...</div>
+        <div className="text-[var(--color-text-secondary)]">
+          {s.status.loading}
+        </div>
       </div>
     );
   }
 
-  if (!authenticated) {
+  if (status === "transient" || status === "forbidden") {
+    const forbidden = status === "forbidden";
+    return (
+      <div className="flex items-center justify-center h-dvh bg-[var(--color-bg)] p-4">
+        <div className="w-full max-w-sm bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded-2xl p-6 flex flex-col items-center gap-4 text-center shadow-xl">
+          <h1 className="text-lg font-semibold text-[var(--color-text)]">
+            {forbidden ? s.auth.forbiddenTitle : s.auth.checkFailedTitle}
+          </h1>
+          <p className="text-sm text-[var(--color-text-secondary)]">
+            {forbidden ? s.auth.forbiddenMessage : s.auth.checkFailedMessage}
+          </p>
+          <button
+            type="button"
+            onClick={() => void retry()}
+            className="min-h-[44px] w-full px-4 py-2 rounded-lg text-sm font-semibold bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] text-[#1a1a1a] transition-colors"
+          >
+            {s.auth.retry}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (status === "unauthenticated") {
     return <Navigate to="/login" replace />;
   }
 

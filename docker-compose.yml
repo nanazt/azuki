@@ -3,6 +3,7 @@ services:
     image: ${AZUKI_IMAGE:-ghcr.io/nanazt/azuki:latest}
     container_name: azuki
     restart: unless-stopped
+    stop_grace_period: 30s
     ports:
       - "127.0.0.1:3000:3000" # reverse proxy recommended
     volumes:

@@ -68,8 +68,22 @@ Then open your configured URL to complete the setup wizard (Discord bot token, O
 ### Updating
 
 ```bash
-docker compose pull && docker compose up -d
+docker compose pull
+docker compose stop --timeout 30
+docker compose up -d --pull never
 ```
+
+Stop the old container before starting its replacement; overlapping a server that uses the previous authentication contract is unsupported.
+
+### Login persistence
+
+Browser logins expire after seven days without a successful renewal and never last longer than 90 days from the original Discord sign-in.
+A visible dashboard renews automatically every five minutes and when it becomes visible or comes back online; hidden-tab traffic does not renew the login.
+Logging out revokes that account's login in every browser and device, including existing WebSocket connections.
+
+When upgrading from the previous login format, existing dashboard tabs must be reloaded and users must sign in with Discord once.
+Do not roll back to a binary that lacks the new session-lifetime and WebSocket-revocation checks; rollback builds must preserve the same authentication policy.
+The [authentication specification](docs/specs/persistent-login.md) documents the API and transition contract.
 
 ## Environment Variables
 

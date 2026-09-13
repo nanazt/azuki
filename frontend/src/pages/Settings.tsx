@@ -69,11 +69,11 @@ export function Settings() {
   const s = t();
   const logout = useAuthStore((s) => s.logout);
   const isAdmin = useAuthStore((s) => s.isAdmin);
+  const me = useAuthStore((state) => state.user);
   const { theme, setTheme } = useTheme();
   const { showToast } = useToast();
 
-  // Preferences state (loading gate only)
-  const [prefsLoaded, setPrefsLoaded] = useState(false);
+  const prefsLoaded = me !== null;
   const [showSkeleton, setShowSkeleton] = useState(true);
 
   // Admin state
@@ -133,18 +133,9 @@ export function Settings() {
   const [savingBotLocale, setSavingBotLocale] = useState(false);
   const [botLocaleSaved, setBotLocaleSaved] = useState(false);
 
-  const [me, setMe] = useState<{
-    id: string;
-    username: string;
-    avatar_url: string | null;
-  } | null>(null);
-
   useEffect(() => {
-    api
-      .getMe()
-      .then(setMe)
-      .catch(() => {})
-      .finally(() => setPrefsLoaded(true));
+
+
     api
       .getYtdlpInfo()
       .then(setInfo)
@@ -224,7 +215,12 @@ export function Settings() {
 
   const handleLogout = async () => {
     setLoggingOut(true);
-    await logout();
+    try {
+      await logout();
+    } catch {
+      showToast(s.settings.logoutFailed, "error");
+      setLoggingOut(false);
+    }
   };
 
   if (showSkeleton) {

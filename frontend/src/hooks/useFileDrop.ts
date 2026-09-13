@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { api } from "../lib/api";
 import { useToast } from "./useToast";
 import { t } from "./useLocale";
 import type { UploadResponse } from "../lib/types";
@@ -40,31 +41,6 @@ export interface DroppedFileUpload {
   uploadPromise: Promise<UploadResponse>;
 }
 
-/** Plain FormData + fetch upload — the standard approach used by every website. */
-function uploadFile(file: File): Promise<UploadResponse> {
-  const formData = new FormData();
-  formData.append("file", file);
-
-  return fetch("/api/upload", {
-    method: "POST",
-    body: formData,
-    credentials: "include",
-    headers: { "X-Requested-With": "XMLHttpRequest" },
-  }).then(async (res) => {
-    if (res.status === 401) {
-      const path = window.location.pathname;
-      if (!path.startsWith("/login") && !path.startsWith("/auth")) {
-        window.location.href = "/login";
-      }
-      throw new Error("unauthorized");
-    }
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({ error: res.statusText }));
-      throw new Error(body.error || res.statusText);
-    }
-    return res.json() as Promise<UploadResponse>;
-  });
-}
 
 function validateFile(
   file: File,
@@ -104,7 +80,7 @@ export function useFileDrop() {
     (file: File) => {
       if (!validateFile(file, showToast)) return;
 
-      const uploadPromise = uploadFile(file);
+      const uploadPromise = api.uploadFile(file);
 
       setDroppedFile({
         name: file.name,

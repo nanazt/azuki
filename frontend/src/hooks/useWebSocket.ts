@@ -1,9 +1,15 @@
 import { useEffect, useRef, useCallback } from "react";
 import { usePlayerStore } from "../stores/playerStore";
 import { useDownloadStore } from "../stores/downloadStore";
+import {
+  recoverAuthentication,
+  useAuthStore,
+  waitForPendingRefresh,
+} from "../stores/authStore";
+import type { AuthStatus } from "../stores/authStore";
 import { useToast } from "./useToast";
 import { t } from "./useLocale";
-import type { SeqEvent } from "../lib/types";
+import type { DownloadStatus, SeqEvent } from "../lib/types";
 
 export function useWebSocket() {
   const wsRef = useRef<WebSocket | null>(null);
@@ -11,52 +17,17 @@ export function useWebSocket() {
   const retriesRef = useRef(0);
   const syncDebounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const syncTimeoutRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const lifecycleGenerationRef = useRef(0);
+  const socketGenerationRef = useRef(0);
+  const status = useAuthStore((state) => state.status);
+  const loggingOut = useAuthStore((state) => state.loggingOut);
   const { showToast } = useToast();
   const showToastRef = useRef(showToast);
   showToastRef.current = showToast;
 
   const store = usePlayerStore;
 
-  const connect = useCallback(() => {
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
-    wsRef.current = ws;
-
-    ws.onopen = () => {
-      store.getState().setConnected(true);
-      retriesRef.current = 0;
-    };
-
-    ws.onmessage = (e) => {
-      try {
-        clearTimeout(syncTimeoutRef.current);
-        const data = JSON.parse(e.data);
-        handleEvent(data);
-      } catch {
-        // ignore malformed messages
-      }
-    };
-
-    ws.onclose = () => {
-      store.getState().setConnected(false);
-      wsRef.current = null;
-      scheduleReconnect();
-    };
-
-    ws.onerror = () => {
-      ws.close();
-    };
-  }, []);
-
-  const scheduleReconnect = useCallback(() => {
-    const delay = Math.min(1000 * 2 ** retriesRef.current, 30000);
-    retriesRef.current++;
-    reconnectTimer.current = setTimeout(connect, delay);
-  }, [connect]);
-
-  const restoreActiveDownloads = (
-    downloads?: import("../lib/types").DownloadStatus[],
-  ) => {
+  const restoreActiveDownloads = (downloads?: DownloadStatus[]) => {
     if (!downloads?.length) return;
     const dlStore = useDownloadStore.getState();
     for (const dl of downloads) {
@@ -262,40 +233,207 @@ export function useWebSocket() {
   }, []);
 
   useEffect(() => {
+    if (status !== "authenticated" || loggingOut) {
+      store.getState().setConnected(false);
+      return;
+    }
+
+    const lifecycleGeneration = ++lifecycleGenerationRef.current;
+    let disposed = false;
+    let connectInFlight: Promise<void> | null = null;
+    let authRecoveryInFlight: Promise<AuthStatus> | null = null;
+
+    const lifecycleIsCurrent = () =>
+      !disposed &&
+      lifecycleGenerationRef.current === lifecycleGeneration &&
+      useAuthStore.getState().status === "authenticated" &&
+      !useAuthStore.getState().loggingOut;
+
+    const socketIsCurrent = (socket: WebSocket, socketGeneration: number) =>
+      lifecycleIsCurrent() &&
+      socketGenerationRef.current === socketGeneration &&
+      wsRef.current === socket;
+
+    const scheduleReconnect = () => {
+      if (!lifecycleIsCurrent()) return;
+
+      clearTimeout(reconnectTimer.current);
+      const scheduledLifecycle = lifecycleGeneration;
+      const delay = Math.min(1000 * 2 ** retriesRef.current, 30000);
+      retriesRef.current += 1;
+      reconnectTimer.current = setTimeout(() => {
+        reconnectTimer.current = undefined;
+        if (
+          !lifecycleIsCurrent() ||
+          lifecycleGenerationRef.current !== scheduledLifecycle
+        ) {
+          return;
+        }
+        void connect();
+      }, delay);
+    };
+
+    const reconnectAfterAuthenticationCheck = async (
+      closedSocketGeneration: number,
+    ) => {
+      const operation = recoverAuthentication();
+      authRecoveryInFlight = operation;
+
+      try {
+        const authStatus = await operation;
+        if (
+          !lifecycleIsCurrent() ||
+          socketGenerationRef.current !== closedSocketGeneration
+        ) {
+          return;
+        }
+        if (authStatus === "authenticated") {
+          scheduleReconnect();
+        }
+      } finally {
+        if (authRecoveryInFlight === operation) {
+          authRecoveryInFlight = null;
+        }
+      }
+    };
+
+    const connect = (): Promise<void> => {
+      if (connectInFlight) return connectInFlight;
+
+      const operation = (async () => {
+        if (authRecoveryInFlight) {
+          await authRecoveryInFlight;
+          return;
+        }
+        await waitForPendingRefresh();
+        if (!lifecycleIsCurrent()) return;
+
+        const currentSocket = wsRef.current;
+        if (
+          currentSocket &&
+          (currentSocket.readyState === WebSocket.CONNECTING ||
+            currentSocket.readyState === WebSocket.OPEN)
+        ) {
+          return;
+        }
+
+        const protocol =
+          window.location.protocol === "https:" ? "wss:" : "ws:";
+        const socket = new WebSocket(
+          `${protocol}//${window.location.host}/ws`,
+        );
+        const socketGeneration = ++socketGenerationRef.current;
+        let opened = false;
+        wsRef.current = socket;
+
+        socket.onopen = () => {
+          if (!socketIsCurrent(socket, socketGeneration)) return;
+          opened = true;
+          store.getState().setConnected(true);
+          retriesRef.current = 0;
+        };
+
+        socket.onmessage = (event) => {
+          if (!socketIsCurrent(socket, socketGeneration)) return;
+          try {
+            clearTimeout(syncTimeoutRef.current);
+            const data = JSON.parse(event.data);
+            handleEvent(data);
+          } catch {
+            // Ignore malformed messages.
+          }
+        };
+
+        socket.onerror = () => {
+          if (!socketIsCurrent(socket, socketGeneration)) return;
+          socket.close();
+        };
+
+        socket.onclose = (event) => {
+          if (!socketIsCurrent(socket, socketGeneration)) return;
+
+          store.getState().setConnected(false);
+          wsRef.current = null;
+          clearTimeout(syncTimeoutRef.current);
+
+          if (!lifecycleIsCurrent()) return;
+
+          if (event.code === 4001 || event.code === 1006 || !opened) {
+            void reconnectAfterAuthenticationCheck(socketGeneration);
+            return;
+          }
+
+          scheduleReconnect();
+        };
+      })();
+
+      connectInFlight = operation;
+      void operation.finally(() => {
+        if (connectInFlight === operation) {
+          connectInFlight = null;
+        }
+      });
+      return operation;
+    };
+
     const handleVisibilityChange = () => {
-      if (document.visibilityState !== "visible") return;
+      if (document.visibilityState !== "visible" || !lifecycleIsCurrent()) {
+        return;
+      }
 
       clearTimeout(syncDebounceRef.current);
+      const scheduledLifecycle = lifecycleGeneration;
       syncDebounceRef.current = setTimeout(() => {
-        const ws = wsRef.current;
+        syncDebounceRef.current = undefined;
+        if (
+          !lifecycleIsCurrent() ||
+          lifecycleGenerationRef.current !== scheduledLifecycle
+        ) {
+          return;
+        }
 
-        if (ws && ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({ action: "sync" }));
+        const socket = wsRef.current;
+        if (socket?.readyState === WebSocket.OPEN) {
+          const socketGeneration = socketGenerationRef.current;
+          socket.send(JSON.stringify({ action: "sync" }));
 
-          // Zombie WS detection: reconnect if no response within 5s
           clearTimeout(syncTimeoutRef.current);
           syncTimeoutRef.current = setTimeout(() => {
-            wsRef.current?.close();
+            syncTimeoutRef.current = undefined;
+            if (socketIsCurrent(socket, socketGeneration)) {
+              socket.close();
+            }
           }, 5000);
-        } else if (!ws || ws.readyState === WebSocket.CLOSED) {
+        } else if (!socket || socket.readyState === WebSocket.CLOSED) {
           retriesRef.current = 0;
-          if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
-          connect();
+          clearTimeout(reconnectTimer.current);
+          reconnectTimer.current = undefined;
+          void connect();
         }
-        // CONNECTING state: do nothing, wait for handshake
       }, 250);
     };
 
     document.addEventListener("visibilitychange", handleVisibilityChange);
-    connect();
+    void connect();
+
     return () => {
+      disposed = true;
+      ++lifecycleGenerationRef.current;
+      ++socketGenerationRef.current;
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       clearTimeout(syncDebounceRef.current);
       clearTimeout(syncTimeoutRef.current);
       clearTimeout(reconnectTimer.current);
-      wsRef.current?.close();
+      syncDebounceRef.current = undefined;
+      syncTimeoutRef.current = undefined;
+      reconnectTimer.current = undefined;
+
+      const socket = wsRef.current;
+      wsRef.current = null;
+      socket?.close();
+      store.getState().setConnected(false);
     };
-  }, [connect]);
+  }, [loggingOut, status]);
 
   return { send };
 }

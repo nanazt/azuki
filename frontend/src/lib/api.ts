@@ -1,3 +1,4 @@
+import { recoverAuthentication } from "../stores/authStore";
 import type {
   ArtistStat,
   CursorResponse,
@@ -14,29 +15,63 @@ const headers = (): HeadersInit => ({
   "X-Requested-With": "XMLHttpRequest",
 });
 
+export class ApiError extends Error {
+  readonly status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
+
+async function readApiError(response: Response): Promise<ApiError> {
+  const body = await response
+    .json()
+    .catch(() => ({ error: response.statusText }));
+  const message =
+    typeof body?.error === "string" && body.error
+      ? body.error
+      : response.statusText || "Request failed";
+  return new ApiError(message, response.status);
+}
+
+async function parseResponse<T>(response: Response): Promise<T> {
+  if (!response.ok) {
+    const error = await readApiError(response);
+    if (response.status === 401) {
+      await recoverAuthentication();
+    }
+    throw error;
+  }
+  if (response.status === 204) return undefined as T;
+  return response.json();
+}
+
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, {
+  const response = await fetch(url, {
     credentials: "include",
     ...init,
     headers: { ...headers(), ...init?.headers },
   });
-  if (res.status === 401) {
-    const path = window.location.pathname;
-    if (!path.startsWith("/login") && !path.startsWith("/auth")) {
-      window.location.href = "/login";
-    }
-    throw new Error("unauthorized");
-  }
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(body.error || res.statusText);
-  }
-  if (res.status === 204) return undefined as T;
-  return res.json();
+  return parseResponse<T>(response);
 }
 
-function get<T>(url: string) {
-  return request<T>(url);
+async function multipartRequest<T>(
+  url: string,
+  formData: FormData,
+): Promise<T> {
+  const response = await fetch(url, {
+    method: "POST",
+    body: formData,
+    credentials: "include",
+    headers: { "X-Requested-With": "XMLHttpRequest" },
+  });
+  return parseResponse<T>(response);
+}
+
+function get<T>(url: string, init?: RequestInit) {
+  return request<T>(url, init);
 }
 
 function post<T>(url: string, body?: unknown) {
@@ -129,15 +164,6 @@ export const api = {
       "/api/admin/ytdlp/update",
     ),
 
-  // Me
-  getMe: () =>
-    get<{
-      id: string;
-      username: string;
-      avatar_url: string | null;
-      is_admin: boolean;
-    }>("/api/me"),
-  deleteTrack: (trackId: string) => del<void>(`/api/tracks/${trackId}`),
 
   // Preferences
   getPreferences: () =>
@@ -151,27 +177,11 @@ export const api = {
     put<{ default_volume: number }>("/api/settings/bot", settings),
 
   // Uploads
-  uploadFile: async (file: File) => {
+  deleteTrack: (trackId: string) => del<void>(`/api/tracks/${trackId}`),
+  uploadFile: (file: File) => {
     const formData = new FormData();
     formData.append("file", file);
-    const res = await fetch("/api/upload", {
-      method: "POST",
-      body: formData,
-      credentials: "include",
-      headers: { "X-Requested-With": "XMLHttpRequest" },
-    });
-    if (res.status === 401) {
-      const path = window.location.pathname;
-      if (!path.startsWith("/login") && !path.startsWith("/auth")) {
-        window.location.href = "/login";
-      }
-      throw new Error("unauthorized");
-    }
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({ error: res.statusText }));
-      throw new Error(body.error || res.statusText);
-    }
-    return res.json() as Promise<UploadResponse>;
+    return multipartRequest<UploadResponse>("/api/upload", formData);
   },
   getUploads: (cursor?: string, limit = 20) => {
     const params = new URLSearchParams({ limit: String(limit) });
@@ -183,8 +193,6 @@ export const api = {
   fetchOEmbed: (url: string) =>
     get<OEmbedResponse>(`/api/oembed?url=${encodeURIComponent(url)}`),
 
-  // Auth
-  logout: () => post<void>("/auth/logout"),
 
   // Admin - YouTube
   getYoutubeInfo: () =>

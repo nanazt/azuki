@@ -30,10 +30,20 @@ docker push "${IMAGE}:${TAG}"
 
 echo "==> Deploying to ${REMOTE}"
 cat docker-compose.yml | ssh "${REMOTE}" \
-  "cd ${REMOTE_DIR} && AZUKI_IMAGE=${IMAGE}:${TAG} docker compose --project-name azuki -f - --env-file .env up -d --pull always"
+  "set -e; cd ${REMOTE_DIR}; \
+   docker pull ${IMAGE}:${TAG}; \
+   if docker container inspect azuki >/dev/null 2>&1; then \
+     if test \"\$(docker container inspect --format '{{.State.Running}}' azuki)\" = true; then \
+       docker stop --time 30 azuki; \
+     fi; \
+     test \"\$(docker container inspect --format '{{.State.Running}}' azuki)\" = false; \
+   fi; \
+   AZUKI_IMAGE=${IMAGE}:${TAG} docker compose --project-name azuki -f - --env-file .env up -d --pull never"
 
 # Post-deploy health check
 sleep 3
 ssh "${REMOTE}" "docker ps --filter name=azuki --format '{{.Status}}'" | grep -q "Up" \
   && echo "==> Deploy complete!" \
   || echo "==> WARNING: container may not be running, check logs"
+
+echo "==> After an authentication-format upgrade, existing dashboard tabs must reload and sign in again."

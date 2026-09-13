@@ -20,6 +20,7 @@ use azuki_web::{DownloadRequest, WebState, build_router};
 
 pub struct TestApp {
     pub router: axum::Router,
+    pub state: WebState,
     pub db: SqlitePool,
     pub jwt_secret: String,
     pub media_dir_path: PathBuf,
@@ -71,6 +72,8 @@ async fn build_state(guild_id: u64, discord_api_base: &str) -> BuildParts {
         voice_channels: Arc::new(RwLock::new(Vec::new())),
         text_channels: Arc::new(RwLock::new(Vec::new())),
         web_tx,
+        auth_revocations: broadcast::channel(128).0,
+        web_shutdown: tokio_util::sync::CancellationToken::new(),
         active_downloads: Arc::new(DashMap::new()),
         download_tx,
         history_channel_id: Arc::new(AtomicU64::new(0)),
@@ -97,9 +100,10 @@ async fn build_state(guild_id: u64, discord_api_base: &str) -> BuildParts {
 impl TestApp {
     pub async fn new() -> Self {
         let parts = build_state(0, "").await;
-        let router = build_router(parts.state);
+        let router = build_router(parts.state.clone());
         Self {
             router,
+            state: parts.state,
             db: parts.db,
             jwt_secret: parts.jwt_secret,
             media_dir_path: parts.media_dir_path,
@@ -111,9 +115,10 @@ impl TestApp {
 
     pub async fn with_guild(guild_id: u64, discord_api_base: &str) -> Self {
         let parts = build_state(guild_id, discord_api_base).await;
-        let router = build_router(parts.state);
+        let router = build_router(parts.state.clone());
         Self {
             router,
+            state: parts.state,
             db: parts.db,
             jwt_secret: parts.jwt_secret,
             media_dir_path: parts.media_dir_path,

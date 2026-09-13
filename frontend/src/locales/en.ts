@@ -68,6 +68,7 @@ export const en: Translations = {
     account: "Account",
     discordConnected: "Connected to Discord",
     logOut: "Log out",
+    logoutFailed: "Global logout failed. Please try again.",
     appearance: "Appearance",
     theme: "Theme",
     dark: "Dark",
@@ -171,6 +172,16 @@ export const en: Translations = {
     serverMembersOnly: "Only server members can log in",
     notMemberError:
       "Only server members can log in. Please join the server first.",
+  },
+
+  auth: {
+    checkFailedTitle: "Could not verify your login",
+    checkFailedMessage:
+      "The server could not be reached. Your login has been kept so you can try again.",
+    forbiddenTitle: "Server access was denied",
+    forbiddenMessage:
+      "Check your server membership and try again. You have not been logged out automatically.",
+    retry: "Check again",
   },
 
   history: {

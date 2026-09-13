@@ -3,7 +3,7 @@ use axum::extract::State;
 use axum_extra::extract::CookieJar;
 use serde::{Deserialize, Serialize};
 
-use crate::auth::extract_user_id;
+use crate::auth::{extract_user_id, extract_verified_auth};
 use crate::{ApiError, WebState};
 
 #[derive(Serialize)]
@@ -69,20 +69,27 @@ pub struct MeResponse {
     pub username: String,
     pub avatar_url: Option<String>,
     pub is_admin: bool,
+    pub expires_at: i64,
+    pub absolute_expires_at: i64,
 }
 
 async fn get_me(
     State(state): State<WebState>,
     jar: CookieJar,
 ) -> Result<Json<MeResponse>, ApiError> {
-    let user_id = extract_user_id(&jar, &state).await?;
-    let user = azuki_db::queries::users::get_user(&state.db, &user_id).await?;
+    let authenticated = extract_verified_auth(&jar, &state).await?;
+    let absolute_expires_at = authenticated
+        .claims
+        .absolute_expires_at()
+        .ok_or(ApiError::Unauthorized)?;
 
     Ok(Json(MeResponse {
-        id: user.id,
-        username: user.username,
-        avatar_url: user.avatar_url,
-        is_admin: user.is_admin,
+        id: authenticated.user.id,
+        username: authenticated.user.username,
+        avatar_url: authenticated.user.avatar_url,
+        is_admin: authenticated.user.is_admin,
+        expires_at: authenticated.claims.exp,
+        absolute_expires_at,
     }))
 }
 

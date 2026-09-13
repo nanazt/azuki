@@ -12,29 +12,6 @@ interface Props {
   onClose: () => void;
 }
 
-function uploadViaFilePicker(file: File): Promise<UploadResponse> {
-  const formData = new FormData();
-  formData.append("file", file);
-  return fetch("/api/upload", {
-    method: "POST",
-    body: formData,
-    credentials: "include",
-    headers: { "X-Requested-With": "XMLHttpRequest" },
-  }).then(async (res) => {
-    if (res.status === 401) {
-      const path = window.location.pathname;
-      if (!path.startsWith("/login") && !path.startsWith("/auth")) {
-        window.location.href = "/login";
-      }
-      throw new Error("unauthorized");
-    }
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({ error: res.statusText }));
-      throw new Error(body.error || res.statusText);
-    }
-    return res.json();
-  });
-}
 
 export function UploadMetadataModal({ file, onClose }: Props) {
   useLocale();
@@ -121,7 +98,7 @@ export function UploadMetadataModal({ file, onClose }: Props) {
       setUploading(true);
       setUploadFailed(false);
 
-      uploadViaFilePicker(selected).then(
+      api.uploadFile(selected).then(
         (result) => handleUploadSuccess(result),
         (err) => {
           console.error("Retry upload failed:", err);

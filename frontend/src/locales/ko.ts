@@ -66,6 +66,7 @@ export const ko = {
     account: "계정",
     discordConnected: "Discord에 연결됐어요",
     logOut: "로그아웃",
+    logoutFailed: "전체 로그아웃에 실패했어요. 잠시 후 다시 시도해 주세요.",
     appearance: "외관",
     theme: "테마",
     dark: "다크",
@@ -168,6 +169,16 @@ export const ko = {
     serverMembersOnly: "서버 멤버만 로그인할 수 있어요",
     notMemberError:
       "서버 멤버만 로그인할 수 있어요. 서버에 먼저 참가해 주세요.",
+  },
+
+  auth: {
+    checkFailedTitle: "로그인 상태를 확인하지 못했어요",
+    checkFailedMessage:
+      "서버에 연결할 수 없어요. 로그인 상태를 유지한 채 다시 확인할 수 있어요.",
+    forbiddenTitle: "서버 접근이 거부됐어요",
+    forbiddenMessage:
+      "서버 멤버십을 확인한 뒤 다시 시도해 주세요. 자동으로 로그아웃되지 않았어요.",
+    retry: "다시 확인해요",
   },
 
   history: {

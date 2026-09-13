@@ -70,6 +70,22 @@ async fn callback_allows_guild_member() {
     assert_eq!(resp.status(), StatusCode::TEMPORARY_REDIRECT);
     assert_eq!(extract_location(&resp), "/");
     assert!(has_cookie(&resp, "azuki_token"));
+    let auth_cookie = resp
+        .headers()
+        .get_all("set-cookie")
+        .iter()
+        .map(|value| value.to_str().unwrap())
+        .find(|value| value.starts_with("azuki_token="))
+        .unwrap();
+    assert!(auth_cookie.contains("Max-Age=604800"));
+    let token = auth_cookie
+        .strip_prefix("azuki_token=")
+        .unwrap()
+        .split(';')
+        .next()
+        .unwrap();
+    let claims = azuki_web::auth::verify_jwt(token, &app.jwt_secret).unwrap();
+    assert_eq!(claims.exp - claims.session_started_at, 604800);
 }
 
 // #10: callback rejects non-member
@@ -127,9 +143,9 @@ async fn callback_does_not_upsert_non_member() {
     assert!(user.is_none());
 }
 
-// #13: extract_verified_user rejects non-member after cache removal
+// #13: protected routes reject a non-member after cache removal
 #[tokio::test]
-async fn extract_verified_user_rejects_non_member() {
+async fn protected_route_rejects_non_member() {
     let app = TestApp::with_guild(99999, "").await;
 
     // Create user and add to cache
@@ -145,14 +161,13 @@ async fn extract_verified_user_rejects_non_member() {
     app.guild_member_cache
         .set_members(vec!["other_user".to_string()]);
 
-    // Should now return 401 (extract_user_id maps all ApiErrors to UNAUTHORIZED)
     let resp = send(&app.router, get("/api/queue", &cookie)).await;
-    assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(resp.status(), StatusCode::FORBIDDEN);
 }
 
-// #14: extract_verified_user allows member
+// #14: protected routes allow a member
 #[tokio::test]
-async fn extract_verified_user_allows_member() {
+async fn protected_route_allows_member() {
     let app = TestApp::with_guild(99999, "").await;
     let cookie = create_test_user(&app, "user1", "testuser", false).await;
     app.guild_member_cache
@@ -162,9 +177,9 @@ async fn extract_verified_user_allows_member() {
     assert_eq!(resp.status(), StatusCode::OK);
 }
 
-// #14b: extract_verified_user fail-open when cache is empty
+// #14b: protected routes fail open when the cache is empty
 #[tokio::test]
-async fn extract_verified_user_fail_open_empty_cache() {
+async fn protected_route_fails_open_with_empty_cache() {
     let app = TestApp::with_guild(99999, "").await;
     let cookie = create_test_user(&app, "user1", "testuser", false).await;
     // Cache is empty (no set_members call) -> fail-open -> 200

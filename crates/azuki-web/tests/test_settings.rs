@@ -9,12 +9,24 @@ use common::*;
 async fn get_me() {
     let app = TestApp::new().await;
     let cookie = create_test_user(&app, "user1", "testuser", false).await;
+    let claims = azuki_web::auth::verify_jwt(
+        cookie.strip_prefix("azuki_token=").unwrap(),
+        &app.jwt_secret,
+    )
+    .unwrap();
     let resp = send(&app.router, get("/api/me", &cookie)).await;
     assert_eq!(resp.status(), StatusCode::OK);
+    assert_eq!(resp.headers()["cache-control"], "no-store");
     let json = body_json(resp).await;
     assert_eq!(json["id"], "user1");
     assert_eq!(json["username"], "testuser");
-    assert!(json.get("is_admin").is_some());
+    assert_eq!(json["avatar_url"], serde_json::Value::Null);
+    assert_eq!(json["is_admin"], false);
+    assert_eq!(json["expires_at"], claims.exp);
+    assert_eq!(
+        json["absolute_expires_at"],
+        claims.absolute_expires_at().unwrap()
+    );
 }
 
 #[tokio::test]

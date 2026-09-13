@@ -4,6 +4,7 @@ pub mod guild;
 pub mod routes;
 pub mod ws;
 
+use std::future::IntoFuture;
 use std::net::SocketAddr;
 use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, RwLock};
@@ -51,6 +52,8 @@ pub struct WebState {
     pub voice_channels: Arc<RwLock<Vec<(u64, String)>>>,
     pub text_channels: Arc<RwLock<Vec<(u64, String)>>>,
     pub web_tx: broadcast::Sender<WebSeqEvent>,
+    pub auth_revocations: broadcast::Sender<auth::AuthRevocation>,
+    pub web_shutdown: CancellationToken,
     pub active_downloads: Arc<DashMap<String, DownloadStatus>>,
     pub download_tx: mpsc::Sender<DownloadRequest>,
     pub history_channel_id: Arc<AtomicU64>,
@@ -114,7 +117,7 @@ impl IntoResponse for ApiError {
     }
 }
 
-async fn csrf_check(req: Request, next: Next) -> Result<axum::response::Response, StatusCode> {
+async fn csrf_check(req: Request, next: Next) -> Result<axum::response::Response, ApiError> {
     let dominated = matches!(
         *req.method(),
         Method::POST | Method::PUT | Method::DELETE | Method::PATCH
@@ -126,10 +129,25 @@ async fn csrf_check(req: Request, next: Next) -> Result<axum::response::Response
             .and_then(|v| v.to_str().ok())
             == Some("XMLHttpRequest");
         if !has_header {
-            return Err(StatusCode::FORBIDDEN);
+            return Err(ApiError::Forbidden);
         }
     }
     Ok(next.run(req).await)
+}
+
+async fn auth_no_store(req: Request, next: Next) -> axum::response::Response {
+    let is_auth = matches!(
+        req.uri().path(),
+        "/api/me" | "/api/auth/refresh" | "/auth/logout"
+    );
+    let mut response = next.run(req).await;
+    if is_auth {
+        response.headers_mut().insert(
+            axum::http::header::CACHE_CONTROL,
+            HeaderValue::from_static("no-store"),
+        );
+    }
+    response
 }
 
 pub mod util {
@@ -170,12 +188,14 @@ pub fn build_router(state: WebState) -> axum::Router {
         .merge(routes::admin::admin_routes())
         .merge(routes::preferences::preferences_routes())
         .merge(routes::queues::queue_routes())
+        .route("/api/auth/refresh", axum::routing::post(auth::refresh))
         .layer(middleware::from_fn(csrf_check));
 
     let app = axum::Router::new()
         .merge(auth::auth_routes())
         .merge(api_routes)
         .merge(ws::ws_routes())
+        .layer(middleware::from_fn(auth_no_store))
         .layer(cors)
         .layer(SetResponseHeaderLayer::overriding(
             HeaderName::from_static("x-content-type-options"),
@@ -201,6 +221,7 @@ pub async fn start_web(
     cancel: CancellationToken,
 ) -> anyhow::Result<()> {
     let static_dir = state.static_dir.clone();
+    let web_shutdown = state.web_shutdown.clone();
     let mut app = build_router(state);
 
     // SPA serving: serve static files with fallback to index.html
@@ -219,11 +240,22 @@ pub async fn start_web(
     let listener = tokio::net::TcpListener::bind(addr).await?;
     info!("web server listening on {addr}");
 
-    axum::serve(listener, app)
+    let shutdown = cancel.clone();
+    let server = axum::serve(listener, app)
         .with_graceful_shutdown(async move {
-            cancel.cancelled().await;
+            shutdown.cancelled().await;
+            web_shutdown.cancel();
         })
-        .await?;
+        .into_future();
+    tokio::pin!(server);
+    tokio::select! {
+        result = &mut server => result?,
+        () = cancel.cancelled() => {
+            tokio::time::timeout(std::time::Duration::from_secs(30), &mut server)
+                .await
+                .map_err(|_| anyhow::anyhow!("web server shutdown timed out"))??;
+        }
+    }
 
     Ok(())
 }

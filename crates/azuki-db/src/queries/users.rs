@@ -33,10 +33,20 @@ pub async fn get_user(pool: &SqlitePool, id: &str) -> DbResult<User> {
     .ok_or(DbError::NotFound)
 }
 
-pub async fn increment_token_version(pool: &SqlitePool, id: &str) -> DbResult<()> {
-    sqlx::query("UPDATE users SET token_version = token_version + 1 WHERE id = ?1")
-        .bind(id)
-        .execute(pool)
-        .await?;
-    Ok(())
+pub async fn increment_token_version_if_current(
+    pool: &SqlitePool,
+    id: &str,
+    current_version: i64,
+) -> DbResult<Option<i64>> {
+    sqlx::query_scalar(
+        "UPDATE users
+         SET token_version = token_version + 1
+         WHERE id = ?1 AND token_version = ?2
+         RETURNING token_version",
+    )
+    .bind(id)
+    .bind(current_version)
+    .fetch_optional(pool)
+    .await
+    .map_err(DbError::from)
 }

@@ -324,6 +324,8 @@ async fn run_normal(config: Config, pool: SqlitePool) -> anyhow::Result<()> {
         voice_channels: Arc::clone(&voice_channels),
         text_channels: Arc::clone(&text_channels),
         web_tx: web_tx.clone(),
+        auth_revocations: broadcast::channel(128).0,
+        web_shutdown: cancel.child_token(),
         active_downloads: Arc::clone(&active_downloads),
         download_tx,
         history_channel_id: Arc::clone(&history_channel_id),
@@ -707,6 +709,16 @@ async fn run_normal(config: Config, pool: SqlitePool) -> anyhow::Result<()> {
     info!("azuki started — web on port {}", config.web_port);
 
     // Wait for shutdown signal
+    #[cfg(unix)]
+    {
+        let mut terminate =
+            tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
+        tokio::select! {
+            result = tokio::signal::ctrl_c() => result?,
+            _ = terminate.recv() => {}
+        }
+    }
+    #[cfg(not(unix))]
     tokio::signal::ctrl_c().await?;
     info!("shutting down...");
     cancel.cancel();

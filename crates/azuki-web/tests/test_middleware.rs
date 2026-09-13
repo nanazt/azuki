@@ -25,9 +25,13 @@ async fn expired_jwt_returns_401() {
     let app = TestApp::new().await;
     create_test_user(&app, "user1", "testuser", false).await;
 
-    // Create a JWT with exp in the past
-    let exp_past = chrono::Utc::now().timestamp() - 3600;
-    let claims = serde_json::json!({ "sub": "user1", "exp": exp_past, "tv": 0 });
+    let now = chrono::Utc::now().timestamp();
+    let claims = serde_json::json!({
+        "sub": "user1",
+        "exp": now - 3600,
+        "tv": 0,
+        "session_started_at": now - 7200
+    });
     let header = jsonwebtoken::Header::new(jsonwebtoken::Algorithm::HS256);
     let token = jsonwebtoken::encode(
         &header,
@@ -50,10 +54,11 @@ async fn revoked_token_returns_401() {
     let resp = send(&app.router, get("/api/queue", &cookie)).await;
     assert_eq!(resp.status(), StatusCode::OK);
 
-    // Increment token_version to revoke
-    azuki_db::queries::users::increment_token_version(&app.db, "user1")
-        .await
-        .unwrap();
+    let new_version =
+        azuki_db::queries::users::increment_token_version_if_current(&app.db, "user1", 0)
+            .await
+            .unwrap();
+    assert_eq!(new_version, Some(1));
 
     // Old token should now fail
     let resp = send(&app.router, get("/api/queue", &cookie)).await;
@@ -65,14 +70,12 @@ async fn jwt_without_tv_claim() {
     let app = TestApp::new().await;
     create_test_user(&app, "user1", "testuser", false).await;
 
-    // Increment token_version so user's tv > 0
-    azuki_db::queries::users::increment_token_version(&app.db, "user1")
-        .await
-        .unwrap();
-
-    // Create JWT without tv (defaults to 0 via serde default)
-    let exp = chrono::Utc::now().timestamp() + 3600;
-    let claims = serde_json::json!({ "sub": "user1", "exp": exp });
+    let now = chrono::Utc::now().timestamp();
+    let claims = serde_json::json!({
+        "sub": "user1",
+        "exp": now + 3600,
+        "session_started_at": now
+    });
     let header = jsonwebtoken::Header::new(jsonwebtoken::Algorithm::HS256);
     let token = jsonwebtoken::encode(
         &header,
@@ -83,7 +86,6 @@ async fn jwt_without_tv_claim() {
 
     let req = get("/api/queue", &format!("azuki_token={token}"));
     let resp = send(&app.router, req).await;
-    // tv=0 (default) != user's token_version=1 → 401
     assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
 }
 
@@ -97,10 +99,13 @@ async fn jwt_alg_none_rejected() {
         &base64::engine::general_purpose::URL_SAFE_NO_PAD,
         r#"{"alg":"none","typ":"JWT"}"#,
     );
-    let exp = chrono::Utc::now().timestamp() + 3600;
+    let now = chrono::Utc::now().timestamp();
     let payload = base64::Engine::encode(
         &base64::engine::general_purpose::URL_SAFE_NO_PAD,
-        format!(r#"{{"sub":"user1","exp":{exp},"tv":0}}"#),
+        format!(
+            r#"{{"sub":"user1","exp":{},"tv":0,"session_started_at":{now}}}"#,
+            now + 3600
+        ),
     );
     let token = format!("{header}.{payload}.");
 
@@ -295,12 +300,7 @@ async fn logout_invalidates_token() {
         post_json("/auth/logout", &cookie, serde_json::json!({})),
     )
     .await;
-    // Logout redirects (302)
-    assert!(
-        resp.status() == StatusCode::SEE_OTHER || resp.status() == StatusCode::TEMPORARY_REDIRECT,
-        "expected redirect, got {}",
-        resp.status()
-    );
+    assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 
     // Old token should be invalidated (token_version incremented)
     let resp = send(&app.router, get("/api/queue", &cookie)).await;
