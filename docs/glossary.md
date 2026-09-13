@@ -19,3 +19,8 @@
 **이용 중인 대시보드(Active dashboard)**
 : 해당 브라우저가 화면에 표시되는 상태로 보고하는 azuki 대시보드 탭을 뜻해요.
 클릭이나 키 입력은 필수가 아니며, 다른 탭 뒤에 숨겨진 상태의 자동 통신이나 WebSocket 이벤트 수신과는 구분해요.
+
+**Discord 앱 승인(Discord app authorization)**
+: Discord 웹 페이지 대신 설치된 Discord 앱의 권한 승인 화면에서 azuki의 Discord 계정 접근을 허용하는 것을 뜻해요.
+Discord 앱을 단순히 실행하거나 azuki 봇을 서버에 추가하는 동작과는 구분해요.
+승인 자체와 승인 결과로 azuki 웹의 로그인 상태가 성립하는 것은 별개의 단계예요.

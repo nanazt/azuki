@@ -229,7 +229,7 @@ pub async fn login(State(state): State<WebState>, jar: CookieJar) -> impl IntoRe
         .build();
 
     let url = format!(
-        "https://discord.com/api/oauth2/authorize?client_id={}&redirect_uri={}&response_type=code&scope=identify&state={}",
+        "https://discord.com/oauth2/authorize?client_id={}&redirect_uri={}&response_type=code&scope=identify&state={}",
         state.discord_client_id,
         urlencoding::encode(&state.discord_redirect_uri),
         oauth_state,
