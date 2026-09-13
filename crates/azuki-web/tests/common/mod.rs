@@ -2,7 +2,7 @@
 
 use std::path::PathBuf;
 use std::sync::atomic::AtomicU64;
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Mutex, RwLock};
 
 use axum::body::Body;
 use axum::http::{Method, Request, StatusCode};
@@ -12,6 +12,7 @@ use sqlx::SqlitePool;
 use tokio::sync::{broadcast, mpsc};
 use tower::ServiceExt;
 
+use azuki_bot::{BotControl, BotRuntime};
 use azuki_media::{MediaStore, YtDlp};
 use azuki_player::PlayerController;
 use azuki_web::events::{DownloadStatus, WebSeqEvent};
@@ -27,6 +28,7 @@ pub struct TestApp {
     pub guild_member_cache: Arc<GuildMemberCache>,
     _media_dir: tempfile::TempDir,
     _download_rx: mpsc::Receiver<DownloadRequest>,
+    _bot_runtime: Option<BotRuntime>,
 }
 
 struct BuildParts {
@@ -36,6 +38,7 @@ struct BuildParts {
     media_dir_path: PathBuf,
     media_dir: tempfile::TempDir,
     download_rx: mpsc::Receiver<DownloadRequest>,
+    bot_runtime: BotRuntime,
     guild_member_cache: Arc<GuildMemberCache>,
 }
 
@@ -51,7 +54,9 @@ async fn build_state(guild_id: u64, discord_api_base: &str) -> BuildParts {
     let media_store = Arc::new(MediaStore::new(&media_dir_path, 1).unwrap());
     let youtube: Arc<RwLock<Option<Arc<azuki_media::YouTubeClient>>>> = Arc::new(RwLock::new(None));
 
+    let (bot_control, bot_runtime) = BotControl::new();
     let (web_tx, _) = broadcast::channel::<WebSeqEvent>(64);
+    let web_seq = Arc::new(Mutex::new(0));
     let (download_tx, download_rx) = mpsc::channel::<DownloadRequest>(8);
 
     let jwt_secret = "test-secret".to_string();
@@ -60,6 +65,7 @@ async fn build_state(guild_id: u64, discord_api_base: &str) -> BuildParts {
     let state = WebState {
         db: db.clone(),
         player,
+        bot_control,
         ytdlp,
         media_store,
         youtube,
@@ -72,6 +78,7 @@ async fn build_state(guild_id: u64, discord_api_base: &str) -> BuildParts {
         voice_channels: Arc::new(RwLock::new(Vec::new())),
         text_channels: Arc::new(RwLock::new(Vec::new())),
         web_tx,
+        web_seq,
         auth_revocations: broadcast::channel(128).0,
         web_shutdown: tokio_util::sync::CancellationToken::new(),
         active_downloads: Arc::new(DashMap::new()),
@@ -93,6 +100,7 @@ async fn build_state(guild_id: u64, discord_api_base: &str) -> BuildParts {
         media_dir_path,
         media_dir,
         download_rx,
+        bot_runtime,
         guild_member_cache,
     }
 }
@@ -110,6 +118,7 @@ impl TestApp {
             guild_member_cache: parts.guild_member_cache,
             _media_dir: parts.media_dir,
             _download_rx: parts.download_rx,
+            _bot_runtime: Some(parts.bot_runtime),
         }
     }
 
@@ -125,7 +134,12 @@ impl TestApp {
             guild_member_cache: parts.guild_member_cache,
             _media_dir: parts.media_dir,
             _download_rx: parts.download_rx,
+            _bot_runtime: Some(parts.bot_runtime),
         }
+    }
+
+    pub fn stop_bot_runtime(&mut self) {
+        self._bot_runtime.take();
     }
 }
 

@@ -1,6 +1,8 @@
 import { recoverAuthentication } from "../stores/authStore";
 import type {
   ArtistStat,
+  BotRestartResponse,
+  BotStatus,
   CursorResponse,
   OEmbedResponse,
   QueueEntry,
@@ -17,11 +19,13 @@ const headers = (): HeadersInit => ({
 
 export class ApiError extends Error {
   readonly status: number;
+  readonly data: unknown;
 
-  constructor(message: string, status: number) {
+  constructor(message: string, status: number, data: unknown) {
     super(message);
     this.name = "ApiError";
     this.status = status;
+    this.data = data;
   }
 }
 
@@ -33,7 +37,7 @@ async function readApiError(response: Response): Promise<ApiError> {
     typeof body?.error === "string" && body.error
       ? body.error
       : response.statusText || "Request failed";
-  return new ApiError(message, response.status);
+  return new ApiError(message, response.status, body);
 }
 
 async function parseResponse<T>(response: Response): Promise<T> {
@@ -170,6 +174,10 @@ export const api = {
     get<{ theme: string; locale: string }>("/api/preferences"),
   updatePreferences: (prefs: { theme?: string; locale?: string }) =>
     put<{ theme: string; locale: string }>("/api/preferences", prefs),
+
+  // Bot lifecycle
+  getBotStatus: () => get<BotStatus>("/api/bot/status"),
+  restartBot: () => post<BotRestartResponse>("/api/bot/restart"),
 
   // Bot Settings
   getBotSettings: () => get<{ default_volume: number }>("/api/settings/bot"),

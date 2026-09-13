@@ -1,8 +1,9 @@
+mod recovery;
 mod setup;
 
 use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::AtomicU64;
+use std::sync::{Arc, Mutex};
 
 use anyhow::Context;
 use dashmap::DashMap;
@@ -10,7 +11,7 @@ use rustls::crypto::CryptoProvider;
 use secrecy::{ExposeSecret, SecretString};
 use serenity::all::GuildId;
 use sqlx::SqlitePool;
-use tokio::sync::{Mutex, broadcast, mpsc};
+use tokio::sync::{broadcast, mpsc};
 use tokio_util::sync::CancellationToken;
 use tracing::info;
 
@@ -204,33 +205,30 @@ async fn run_normal(config: Config, pool: SqlitePool) -> anyhow::Result<()> {
             }
         };
 
-    let initial_queue: Vec<azuki_player::QueueEntry> =
-        match azuki_db::queries::queue::load_queue(&pool).await {
-            Ok(entries) => entries.into_iter().map(restore_entry_to_queue).collect(),
-            Err(e) => {
-                tracing::error!("failed to restore queue: {e}");
-                Vec::new()
-            }
-        };
-
-    let initial_loop_mode = match azuki_db::queries::queue::load_loop_mode(&pool)
+    let restored = azuki_db::queries::queue::load_recovery_snapshot(&pool)
         .await
-        .unwrap_or_default()
-        .as_str()
-    {
+        .context("failed to restore playback snapshot")?;
+    let invalid_restore = restored.error.is_some();
+    if let Some(error) = &restored.error {
+        tracing::warn!(%error, "saved playback could not be restored");
+    }
+    let initial_queue: Vec<azuki_player::QueueEntry> = restored
+        .queue
+        .into_iter()
+        .map(&restore_entry_to_queue)
+        .collect();
+    let initial_loop_mode = match restored.loop_mode.as_str() {
         "one" => azuki_player::LoopMode::One,
         "all" => azuki_player::LoopMode::All,
         _ => azuki_player::LoopMode::Off,
     };
-
-    let initial_now_playing: Option<azuki_player::QueueEntry> =
-        match azuki_db::queries::queue::load_now_playing(&pool).await {
-            Ok(entry) => entry.map(&restore_entry_to_queue),
-            Err(e) => {
-                tracing::error!("failed to restore now_playing: {e}");
-                None
-            }
-        };
+    let initial_now_playing = restored
+        .current
+        .map(|current| azuki_player::RestoredPlayback {
+            entry: restore_entry_to_queue(current.entry),
+            position_ms: current.position_ms,
+            paused: current.paused,
+        });
 
     if !initial_queue.is_empty() || initial_now_playing.is_some() {
         info!(
@@ -239,7 +237,7 @@ async fn run_normal(config: Config, pool: SqlitePool) -> anyhow::Result<()> {
             initial_loop_mode,
             initial_now_playing
                 .as_ref()
-                .map_or("none", |e| e.track.title.as_str()),
+                .map_or("none", |e| e.entry.track.title.as_str()),
         );
     }
 
@@ -249,8 +247,20 @@ async fn run_normal(config: Config, pool: SqlitePool) -> anyhow::Result<()> {
         initial_loop_mode,
         initial_now_playing,
     );
+    player.suspend_output().await?;
 
     let cancel = CancellationToken::new();
+    let (bot_control, bot_runtime) = azuki_bot::BotControl::new();
+    let (checkpoint_tx, checkpoint_rx) = mpsc::channel(8);
+    let checkpoint_cancel = CancellationToken::new();
+    let checkpoint_handle = recovery::spawn_checkpoint_writer(
+        pool.clone(),
+        player.clone(),
+        bot_control.clone(),
+        checkpoint_rx,
+        checkpoint_cancel.clone(),
+        invalid_restore,
+    );
 
     // History channel ID cache (shared between bot and web)
     let history_channel_id = azuki_db::config::get_config(&pool, "history_channel_id")
@@ -293,6 +303,32 @@ async fn run_normal(config: Config, pool: SqlitePool) -> anyhow::Result<()> {
 
     // WebEvent broadcast channel
     let (web_tx, _) = broadcast::channel::<azuki_web::events::WebSeqEvent>(128);
+    let seq_counter = Arc::new(Mutex::new(0));
+    let status_handle = tokio::spawn({
+        let mut status_rx = bot_control.subscribe();
+        let status_tx = web_tx.clone();
+        let seq = Arc::clone(&seq_counter);
+        let shutdown = cancel.clone();
+        async move {
+            loop {
+                let status = status_rx.borrow_and_update().clone();
+                azuki_web::events::publish_web_event(
+                    &status_tx,
+                    &seq,
+                    azuki_web::events::WebEvent::BotStatus { status },
+                );
+                tokio::select! {
+                    biased;
+                    () = shutdown.cancelled() => break,
+                    result = status_rx.changed() => {
+                        if result.is_err() {
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    });
     let active_downloads: Arc<DashMap<String, azuki_web::events::DownloadStatus>> =
         Arc::new(DashMap::new());
     let (download_tx, download_rx) = mpsc::channel::<azuki_web::DownloadRequest>(20);
@@ -301,6 +337,8 @@ async fn run_normal(config: Config, pool: SqlitePool) -> anyhow::Result<()> {
     let web_state = azuki_web::WebState {
         db: pool.clone(),
         player: player.clone(),
+        bot_control: bot_control.clone(),
+        web_seq: Arc::clone(&seq_counter),
         ytdlp: ytdlp.clone(),
         media_store: media_store.clone(),
         jwt_secret: config.jwt_secret.expose_secret().to_string(),
@@ -347,10 +385,11 @@ async fn run_normal(config: Config, pool: SqlitePool) -> anyhow::Result<()> {
     // Bot state
     let bot_state = Arc::new(azuki_bot::BotState {
         player: player.clone(),
+        control: bot_control.clone(),
+        checkpoint_tx: checkpoint_tx.clone(),
         ytdlp: ytdlp.clone(),
         db: pool.clone(),
         guild_id: GuildId::new(config.discord_guild_id),
-        songbird: Mutex::new(None),
         youtube: Arc::clone(&youtube),
         voice_channels: Arc::clone(&voice_channels),
         text_channels: Arc::clone(&text_channels),
@@ -366,7 +405,8 @@ async fn run_normal(config: Config, pool: SqlitePool) -> anyhow::Result<()> {
     let bot_token = config.discord_token.expose_secret().to_string();
     let bot_guild_id = config.discord_guild_id;
     let bot_handle = tokio::spawn(async move {
-        if let Err(e) = azuki_bot::start_bot(&bot_token, bot_guild_id, bot_state, bot_cancel).await
+        if let Err(e) =
+            azuki_bot::start_bot(&bot_token, bot_guild_id, bot_state, bot_runtime, bot_cancel).await
         {
             tracing::error!("bot error: {e}");
         }
@@ -424,12 +464,10 @@ async fn run_normal(config: Config, pool: SqlitePool) -> anyhow::Result<()> {
     let bridge_locale = Arc::clone(&bot_locale);
     let mut bridge_history_delete_rx = history_delete_rx;
     let bridge_web_origin = config.web_origin.clone();
-    let seq_counter = Arc::new(AtomicU64::new(0));
     tokio::spawn({
         let seq = Arc::clone(&seq_counter);
         async move {
             let mut player_rx = bridge_player.subscribe();
-
             // Current play_history row ID (set on TrackStarted, cleared on TrackEnded)
             let mut current_history_id: Option<i64> = None;
 
@@ -458,7 +496,7 @@ async fn run_normal(config: Config, pool: SqlitePool) -> anyhow::Result<()> {
                     result = player_rx.recv() => {
                         match result {
                             Ok(player_seq_event) => {
-                                // Record play history, persist now_playing, send embed when a track starts
+                                // Record play history and send the embed for a genuinely new track.
                                 if let azuki_player::PlayerEvent::TrackStarted { ref track, added_by: ref user_info, .. } = player_seq_event.event {
                                     // Ensure user exists in DB (Discord users may not have logged in via web OAuth)
                                     if let Err(e) = azuki_db::queries::users::upsert_user(
@@ -476,17 +514,14 @@ async fn run_normal(config: Config, pool: SqlitePool) -> anyhow::Result<()> {
                                         &user_info.id,
                                         track.volume as i64,
                                     ).await;
-                                    if let Err(e) = azuki_db::queries::queue::save_now_playing(&bridge_db, &track.id, &user_info.id).await {
-                                        tracing::warn!("failed to persist now_playing: {e}");
-                                    }
-                                    let s = seq.fetch_add(1, Ordering::Relaxed) + 1;
-                                    let _ = bridge_web_tx.send(azuki_web::events::WebSeqEvent {
-                                        seq: s,
-                                        event: azuki_web::events::WebEvent::HistoryAdded {
+                                    azuki_web::events::publish_web_event(
+                                        &bridge_web_tx,
+                                        &seq,
+                                        azuki_web::events::WebEvent::HistoryAdded {
                                             track: track.clone(),
                                             user_id: user_info.id.clone(),
                                         },
-                                    });
+                                    );
 
                                     if let Ok(ref history_record) = history_result {
                                         current_history_id = Some(history_record.id);
@@ -612,22 +647,11 @@ async fn run_normal(config: Config, pool: SqlitePool) -> anyhow::Result<()> {
                                     current_history = None;
                                     debounce_delay.as_mut().reset(tokio::time::Instant::now() + std::time::Duration::from_secs(86400));
 
-                                    if let Err(e) = azuki_db::queries::queue::clear_now_playing(&bridge_db).await {
-                                        tracing::warn!("failed to clear now_playing: {e}");
-                                    }
                                 }
 
-                                // Persist queue to DB & clean up stale pending history deletes
+                                // Clean up stale pending history deletes.
                                 if let azuki_player::PlayerEvent::QueueUpdated { ref queue } = player_seq_event.event
                                 {
-                                    let items: Vec<(String, String)> = queue
-                                        .iter()
-                                        .map(|e| (e.track.id.clone(), e.added_by.id.clone()))
-                                        .collect();
-                                    if let Err(e) = azuki_db::queries::queue::save_queue(&bridge_db, &items).await {
-                                        tracing::warn!("failed to persist queue: {e}");
-                                    }
-
                                     // Clean up pending deletes for tracks no longer in queue.
                                     // TrackStarted is always broadcast before QueueUpdated,
                                     // so entries for tracks that just started are already consumed.
@@ -637,24 +661,13 @@ async fn run_normal(config: Config, pool: SqlitePool) -> anyhow::Result<()> {
                                     pending_history_deletes.retain(|track_id, _| queued_ids.contains(track_id.as_str()));
                                 }
 
-                                // Persist loop mode to DB
-                                if let azuki_player::PlayerEvent::LoopModeChanged { mode } = player_seq_event.event {
-                                    let mode_str = match mode {
-                                        azuki_player::LoopMode::Off => "off",
-                                        azuki_player::LoopMode::One => "one",
-                                        azuki_player::LoopMode::All => "all",
-                                    };
-                                    if let Err(e) = azuki_db::queries::queue::save_loop_mode(&bridge_db, mode_str).await {
-                                        tracing::warn!("failed to persist loop mode: {e}");
-                                    }
-                                }
 
                                 let web_event: azuki_web::events::WebEvent = player_seq_event.event.into();
-                                let s = seq.fetch_add(1, Ordering::Relaxed) + 1;
-                                let _ = bridge_web_tx.send(azuki_web::events::WebSeqEvent {
-                                    seq: s,
-                                    event: web_event,
-                                });
+                                azuki_web::events::publish_web_event(
+                                    &bridge_web_tx,
+                                    &seq,
+                                    web_event,
+                                );
                             }
                             Err(broadcast::error::RecvError::Lagged(n)) => {
                                 tracing::warn!("bridge lagged by {n} events");
@@ -695,7 +708,7 @@ async fn run_normal(config: Config, pool: SqlitePool) -> anyhow::Result<()> {
     let dl_youtube = Arc::clone(&youtube);
     let dl_player = player.clone();
     let dl_db = pool.clone();
-    tokio::spawn(download_worker(
+    let download_handle = tokio::spawn(download_worker(
         download_rx,
         dl_web_tx,
         dl_seq,
@@ -722,27 +735,28 @@ async fn run_normal(config: Config, pool: SqlitePool) -> anyhow::Result<()> {
     tokio::signal::ctrl_c().await?;
     info!("shutting down...");
     cancel.cancel();
+    if let Err(error) = player.suspend_output().await {
+        tracing::warn!(%error, "failed to freeze playback before shutdown");
+    }
+    if let Err(error) = recovery::flush_checkpoint(&checkpoint_tx).await {
+        tracing::warn!(%error, "failed to flush playback before shutdown");
+    }
 
-    let _ = tokio::join!(bot_handle, web_handle);
+    let _ = tokio::join!(bot_handle, web_handle, status_handle);
+    download_handle.abort();
+    let _ = download_handle.await;
+    checkpoint_cancel.cancel();
+    let _ = checkpoint_handle.await;
     info!("goodbye!");
 
     Ok(())
-}
-
-fn broadcast_web_event(
-    tx: &broadcast::Sender<azuki_web::events::WebSeqEvent>,
-    seq: &AtomicU64,
-    event: azuki_web::events::WebEvent,
-) {
-    let s = seq.fetch_add(1, Ordering::Relaxed) + 1;
-    let _ = tx.send(azuki_web::events::WebSeqEvent { seq: s, event });
 }
 
 #[allow(clippy::too_many_arguments)]
 async fn download_worker(
     mut rx: mpsc::Receiver<azuki_web::DownloadRequest>,
     web_tx: broadcast::Sender<azuki_web::events::WebSeqEvent>,
-    seq: Arc<AtomicU64>,
+    seq: Arc<Mutex<u64>>,
     active_downloads: Arc<DashMap<String, azuki_web::events::DownloadStatus>>,
     ytdlp: Arc<azuki_media::YtDlp>,
     youtube: Arc<std::sync::RwLock<Option<Arc<azuki_media::YouTubeClient>>>>,
@@ -778,7 +792,7 @@ async fn download_worker(
                 },
             );
 
-            broadcast_web_event(
+            azuki_web::events::publish_web_event(
                 &web_tx,
                 &seq,
                 azuki_web::events::WebEvent::DownloadStarted {
@@ -798,7 +812,7 @@ async fn download_worker(
                 if let Some((vid, client)) = url_meta_pair
                     && let Ok(meta) = client.get_video(&vid).await
                 {
-                    broadcast_web_event(
+                    azuki_web::events::publish_web_event(
                         &web_tx,
                         &seq,
                         azuki_web::events::WebEvent::DownloadMetadataResolved {
@@ -826,7 +840,7 @@ async fn download_worker(
                         Ok((results, _)) => match results.into_iter().next() {
                             Some(meta) => {
                                 // Broadcast resolved metadata from search result
-                                broadcast_web_event(
+                                azuki_web::events::publish_web_event(
                                     &web_tx,
                                     &seq,
                                     azuki_web::events::WebEvent::DownloadMetadataResolved {
@@ -906,7 +920,7 @@ async fn download_worker(
                     .await
                 {
                     active.remove(&download_id);
-                    broadcast_web_event(
+                    azuki_web::events::publish_web_event(
                         &web_tx,
                         &seq,
                         azuki_web::events::WebEvent::DownloadFailed {
@@ -918,7 +932,7 @@ async fn download_worker(
                 }
 
                 active.remove(&download_id);
-                broadcast_web_event(
+                azuki_web::events::publish_web_event(
                     &web_tx,
                     &seq,
                     azuki_web::events::WebEvent::DownloadComplete {
@@ -943,7 +957,7 @@ async fn download_worker(
                         entry.speed_bps = p.speed_bps;
                     }
 
-                    broadcast_web_event(
+                    azuki_web::events::publish_web_event(
                         &progress_web_tx,
                         &progress_seq,
                         azuki_web::events::WebEvent::DownloadProgress {
@@ -1014,7 +1028,7 @@ async fn download_worker(
                         .await
                     {
                         active.remove(&download_id);
-                        broadcast_web_event(
+                        azuki_web::events::publish_web_event(
                             &web_tx,
                             &seq,
                             azuki_web::events::WebEvent::DownloadFailed {
@@ -1026,7 +1040,7 @@ async fn download_worker(
                     }
 
                     active.remove(&download_id);
-                    broadcast_web_event(
+                    azuki_web::events::publish_web_event(
                         &web_tx,
                         &seq,
                         azuki_web::events::WebEvent::DownloadComplete {
@@ -1045,13 +1059,13 @@ async fn download_worker(
 
 fn finish_download_failed(
     web_tx: &broadcast::Sender<azuki_web::events::WebSeqEvent>,
-    seq: &AtomicU64,
+    seq: &Mutex<u64>,
     active: &DashMap<String, azuki_web::events::DownloadStatus>,
     download_id: &str,
     error: &str,
 ) {
     active.remove(download_id);
-    broadcast_web_event(
+    azuki_web::events::publish_web_event(
         web_tx,
         seq,
         azuki_web::events::WebEvent::DownloadFailed {

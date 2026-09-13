@@ -1,6 +1,7 @@
 import { useEffect, useRef, useCallback } from "react";
 import { usePlayerStore } from "../stores/playerStore";
 import { useDownloadStore } from "../stores/downloadStore";
+import { useBotStore } from "../stores/botStore";
 import {
   recoverAuthentication,
   useAuthStore,
@@ -9,7 +10,34 @@ import {
 import type { AuthStatus } from "../stores/authStore";
 import { useToast } from "./useToast";
 import { t } from "./useLocale";
-import type { DownloadStatus, SeqEvent } from "../lib/types";
+import type { DownloadStatus, SeqEvent, WebEvent } from "../lib/types";
+
+function isSnapshotCoveredEvent(
+  event: Exclude<WebEvent, { type: "bot_status" }>,
+) {
+  switch (event.type) {
+    case "track_started":
+    case "track_ended":
+    case "track_loading":
+    case "track_error":
+    case "paused":
+    case "resumed":
+    case "output_suspended":
+    case "output_resumed":
+    case "seeked":
+    case "volume_changed":
+    case "queue_updated":
+    case "loop_mode_changed":
+    case "listeners_updated":
+    case "download_started":
+    case "download_metadata_resolved":
+    case "download_progress":
+      // Terminal download events remain live because snapshots list only active downloads.
+      return true;
+    default:
+      return false;
+  }
+}
 
 export function useWebSocket() {
   const wsRef = useRef<WebSocket | null>(null);
@@ -56,36 +84,49 @@ export function useWebSocket() {
   };
 
   const handleEvent = (
-    data: SeqEvent | { event: { type: "state_snapshot" } },
+    data: SeqEvent | WebEvent,
+    socketGeneration: number,
   ) => {
+    const event = "event" in data ? data.event : data;
+    if (event.type === "bot_status") {
+      useBotStore
+        .getState()
+        .applyWebSocketStatus(event.status, socketGeneration);
+      return;
+    }
+
     const state = store.getState();
 
-    // Initial snapshot (no seq wrapper)
-    if ("type" in data && (data as any).type === "state_snapshot") {
-      const snap = data as any;
-      state.applySnapshot(snap.state ?? snap, 0);
-      restoreActiveDownloads(snap.active_downloads);
+    // Initial snapshots define a new stream baseline on each connection.
+    if (!("event" in data) && event.type === "state_snapshot") {
+      state.setLiveEventSeq(0);
+      state.applySnapshot(event.state, 0);
+      restoreActiveDownloads(
+        event.active_downloads ?? event.state.active_downloads,
+      );
       return;
     }
 
     const seqEvent = data as SeqEvent;
-    if (
-      seqEvent.seq != null &&
-      seqEvent.seq > 0 &&
-      seqEvent.seq <= state.lastSeq
-    )
-      return;
-    if (seqEvent.seq != null && seqEvent.seq > 0)
-      state.setLastSeq(seqEvent.seq);
+    const seq = seqEvent.seq;
+    const ev = event as Exclude<WebEvent, { type: "bot_status" }>;
 
-    const event = seqEvent.event ?? data;
-    const ev = event as any;
+    // A sync snapshot is authoritative player state, not a consumed live event.
+    if (ev.type === "state_snapshot") {
+      if (seq <= state.snapshotSeq) return;
+      state.applySnapshot(ev.state, seq);
+      restoreActiveDownloads(ev.active_downloads);
+      return;
+    }
+
+    if (seq > 0 && seq <= state.liveEventSeq) return;
+    if (seq > 0) state.setLiveEventSeq(seq);
+
+    if (seq > 0 && seq <= state.snapshotSeq && isSnapshotCoveredEvent(ev)) {
+      return;
+    }
 
     switch (ev.type) {
-      case "state_snapshot":
-        state.applySnapshot(ev.state, seqEvent.seq);
-        restoreActiveDownloads(ev.active_downloads);
-        break;
       case "track_started":
         state.setPlayState({
           status: ev.paused ? "paused" : "playing",
@@ -151,6 +192,12 @@ export function useWebSocket() {
             position_ms: ev.position_ms,
           });
         }
+        break;
+      case "output_suspended":
+        state.setOutputSuspended(true, ev.position_ms);
+        break;
+      case "output_resumed":
+        state.setOutputSuspended(false, ev.position_ms);
         break;
       case "volume_changed":
         state.setVolume(ev.volume);
@@ -329,6 +376,7 @@ export function useWebSocket() {
         socket.onopen = () => {
           if (!socketIsCurrent(socket, socketGeneration)) return;
           opened = true;
+          useBotStore.getState().beginConnection(socketGeneration);
           store.getState().setConnected(true);
           retriesRef.current = 0;
         };
@@ -338,7 +386,7 @@ export function useWebSocket() {
           try {
             clearTimeout(syncTimeoutRef.current);
             const data = JSON.parse(event.data);
-            handleEvent(data);
+            handleEvent(data, socketGeneration);
           } catch {
             // Ignore malformed messages.
           }
@@ -353,6 +401,7 @@ export function useWebSocket() {
           if (!socketIsCurrent(socket, socketGeneration)) return;
 
           store.getState().setConnected(false);
+          useBotStore.getState().endConnection(socketGeneration);
           wsRef.current = null;
           clearTimeout(syncTimeoutRef.current);
 
@@ -417,6 +466,8 @@ export function useWebSocket() {
     void connect();
 
     return () => {
+      const socket = wsRef.current;
+      const socketGeneration = socketGenerationRef.current;
       disposed = true;
       ++lifecycleGenerationRef.current;
       ++socketGenerationRef.current;
@@ -428,7 +479,7 @@ export function useWebSocket() {
       syncTimeoutRef.current = undefined;
       reconnectTimer.current = undefined;
 
-      const socket = wsRef.current;
+      useBotStore.getState().endConnection(socketGeneration);
       wsRef.current = null;
       socket?.close();
       store.getState().setConnected(false);

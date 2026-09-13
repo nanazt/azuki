@@ -45,6 +45,14 @@ pub struct Messages {
     pub volume_label: &'static str,
     // web link
     pub web_link: &'static str,
+    // bot restart
+    pub restart_acknowledged: &'static str,
+    pub restart_accepted: &'static str,
+    pub restart_already_in_progress: &'static str,
+    pub restart_cooldown: &'static str,
+    pub restart_seconds: &'static str,
+    pub restart_unavailable: &'static str,
+    pub restart_wrong_guild: &'static str,
 }
 
 pub static KO: Messages = Messages {
@@ -83,6 +91,13 @@ pub static KO: Messages = Messages {
     paused_at: "일시정지 중",
     volume_label: "볼륨",
     web_link: "", // 🌐 웹에서 열기
+    restart_acknowledged: "Discord 봇 재시작 요청을 확인하고 있어요.",
+    restart_accepted: "Discord 봇 재시작 요청을 접수했어요. 재연결 완료까지 시간이 걸릴 수 있어요.",
+    restart_already_in_progress: "이미 Discord 봇을 재시작하고 있어요.",
+    restart_cooldown: "Discord 봇을 다시 재시작하려면",
+    restart_seconds: "초 기다려야 해요.",
+    restart_unavailable: "지금은 Discord 봇 재시작 요청을 받을 수 없어요. 봇이 오프라인이면 웹 설정에서 다시 시도할 수 있어요.",
+    restart_wrong_guild: "이 서버에서는 Discord 봇 재시작을 요청할 수 없어요.",
 };
 
 pub static EN: Messages = Messages {
@@ -121,6 +136,13 @@ pub static EN: Messages = Messages {
     paused_at: "paused at",
     volume_label: "Volume",
     web_link: "", // 🌐 Open in browser
+    restart_acknowledged: "Checking the Discord bot restart request.",
+    restart_accepted: "The Discord bot restart request was accepted. Reconnection may take some time.",
+    restart_already_in_progress: "The Discord bot is already restarting.",
+    restart_cooldown: "The Discord bot can be restarted again in",
+    restart_seconds: " seconds.",
+    restart_unavailable: "The Discord bot cannot accept a restart request right now. If the bot is offline, retry from web settings.",
+    restart_wrong_guild: "The Discord bot cannot be restarted from this server.",
 };
 
 /// 0 = ko (default), 1 = en

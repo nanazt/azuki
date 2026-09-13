@@ -167,6 +167,7 @@ pub async fn voice_channel_set(
     azuki_db::config::save_config(&state.db, &[("default_voice_channel_id", &body.channel_id)])
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
+    state.bot_control.voice_config_changed();
 
     Ok(Json(serde_json::json!({ "success": true })))
 }

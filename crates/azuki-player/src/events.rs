@@ -55,6 +55,8 @@ pub struct PlayerSnapshot {
     pub loop_mode: LoopMode,
     pub listeners: Vec<UserInfo>,
     pub current_added_by: Option<UserInfo>,
+    pub playback_suspended: bool,
+    pub playback_revision: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -103,6 +105,12 @@ pub enum PlayerEvent {
     Seeked {
         position_ms: u64,
         paused: bool,
+    },
+    OutputSuspended {
+        position_ms: u64,
+    },
+    OutputResumed {
+        position_ms: u64,
     },
     VolumeChanged {
         volume: u8,

@@ -1,10 +1,12 @@
 import { useEffect, useState, useRef } from "react";
-import { api } from "../lib/api";
+import { ApiError, api } from "../lib/api";
 import { useAuthStore } from "../stores/authStore";
+import { useBotStore } from "../stores/botStore";
 import { useTheme } from "../hooks/useTheme";
 import { useToast } from "../hooks/useToast";
 import { useLocale, setLocale, t } from "../hooks/useLocale";
 import type { Locale } from "../locales";
+import type { BotRestartCooldownResponse, BotStatus } from "../lib/types";
 import { Skeleton } from "../components/ui/Skeleton";
 import { Slider } from "../components/ui/Slider";
 import { Select } from "../components/ui";
@@ -20,6 +22,9 @@ import {
   Globe,
   HelpCircle,
   ChevronRight,
+  Bot,
+  Clock3,
+  RotateCcw,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import clsx from "clsx";
@@ -99,6 +104,17 @@ export function Settings() {
   const [adminError, setAdminError] = useState<string | null>(null);
   const [loggingOut, setLoggingOut] = useState(false);
 
+  const botStatus = useBotStore((state) => state.status);
+  const lifecycleEpoch = useBotStore((state) => state.lifecycleEpoch);
+  const [botStatusError, setBotStatusError] = useState<string | null>(null);
+  const [requestingBotRestart, setRequestingBotRestart] = useState(false);
+  const [botRestartError, setBotRestartError] = useState<string | null>(null);
+  const [responseCooldown, setResponseCooldown] = useState<{
+    until: number;
+    lifecycleEpoch: number;
+  } | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+
   // Bot settings state
   const [botDefaultVolume, setBotDefaultVolume] = useState<number>(5);
   const [savingBotVolume, setSavingBotVolume] = useState(false);
@@ -132,6 +148,70 @@ export function Settings() {
   const [botLocale, setBotLocale] = useState("ko");
   const [savingBotLocale, setSavingBotLocale] = useState(false);
   const [botLocaleSaved, setBotLocaleSaved] = useState(false);
+
+  useEffect(() => {
+    const requestEpoch = useBotStore.getState().lifecycleEpoch;
+    let cancelled = false;
+
+    void api
+      .getBotStatus()
+      .then((status) => {
+        if (
+          !cancelled &&
+          useBotStore.getState().lifecycleEpoch === requestEpoch
+        ) {
+          useBotStore.getState().applyHttpStatus(status, requestEpoch);
+          setBotStatusError(null);
+        }
+      })
+      .catch((error) => {
+        if (
+          !cancelled &&
+          useBotStore.getState().lifecycleEpoch === requestEpoch
+        ) {
+          setBotStatusError(
+            error instanceof Error ? error.message : t().settings.botStatusUnavailable,
+          );
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const responseCooldownUntil =
+    responseCooldown?.lifecycleEpoch === lifecycleEpoch
+      ? responseCooldown.until
+      : 0;
+  const restartAvailableAt = Math.max(
+    botStatus?.restart_available_at ?? 0,
+    responseCooldownUntil,
+  );
+  const nextRetryAt = botStatus?.next_retry_at ?? null;
+
+  useEffect(() => {
+    setRequestingBotRestart(false);
+    setResponseCooldown((cooldown) =>
+      cooldown?.lifecycleEpoch === lifecycleEpoch ? cooldown : null,
+    );
+  }, [lifecycleEpoch]);
+  useEffect(() => {
+    if (!restartAvailableAt && !nextRetryAt) return;
+
+    setNow(Date.now());
+    const timer = setInterval(() => {
+      const currentNow = Date.now();
+      setNow(currentNow);
+      if (
+        (!restartAvailableAt || restartAvailableAt <= currentNow) &&
+        (!nextRetryAt || nextRetryAt <= currentNow)
+      ) {
+        clearInterval(timer);
+      }
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [nextRetryAt, restartAvailableAt]);
 
   useEffect(() => {
 
@@ -220,6 +300,79 @@ export function Settings() {
     } catch {
       showToast(s.settings.logoutFailed, "error");
       setLoggingOut(false);
+    }
+  };
+  const botStatusLabels: Record<BotStatus["status"], string> = {
+    starting: s.settings.botStatusStarting,
+    restarting: s.settings.botStatusRestarting,
+    connecting: s.settings.botStatusConnecting,
+    retry_wait: s.settings.botStatusRetryWait,
+    ready: s.settings.botStatusReady,
+    unconfigured: s.settings.botStatusUnconfigured,
+    failed: s.settings.botStatusFailed,
+    stopped: s.settings.botStatusStopped,
+  };
+  const botStatusLabel = botStatus
+    ? botStatusLabels[botStatus.status]
+    : s.settings.botStatusUnavailable;
+  const restartCooldownSeconds =
+    restartAvailableAt > now
+      ? Math.max(0, Math.ceil((restartAvailableAt - now) / 1000))
+      : 0;
+  const nextRetrySeconds =
+    nextRetryAt && nextRetryAt > now
+      ? Math.max(0, Math.ceil((nextRetryAt - now) / 1000))
+      : 0;
+  const restartDisabled =
+    !botStatus ||
+    requestingBotRestart ||
+    botStatus.restart_in_progress ||
+    restartCooldownSeconds > 0;
+  const botStatusColor =
+    botStatus?.status === "ready"
+      ? "bg-[var(--color-success)]"
+      : botStatus?.status === "unconfigured" ||
+          botStatus?.status === "failed" ||
+          botStatus?.status === "stopped"
+        ? "bg-[var(--color-danger)]"
+        : "bg-[var(--color-warning)]";
+
+  const handleBotRestart = async () => {
+    if (restartDisabled) return;
+
+    const requestEpoch = useBotStore.getState().lifecycleEpoch;
+    setRequestingBotRestart(true);
+    setBotRestartError(null);
+    try {
+      const response = await api.restartBot();
+      if (useBotStore.getState().lifecycleEpoch !== requestEpoch) {
+        return;
+      }
+      useBotStore.getState().applyHttpStatus(response.status, requestEpoch);
+      setResponseCooldown(null);
+    } catch (error) {
+      if (useBotStore.getState().lifecycleEpoch !== requestEpoch) {
+        return;
+      }
+      if (error instanceof ApiError && error.status === 429) {
+        const response = error.data as Partial<BotRestartCooldownResponse>;
+        if (
+          typeof response.retry_after_seconds === "number" &&
+          response.retry_after_seconds > 0
+        ) {
+          setResponseCooldown({
+            until: Date.now() + response.retry_after_seconds * 1000,
+            lifecycleEpoch: requestEpoch,
+          });
+        }
+      }
+      setBotRestartError(
+        error instanceof Error ? error.message : s.settings.botRestartFailed,
+      );
+    } finally {
+      if (useBotStore.getState().lifecycleEpoch === requestEpoch) {
+        setRequestingBotRestart(false);
+      }
     }
   };
 
@@ -353,6 +506,144 @@ export function Settings() {
           />
         </div>
       </section>
+      <section className="flex flex-col gap-4">
+        <h2 className="text-sm font-semibold text-[var(--color-text-secondary)] uppercase tracking-wide">
+          {s.settings.botControl}
+        </h2>
+        <div className="rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border)] p-4 flex flex-col gap-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-9 h-9 rounded-lg bg-[var(--color-bg-tertiary)] flex items-center justify-center flex-shrink-0">
+                <Bot size={18} className="text-[var(--color-text-secondary)]" />
+              </div>
+              <div className="min-w-0">
+                <h3 className="text-sm font-medium text-[var(--color-text)]">
+                  {s.settings.discordBot}
+                </h3>
+                <div className="flex items-center gap-2 text-xs text-[var(--color-text-secondary)]">
+                  <span
+                    className={clsx(
+                      "w-1.5 h-1.5 rounded-full flex-shrink-0",
+                      botStatusColor,
+                    )}
+                  />
+                  <span aria-live="polite">{botStatusLabel}</span>
+                </div>
+              </div>
+            </div>
+            <button
+              onClick={handleBotRestart}
+              disabled={restartDisabled}
+              className={clsx(
+                "min-h-[44px] touch-manipulation px-4 py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-colors",
+                restartDisabled
+                  ? "bg-[var(--color-bg-tertiary)] text-[var(--color-text-tertiary)] cursor-not-allowed"
+                  : "bg-[var(--color-accent)] text-[#1a1a1a] hover:bg-[var(--color-accent-hover)] cursor-pointer",
+              )}
+            >
+              {requestingBotRestart ? (
+                <Loader2 size={16} className="animate-spin" />
+              ) : (
+                <RotateCcw size={16} />
+              )}
+              {requestingBotRestart
+                ? s.settings.requestingBotRestart
+                : s.settings.restartDiscordBot}
+            </button>
+          </div>
+
+          {botStatus?.target_voice_channel_id && (
+            <p className="text-xs text-[var(--color-text-tertiary)]">
+              {s.settings.botRecoveryTarget.replace(
+                "{channel}",
+                botStatus.target_voice_channel_id,
+              )}
+            </p>
+          )}
+
+          {(botStatus?.restart_in_progress ||
+            restartCooldownSeconds > 0 ||
+            nextRetrySeconds > 0) && (
+            <div className="flex flex-col gap-1 text-xs text-[var(--color-text-secondary)]">
+              {botStatus?.restart_in_progress && (
+                <span>{s.settings.botRestartInProgress}</span>
+              )}
+              {restartCooldownSeconds > 0 && (
+                <span className="flex items-center gap-1.5">
+                  <Clock3 size={13} />
+                  {s.settings.restartAvailableIn.replace(
+                    "{seconds}",
+                    String(restartCooldownSeconds),
+                  )}
+                </span>
+              )}
+              {nextRetrySeconds > 0 && (
+                <span className="flex items-center gap-1.5">
+                  <Clock3 size={13} />
+                  {s.settings.voiceRetryIn.replace(
+                    "{seconds}",
+                    String(nextRetrySeconds),
+                  )}
+                </span>
+              )}
+            </div>
+          )}
+
+          {botStatus?.last_error && (
+            <div
+              role="status"
+              className="flex items-start gap-2 rounded-lg bg-[var(--color-bg-tertiary)] px-3 py-2 text-xs text-[var(--color-text-secondary)]"
+            >
+              <AlertCircle
+                size={15}
+                className="mt-0.5 flex-shrink-0 text-[var(--color-warning)]"
+              />
+              <div>
+                <span className="font-medium text-[var(--color-text)]">
+                  {s.settings.botRecoveryError}
+                </span>
+                <p>{botStatus.last_error.message}</p>
+              </div>
+            </div>
+          )}
+
+          {botStatus?.persistence_error && (
+            <div
+              role="status"
+              className="flex items-start gap-2 rounded-lg border border-[var(--color-warning-border)] bg-[var(--color-warning-bg)] px-3 py-2 text-xs text-[var(--color-warning)]"
+            >
+              <AlertCircle size={15} className="mt-0.5 flex-shrink-0" />
+              <div>
+                <span className="font-medium">
+                  {s.settings.persistenceError}
+                </span>
+                <p>{botStatus.persistence_error.message}</p>
+              </div>
+            </div>
+          )}
+
+          {botRestartError && (
+            <div
+              role="alert"
+              className="flex items-start gap-2 text-xs text-[var(--color-danger)]"
+            >
+              <AlertCircle size={15} className="mt-0.5 flex-shrink-0" />
+              <span>{botRestartError}</span>
+            </div>
+          )}
+
+          {!botStatus && botStatusError && (
+            <div
+              role="alert"
+              className="flex items-start gap-2 text-xs text-[var(--color-danger)]"
+            >
+              <AlertCircle size={15} className="mt-0.5 flex-shrink-0" />
+              <span>{botStatusError}</span>
+            </div>
+          )}
+        </div>
+      </section>
+
 
       {/* SERVER (admin) */}
       {isAdmin && (

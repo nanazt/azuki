@@ -1,7 +1,5 @@
 import { create } from "zustand";
-import type { UserInfo } from "../lib/types";
-
-export type DownloadStage = "resolving" | "downloading" | "converting";
+import type { DownloadStage, UserInfo } from "../lib/types";
 
 export interface DownloadEntry {
   download_id: string;

@@ -45,6 +45,8 @@ export interface PlayerSnapshot {
   listeners: UserInfo[];
   current_added_by?: UserInfo | null;
   active_downloads?: DownloadStatus[];
+  playback_suspended: boolean;
+  playback_revision: number;
 }
 
 export type PlayStateInfo =
@@ -53,6 +55,8 @@ export type PlayStateInfo =
   | { status: "playing"; track: TrackInfo; position_ms: number }
   | { status: "paused"; track: TrackInfo; position_ms: number }
   | { status: "error"; track: TrackInfo; error: string };
+
+export type DownloadStage = "resolving" | "downloading" | "converting";
 
 export type PlayerEvent =
   | {
@@ -67,6 +71,8 @@ export type PlayerEvent =
   | { type: "track_error"; track_id: string; error: string }
   | { type: "paused"; position_ms: number }
   | { type: "resumed"; position_ms: number }
+  | { type: "output_suspended"; position_ms: number }
+  | { type: "output_resumed"; position_ms: number }
   | { type: "seeked"; position_ms: number }
   | { type: "volume_changed"; volume: number }
   | { type: "queue_updated"; queue: QueueEntry[] }
@@ -79,7 +85,11 @@ export type PlayerEvent =
       server_timestamp_ms: number;
     }
   | { type: "listeners_updated"; users: UserInfo[] }
-  | { type: "state_snapshot"; state: PlayerSnapshot }
+  | {
+      type: "state_snapshot";
+      state: PlayerSnapshot;
+      active_downloads?: DownloadStatus[];
+    }
   | {
       type: "download_started";
       download_id: string;
@@ -98,17 +108,60 @@ export type PlayerEvent =
   | {
       type: "download_progress";
       download_id: string;
+      stage: DownloadStage;
       percent: number;
       speed_bps: number | null;
     }
   | { type: "download_complete"; download_id: string; track: TrackInfo }
   | { type: "download_failed"; download_id: string; error: string }
   | { type: "history_added"; track: TrackInfo; user_id: string }
+  | { type: "upload_added"; track: TrackInfo; user_id: string }
   | { type: "history_updated"; history: QueueEntry[] };
+
+export interface BotStatus {
+  revision: number;
+  status:
+    | "starting"
+    | "restarting"
+    | "connecting"
+    | "retry_wait"
+    | "ready"
+    | "unconfigured"
+    | "failed"
+    | "stopped";
+  target_voice_channel_id: string | null;
+  restart_in_progress: boolean;
+  restart_available_at: number | null;
+  next_retry_at: number | null;
+  last_error: {
+    stage: "bot" | "voice" | "playback";
+    code: string;
+    message: string;
+  } | null;
+  last_checkpoint_at: number | null;
+  persistence_error: {
+    code: string;
+    message: string;
+  } | null;
+}
+
+export interface BotRestartResponse {
+  outcome: "accepted" | "already_restarting";
+  status: BotStatus;
+}
+
+export interface BotRestartCooldownResponse {
+  error: string;
+  retry_after_seconds: number;
+}
+
+export type WebEvent =
+  | PlayerEvent
+  | { type: "bot_status"; status: BotStatus };
 
 export interface SeqEvent {
   seq: number;
-  event: PlayerEvent;
+  event: WebEvent;
 }
 
 export interface Stats {

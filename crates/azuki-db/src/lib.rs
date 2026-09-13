@@ -12,6 +12,8 @@ pub enum DbError {
     Sqlx(#[from] sqlx::Error),
     #[error("migration error: {0}")]
     Migrate(#[from] sqlx::migrate::MigrateError),
+    #[error("invalid database input: {0}")]
+    InvalidInput(&'static str),
     #[error("not found")]
     NotFound,
 }

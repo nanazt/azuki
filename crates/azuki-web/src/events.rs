@@ -1,3 +1,6 @@
+use std::sync::Mutex;
+
+use azuki_bot::BotStatus;
 use serde::Serialize;
 
 use azuki_player::{PlayerEvent, PlayerSnapshot, TrackInfo};
@@ -30,6 +33,12 @@ pub enum WebEvent {
     Resumed {
         position_ms: u64,
     },
+    OutputSuspended {
+        position_ms: u64,
+    },
+    OutputResumed {
+        position_ms: u64,
+    },
     Seeked {
         position_ms: u64,
     },
@@ -54,6 +63,9 @@ pub enum WebEvent {
     StateSnapshot {
         state: PlayerSnapshot,
         active_downloads: Vec<DownloadStatus>,
+    },
+    BotStatus {
+        status: BotStatus,
     },
 
     // App events
@@ -103,6 +115,22 @@ pub struct WebSeqEvent {
     pub event: WebEvent,
 }
 
+/// Assigns and broadcasts the next event while holding the shared publication lock.
+pub fn publish_web_event(
+    tx: &tokio::sync::broadcast::Sender<WebSeqEvent>,
+    sequence: &Mutex<u64>,
+    event: WebEvent,
+) {
+    let mut sequence = sequence
+        .lock()
+        .expect("web event sequence mutex should not be poisoned");
+    *sequence = (*sequence).wrapping_add(1);
+    let _ = tx.send(WebSeqEvent {
+        seq: *sequence,
+        event,
+    });
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct DownloadStatus {
     pub download_id: String,
@@ -144,6 +172,10 @@ impl From<PlayerEvent> for WebEvent {
             PlayerEvent::TrackError { track_id, error } => WebEvent::TrackError { track_id, error },
             PlayerEvent::Paused { position_ms } => WebEvent::Paused { position_ms },
             PlayerEvent::Resumed { position_ms } => WebEvent::Resumed { position_ms },
+            PlayerEvent::OutputSuspended { position_ms } => {
+                WebEvent::OutputSuspended { position_ms }
+            }
+            PlayerEvent::OutputResumed { position_ms } => WebEvent::OutputResumed { position_ms },
             PlayerEvent::Seeked { position_ms, .. } => WebEvent::Seeked { position_ms },
             PlayerEvent::VolumeChanged { volume } => WebEvent::VolumeChanged { volume },
             PlayerEvent::QueueUpdated { queue } => WebEvent::QueueUpdated { queue },
@@ -166,5 +198,56 @@ impl From<PlayerEvent> for WebEvent {
                 active_downloads: Vec::new(),
             },
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::{Arc, Barrier, Mutex};
+
+    use tokio::sync::broadcast;
+
+    use super::{WebEvent, WebSeqEvent, publish_web_event};
+
+    #[test]
+    fn concurrent_publications_are_delivered_in_sequence_order() {
+        const PUBLISHERS: usize = 8;
+        const EVENTS_PER_PUBLISHER: usize = 128;
+        const EVENT_COUNT: usize = PUBLISHERS * EVENTS_PER_PUBLISHER;
+
+        let (tx, mut rx) = broadcast::channel::<WebSeqEvent>(EVENT_COUNT);
+        let sequence = Arc::new(Mutex::new(0));
+        let start = Arc::new(Barrier::new(PUBLISHERS));
+
+        std::thread::scope(|scope| {
+            for publisher in 0..PUBLISHERS {
+                let tx = tx.clone();
+                let sequence = Arc::clone(&sequence);
+                let start = Arc::clone(&start);
+                scope.spawn(move || {
+                    start.wait();
+                    for event in 0..EVENTS_PER_PUBLISHER {
+                        publish_web_event(
+                            &tx,
+                            &sequence,
+                            WebEvent::VolumeChanged {
+                                volume: (publisher + event) as u8,
+                            },
+                        );
+                    }
+                });
+            }
+        });
+
+        for expected_sequence in 1..=EVENT_COUNT as u64 {
+            let published = rx
+                .try_recv()
+                .expect("every publication should be delivered");
+            assert_eq!(published.seq, expected_sequence);
+        }
+        assert!(matches!(
+            rx.try_recv(),
+            Err(broadcast::error::TryRecvError::Empty)
+        ));
     }
 }

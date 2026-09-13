@@ -11,8 +11,8 @@ use tracing::info;
 
 use azuki_player::{LoopMode, PlayAction, PlayerError, TrackInfo, UserInfo};
 
-use crate::BotState;
 use crate::messages::{self, Messages};
+use crate::{BotLifecycleStatus, BotState, RestartError, RestartOutcome};
 
 /// Get localized messages for this bot
 fn msg(state: &BotState) -> &'static Messages {
@@ -61,6 +61,7 @@ pub async fn register_commands(ctx: &Context, guild_id: GuildId) -> Result<(), s
                     .add_string_choice("all", "all"),
             ),
         CreateCommand::new("web").description("Get web dashboard link"),
+        CreateCommand::new("restart").description("Restart the Discord bot and voice generation"),
     ];
 
     let count = commands.len();
@@ -84,6 +85,7 @@ pub async fn handle_command(
         "volume" => handle_volume(ctx, cmd, state, is_history).await,
         "loop" => handle_loop(ctx, cmd, state, is_history).await,
         "web" => handle_web(ctx, cmd, state, is_history).await,
+        "restart" => handle_restart(ctx, cmd, state).await,
         _ => Ok(()),
     }
 }
@@ -150,12 +152,8 @@ pub async fn ensure_user_in_voice(
     }
     .ok_or(crate::BotError::NotInVoice)?;
 
-    if let Some(sb) = state.songbird.lock().await.as_ref()
-        && sb.get(state.guild_id).is_none()
-    {
-        crate::voice::join_channel(sb, state.guild_id, channel_id)
-            .await
-            .map_err(crate::BotError::Voice)?;
+    if state.control.status().status != BotLifecycleStatus::Ready {
+        state.control.request_voice_recovery();
     }
 
     Ok(channel_id)
@@ -168,6 +166,46 @@ async fn ensure_voice(
 ) -> Result<ChannelId, crate::BotError> {
     let guild_id = cmd.guild_id.ok_or(crate::BotError::NotInVoice)?;
     ensure_user_in_voice(ctx, guild_id, cmd.user.id, state).await
+}
+
+async fn handle_restart(
+    ctx: &Context,
+    cmd: &CommandInteraction,
+    state: &Arc<BotState>,
+) -> Result<(), crate::BotError> {
+    let messages = msg(state);
+    if cmd.guild_id != Some(state.guild_id) {
+        return respond(ctx, cmd, messages.restart_wrong_guild, true).await;
+    }
+
+    respond(ctx, cmd, messages.restart_acknowledged, true).await?;
+    let content = match state.control.restart().await {
+        Ok(RestartOutcome::Accepted(_)) => messages.restart_accepted.to_string(),
+        Ok(RestartOutcome::AlreadyRestarting(_)) => {
+            messages.restart_already_in_progress.to_string()
+        }
+        Err(RestartError::Cooldown {
+            retry_after_seconds,
+        }) => format!(
+            "{} {}{}",
+            messages.restart_cooldown, retry_after_seconds, messages.restart_seconds
+        ),
+        Err(RestartError::Unavailable) => messages.restart_unavailable.to_string(),
+    };
+
+    if let Err(error) = cmd
+        .edit_response(
+            &ctx.http,
+            serenity::all::EditInteractionResponse::new().content(content),
+        )
+        .await
+    {
+        tracing::debug!(
+            ?error,
+            "restart result response could not be delivered after acknowledgement"
+        );
+    }
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -579,6 +617,7 @@ fn player_error_message(m: &Messages, err: &PlayerError) -> &'static str {
         PlayerError::InvalidPosition => m.invalid_position,
         PlayerError::QueueFull => m.queue_full,
         PlayerError::Duplicate => m.duplicate,
+        PlayerError::ActorUnavailable => m.invalid_state,
     }
 }
 

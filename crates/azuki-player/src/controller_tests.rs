@@ -32,6 +32,19 @@ fn make_entry(id: &str) -> QueueEntry {
         added_by: test_user(),
     }
 }
+fn restored_playback(id: &str, position_ms: u64, paused: bool) -> RestoredPlayback {
+    RestoredPlayback {
+        entry: make_entry(id),
+        position_ms,
+        paused,
+    }
+}
+
+async fn end_current(pc: &PlayerController, track_id: &str, reason: TrackEndReason) {
+    let revision = pc.try_get_state().await.unwrap().playback_revision;
+    pc.on_track_end(track_id.to_string(), reason, revision)
+        .await;
+}
 
 async fn collect_events(rx: &mut broadcast::Receiver<SeqEvent>, n: usize) -> Vec<SeqEvent> {
     let mut events = Vec::new();
@@ -67,6 +80,7 @@ async fn test_play_from_idle() {
 
     let snap = pc.get_state().await;
     assert!(matches!(snap.state, PlayStateInfo::Playing { ref track, .. } if track.id == "A"));
+    assert!(!snap.playback_suspended);
 
     let events = collect_events(&mut rx, 3).await;
     assert!(matches!(events[0].event, PlayerEvent::TrackLoading { .. }));
@@ -305,7 +319,12 @@ async fn test_play_or_enqueue_while_playing() {
 // C20
 #[tokio::test]
 async fn test_play_or_enqueue_paused_at_end() {
-    let pc = PlayerController::with_state(vec![], vec![], LoopMode::Off, Some(make_entry("old")));
+    let pc = PlayerController::with_state(
+        vec![],
+        vec![],
+        LoopMode::Off,
+        Some(restored_playback("old", 0, true)),
+    );
     // with_state creates Paused at position 0; seek to >= duration_ms to trigger PlayedNow
     pc.seek(180_000).await.unwrap();
 
@@ -331,8 +350,12 @@ async fn test_play_or_enqueue_duplicate() {
 // C21a
 #[tokio::test]
 async fn test_play_or_enqueue_paused_mid_track() {
-    let pc =
-        PlayerController::with_state(vec![], vec![], LoopMode::Off, Some(make_entry("current")));
+    let pc = PlayerController::with_state(
+        vec![],
+        vec![],
+        LoopMode::Off,
+        Some(restored_playback("current", 0, true)),
+    );
     // with_state creates Paused at position 0, which is < duration_ms (180_000)
     let action = pc
         .play_or_enqueue(make_track("new"), test_user())
@@ -404,7 +427,12 @@ async fn test_skip_from_idle() {
 // C26
 #[tokio::test]
 async fn test_previous_restart_over_threshold() {
-    let pc = PlayerController::with_state(vec![], vec![], LoopMode::Off, Some(make_entry("A")));
+    let pc = PlayerController::with_state(
+        vec![],
+        vec![],
+        LoopMode::Off,
+        Some(restored_playback("A", 0, true)),
+    );
     // Paused at pos 0, seek to 5000 (> 3000 threshold)
     pc.seek(5000).await.unwrap();
     pc.previous().await.unwrap();
@@ -439,7 +467,12 @@ async fn test_previous_go_to_history() {
 // C28
 #[tokio::test]
 async fn test_previous_no_history_seek_zero() {
-    let pc = PlayerController::with_state(vec![], vec![], LoopMode::Off, Some(make_entry("A")));
+    let pc = PlayerController::with_state(
+        vec![],
+        vec![],
+        LoopMode::Off,
+        Some(restored_playback("A", 0, true)),
+    );
     // Paused at pos 0 (below threshold), no history
     pc.previous().await.unwrap();
 
@@ -456,7 +489,7 @@ async fn test_previous_loop_one_with_history() {
         vec![],
         vec![make_entry("prev")],
         LoopMode::One,
-        Some(make_entry("A")),
+        Some(restored_playback("A", 0, true)),
     );
     // Paused at pos 0 (below threshold), has history → should go to prev track
     pc.previous().await.unwrap();
@@ -476,7 +509,12 @@ async fn test_previous_from_idle() {
 // C31
 #[tokio::test]
 async fn test_previous_preserves_paused() {
-    let pc = PlayerController::with_state(vec![], vec![], LoopMode::Off, Some(make_entry("A")));
+    let pc = PlayerController::with_state(
+        vec![],
+        vec![],
+        LoopMode::Off,
+        Some(restored_playback("A", 0, true)),
+    );
     pc.seek(5000).await.unwrap();
     pc.previous().await.unwrap();
 
@@ -495,7 +533,7 @@ async fn test_previous_loop_all_no_history() {
         vec![make_entry("A"), make_entry("B"), make_entry("C")],
         vec![],
         LoopMode::All,
-        Some(make_entry("X")),
+        Some(restored_playback("X", 0, true)),
     );
     // Paused at pos 0 (below threshold), no history → seek to 0
     pc.previous().await.unwrap();
@@ -514,7 +552,7 @@ async fn test_previous_loop_all_single_item() {
         vec![make_entry("A")],
         vec![],
         LoopMode::All,
-        Some(make_entry("X")),
+        Some(restored_playback("X", 0, true)),
     );
     // Paused at pos 0 (below threshold)
     pc.previous().await.unwrap();
@@ -534,7 +572,7 @@ async fn test_previous_loop_all_consecutive() {
         vec![make_entry("A"), make_entry("B")],
         vec![make_entry("H1"), make_entry("H2")],
         LoopMode::All,
-        Some(make_entry("X")),
+        Some(restored_playback("X", 0, true)),
     );
 
     pc.previous().await.unwrap();
@@ -586,7 +624,7 @@ async fn test_play_at_preserves_paused() {
         vec![make_entry("A")],
         vec![],
         LoopMode::Off,
-        Some(make_entry("current")),
+        Some(restored_playback("current", 0, true)),
     );
 
     pc.play_at(0).await.unwrap();
@@ -658,8 +696,7 @@ async fn test_on_track_end_advances() {
     let mut rx = pc.subscribe();
     drain_events(&mut rx).await;
 
-    pc.on_track_end("A".to_string(), TrackEndReason::Finished)
-        .await;
+    end_current(&pc, "A", TrackEndReason::Finished).await;
 
     // Wait for events to propagate
     let events = collect_events(&mut rx, 5).await;
@@ -683,8 +720,7 @@ async fn test_on_track_end_to_idle() {
     let mut rx = pc.subscribe();
     drain_events(&mut rx).await;
 
-    pc.on_track_end("A".to_string(), TrackEndReason::Finished)
-        .await;
+    end_current(&pc, "A", TrackEndReason::Finished).await;
 
     let events = collect_events(&mut rx, 2).await;
     assert!(matches!(events[0].event, PlayerEvent::TrackEnded { .. }));
@@ -706,8 +742,7 @@ async fn test_on_track_end_loop_one_replays() {
     let mut rx = pc.subscribe();
     drain_events(&mut rx).await;
 
-    pc.on_track_end("A".to_string(), TrackEndReason::Finished)
-        .await;
+    end_current(&pc, "A", TrackEndReason::Finished).await;
 
     let events = collect_events(&mut rx, 3).await;
     // TrackEnded, TrackStarted(same track), VolumeChanged — no HistoryUpdated
@@ -730,8 +765,7 @@ async fn test_on_track_end_wrong_track_id() {
     let mut rx = pc.subscribe();
     drain_events(&mut rx).await;
 
-    pc.on_track_end("B".to_string(), TrackEndReason::Finished)
-        .await;
+    end_current(&pc, "B", TrackEndReason::Finished).await;
 
     // Give actor time to process the command, then verify no events
     assert_no_more_events(&mut rx).await;
@@ -748,11 +782,7 @@ async fn test_on_track_end_error_broadcasts() {
     let mut rx = pc.subscribe();
     drain_events(&mut rx).await;
 
-    pc.on_track_end(
-        "A".to_string(),
-        TrackEndReason::Error("decode failed".into()),
-    )
-    .await;
+    end_current(&pc, "A", TrackEndReason::Error("decode failed".into())).await;
 
     let events = collect_events(&mut rx, 3).await;
     // TrackError, TrackEnded, HistoryUpdated
@@ -767,8 +797,7 @@ async fn test_on_track_end_history() {
     let pc = PlayerController::new();
     pc.play(make_track("A"), test_user()).await.unwrap();
 
-    pc.on_track_end("A".to_string(), TrackEndReason::Finished)
-        .await;
+    end_current(&pc, "A", TrackEndReason::Finished).await;
 
     // Give actor time to process
     tokio::time::sleep(Duration::from_millis(50)).await;
@@ -789,8 +818,7 @@ async fn test_on_track_end_loop_all_preserves_queue() {
     let mut rx = pc.subscribe();
     drain_events(&mut rx).await;
 
-    pc.on_track_end("A".to_string(), TrackEndReason::Finished)
-        .await;
+    end_current(&pc, "A", TrackEndReason::Finished).await;
 
     // Wait for events: TrackEnded, TrackStarted, VolumeChanged, QueueUpdated, HistoryUpdated
     let events = collect_events(&mut rx, 5).await;
@@ -811,14 +839,15 @@ async fn test_on_track_end_while_paused_ignored() {
         vec![make_entry("B")],
         vec![],
         LoopMode::Off,
-        Some(make_entry("A")),
+        Some(restored_playback("A", 0, true)),
     );
+    let revision = pc.try_get_state().await.unwrap().playback_revision;
+    assert!(pc.resume_output(revision).await.unwrap());
     // State is Paused (from with_state)
     let mut rx = pc.subscribe();
     drain_events(&mut rx).await;
 
-    pc.on_track_end("A".to_string(), TrackEndReason::Finished)
-        .await;
+    end_current(&pc, "A", TrackEndReason::Finished).await;
 
     // Paused doesn't match OnTrackEnd's Playing|Loading|Error check, so ignored
     assert_no_more_events(&mut rx).await;
@@ -844,19 +873,34 @@ async fn test_get_state_idle() {
 async fn test_with_state_restores() {
     let queue = vec![make_entry("A"), make_entry("B")];
     let history = vec![make_entry("X")];
-    let current = make_entry("cur");
-    let pc = PlayerController::with_state(queue, history, LoopMode::All, Some(current));
+    let mut restored = restored_playback("cur", 12_345, true);
+    restored.entry.track.volume = 37;
+    let pc = PlayerController::with_state(queue, history, LoopMode::All, Some(restored));
 
     let snap = pc.get_state().await;
     assert!(
-        matches!(snap.state, PlayStateInfo::Paused { ref track, position_ms: 0 } if track.id == "cur")
+        matches!(snap.state, PlayStateInfo::Paused { ref track, position_ms: 12_345 } if track.id == "cur")
     );
+    assert!(snap.playback_suspended);
+    assert_eq!(snap.playback_revision, 0);
+    assert_eq!(snap.volume, 37);
     assert_eq!(snap.queue.len(), 2);
     assert_eq!(snap.queue[0].track.id, "A");
     assert_eq!(snap.queue[1].track.id, "B");
     assert_eq!(snap.history.len(), 1);
     assert_eq!(snap.history[0].track.id, "X");
     assert_eq!(snap.loop_mode, LoopMode::All);
+
+    assert!(pc.resume_output(snap.playback_revision).await.unwrap());
+    let acknowledged = pc.try_get_state().await.unwrap();
+    assert!(!acknowledged.playback_suspended);
+    assert!(matches!(
+        acknowledged.state,
+        PlayStateInfo::Paused {
+            position_ms: 12_345,
+            ..
+        }
+    ));
 }
 
 // C47
@@ -920,8 +964,7 @@ async fn test_loop_one_track_end_no_history_push() {
     pc.set_loop(LoopMode::One).await.unwrap();
     pc.play(make_track("A"), test_user()).await.unwrap();
 
-    pc.on_track_end("A".to_string(), TrackEndReason::Finished)
-        .await;
+    end_current(&pc, "A", TrackEndReason::Finished).await;
 
     tokio::time::sleep(Duration::from_millis(50)).await;
     let snap = pc.get_state().await;
@@ -938,8 +981,7 @@ async fn test_loop_off_track_end_adds_history() {
     let pc = PlayerController::new();
     pc.play(make_track("A"), test_user()).await.unwrap();
 
-    pc.on_track_end("A".to_string(), TrackEndReason::Finished)
-        .await;
+    end_current(&pc, "A", TrackEndReason::Finished).await;
 
     tokio::time::sleep(Duration::from_millis(50)).await;
     let snap = pc.get_state().await;
@@ -952,8 +994,7 @@ async fn test_loop_all_track_end_adds_history() {
     let pc = PlayerController::with_state(vec![make_entry("B")], vec![], LoopMode::All, None);
     pc.play(make_track("A"), test_user()).await.unwrap();
 
-    pc.on_track_end("A".to_string(), TrackEndReason::Finished)
-        .await;
+    end_current(&pc, "A", TrackEndReason::Finished).await;
 
     tokio::time::sleep(Duration::from_millis(50)).await;
     let snap = pc.get_state().await;
@@ -1047,8 +1088,7 @@ async fn test_previous_loop_all_natural_then_previous() {
     pc.play(make_track("A"), test_user()).await.unwrap();
 
     // Natural end: A goes to history, B starts, queue rotates
-    pc.on_track_end("A".to_string(), TrackEndReason::Finished)
-        .await;
+    end_current(&pc, "A", TrackEndReason::Finished).await;
     tokio::time::sleep(Duration::from_millis(50)).await;
 
     let snap = pc.get_state().await;
@@ -1072,7 +1112,7 @@ async fn test_previous_loop_all_enqueue_preserved() {
         vec![make_entry("B")],
         vec![make_entry("prev")],
         LoopMode::All,
-        Some(make_entry("A")),
+        Some(restored_playback("A", 0, true)),
     );
 
     // Enqueue a new track
@@ -1107,8 +1147,7 @@ async fn test_previous_loop_all_rotation_invariant() {
     pc.play(make_track("A"), test_user()).await.unwrap();
 
     // Natural end: A → history, now playing B, queue = [C, B] (len 2)
-    pc.on_track_end("A".to_string(), TrackEndReason::Finished)
-        .await;
+    end_current(&pc, "A", TrackEndReason::Finished).await;
     tokio::time::sleep(Duration::from_millis(50)).await;
 
     // Pause + previous: A comes back from history into the rotation
@@ -1126,7 +1165,12 @@ async fn test_previous_loop_all_rotation_invariant() {
 // C60: LoopOne + no history + previous (pos < 3s) seeks to 0
 #[tokio::test]
 async fn test_previous_loop_one_no_history_seeks_zero() {
-    let pc = PlayerController::with_state(vec![], vec![], LoopMode::One, Some(make_entry("A")));
+    let pc = PlayerController::with_state(
+        vec![],
+        vec![],
+        LoopMode::One,
+        Some(restored_playback("A", 0, true)),
+    );
     // Paused at pos 0, no history → should seek to 0
     pc.previous().await.unwrap();
 
@@ -1134,4 +1178,251 @@ async fn test_previous_loop_one_no_history_seeks_zero() {
     assert!(
         matches!(snap.state, PlayStateInfo::Paused { ref track, position_ms: 0 } if track.id == "A")
     );
+}
+
+// ───── Output recovery and playback revisions ─────
+
+#[tokio::test]
+async fn restored_playing_position_stays_frozen_until_matching_acknowledgement() {
+    let pc = PlayerController::with_state(
+        Vec::new(),
+        Vec::new(),
+        LoopMode::Off,
+        Some(restored_playback("A", 7_500, false)),
+    );
+
+    let initial = pc.try_get_state().await.unwrap();
+    assert!(initial.playback_suspended);
+    assert_eq!(initial.playback_revision, 0);
+    assert!(matches!(
+        initial.state,
+        PlayStateInfo::Playing {
+            position_ms: 7_500,
+            ..
+        }
+    ));
+
+    tokio::time::sleep(Duration::from_millis(20)).await;
+    let frozen = pc.try_get_state().await.unwrap();
+    assert!(matches!(
+        frozen.state,
+        PlayStateInfo::Playing {
+            position_ms: 7_500,
+            ..
+        }
+    ));
+
+    let mut rx = pc.subscribe();
+    assert!(pc.resume_output(0).await.unwrap());
+    let event = collect_events(&mut rx, 1).await;
+    assert!(matches!(
+        event[0].event,
+        PlayerEvent::OutputResumed { position_ms: 7_500 }
+    ));
+    assert!(pc.resume_output(0).await.unwrap());
+    assert_no_more_events(&mut rx).await;
+    assert_eq!(pc.try_get_state().await.unwrap().playback_revision, 0);
+
+    tokio::time::sleep(Duration::from_millis(20)).await;
+    let resumed = pc.try_get_state().await.unwrap();
+    assert!(!resumed.playback_suspended);
+    assert!(matches!(
+        resumed.state,
+        PlayStateInfo::Playing { position_ms, .. } if position_ms > 7_500
+    ));
+}
+
+#[tokio::test]
+async fn suspension_freezes_position_and_listened_time() {
+    let pc = PlayerController::new();
+    pc.play(make_track("A"), test_user()).await.unwrap();
+    pc.seek(5_000).await.unwrap();
+    pc.enqueue(make_track("B"), test_user()).await.unwrap();
+    let mut rx = pc.subscribe();
+    drain_events(&mut rx).await;
+
+    pc.suspend_output().await.unwrap();
+    let suspended_event = collect_events(&mut rx, 1).await;
+    let frozen_position = match suspended_event[0].event {
+        PlayerEvent::OutputSuspended { position_ms } => position_ms,
+        ref event => panic!("expected output suspension, got {event:?}"),
+    };
+    let first_revision = pc.try_get_state().await.unwrap().playback_revision;
+    pc.suspend_output().await.unwrap();
+    assert_eq!(
+        pc.try_get_state().await.unwrap().playback_revision,
+        first_revision
+    );
+    assert_no_more_events(&mut rx).await;
+
+    tokio::time::sleep(Duration::from_millis(20)).await;
+    let snapshot = pc.try_get_state().await.unwrap();
+    assert!(snapshot.playback_suspended);
+    let suspended_revision = snapshot.playback_revision;
+    assert!(
+        matches!(snapshot.state, PlayStateInfo::Playing { position_ms, .. } if position_ms == frozen_position)
+    );
+
+    pc.skip().await.unwrap();
+    let events = collect_events(&mut rx, 5).await;
+    assert!(matches!(
+        events[0].event,
+        PlayerEvent::TrackEnded { listened_ms, .. } if listened_ms == frozen_position
+    ));
+    assert!(!pc.resume_output(suspended_revision).await.unwrap());
+    let snapshot = pc.try_get_state().await.unwrap();
+    assert!(snapshot.playback_suspended);
+    assert!(
+        matches!(snapshot.state, PlayStateInfo::Playing { ref track, position_ms: 0 } if track.id == "B")
+    );
+}
+
+#[tokio::test]
+async fn latest_seek_pause_and_resume_intent_wins_while_suspended() {
+    let pc = PlayerController::new();
+    pc.play(make_track("A"), test_user()).await.unwrap();
+    pc.suspend_output().await.unwrap();
+    let prepared_revision = pc.try_get_state().await.unwrap().playback_revision;
+
+    pc.seek(24_000).await.unwrap();
+    pc.pause().await.unwrap();
+    let paused = pc.try_get_state().await.unwrap();
+    assert!(paused.playback_revision > prepared_revision);
+    assert!(matches!(
+        paused.state,
+        PlayStateInfo::Paused {
+            position_ms: 24_000,
+            ..
+        }
+    ));
+    assert!(!pc.resume_output(prepared_revision).await.unwrap());
+
+    let paused_revision = paused.playback_revision;
+    pc.resume().await.unwrap();
+    let resumed_intent = pc.try_get_state().await.unwrap();
+    assert!(resumed_intent.playback_suspended);
+    assert!(resumed_intent.playback_revision > paused_revision);
+    assert!(!pc.resume_output(paused_revision).await.unwrap());
+    assert!(
+        pc.resume_output(resumed_intent.playback_revision)
+            .await
+            .unwrap()
+    );
+
+    let ready = pc.try_get_state().await.unwrap();
+    assert!(!ready.playback_suspended);
+    assert_eq!(
+        ready.playback_revision, resumed_intent.playback_revision,
+        "output acknowledgement must not invalidate its own revision"
+    );
+    assert!(matches!(
+        ready.state,
+        PlayStateInfo::Playing { position_ms, .. } if position_ms >= 24_000
+    ));
+}
+
+#[tokio::test]
+async fn stale_same_track_end_does_not_replay_loop_one_twice() {
+    let pc = PlayerController::new();
+    pc.set_loop(LoopMode::One).await.unwrap();
+    pc.play(make_track("A"), test_user()).await.unwrap();
+    let first_revision = pc.try_get_state().await.unwrap().playback_revision;
+    let mut rx = pc.subscribe();
+    drain_events(&mut rx).await;
+
+    pc.on_track_end("A".to_string(), TrackEndReason::Finished, first_revision)
+        .await;
+    let events = collect_events(&mut rx, 3).await;
+    assert!(matches!(
+        events[1].event,
+        PlayerEvent::TrackStarted { ref track, .. } if track.id == "A"
+    ));
+
+    pc.on_track_end("A".to_string(), TrackEndReason::Finished, first_revision)
+        .await;
+    assert_no_more_events(&mut rx).await;
+
+    let snapshot = pc.try_get_state().await.unwrap();
+    assert!(snapshot.playback_revision > first_revision);
+    assert!(snapshot.history.is_empty());
+    assert!(matches!(snapshot.state, PlayStateInfo::Playing { ref track, .. } if track.id == "A"));
+}
+
+#[tokio::test]
+async fn track_end_is_ignored_while_output_is_suspended() {
+    let pc = PlayerController::new();
+    pc.play(make_track("A"), test_user()).await.unwrap();
+    pc.enqueue(make_track("B"), test_user()).await.unwrap();
+    pc.suspend_output().await.unwrap();
+    let revision = pc.try_get_state().await.unwrap().playback_revision;
+    let mut rx = pc.subscribe();
+    drain_events(&mut rx).await;
+
+    pc.on_track_end("A".to_string(), TrackEndReason::Finished, revision)
+        .await;
+    assert_no_more_events(&mut rx).await;
+
+    let suspended = pc.try_get_state().await.unwrap();
+    assert!(suspended.playback_suspended);
+    assert!(suspended.history.is_empty());
+    assert_eq!(suspended.queue[0].track.id, "B");
+    assert!(matches!(suspended.state, PlayStateInfo::Playing { ref track, .. } if track.id == "A"));
+
+    assert!(pc.resume_output(revision).await.unwrap());
+    end_current(&pc, "A", TrackEndReason::Finished).await;
+    let advanced = pc.try_get_state().await.unwrap();
+    assert!(matches!(advanced.state, PlayStateInfo::Playing { ref track, .. } if track.id == "B"));
+}
+
+#[tokio::test]
+async fn output_recovery_fields_and_events_use_the_wire_contract() {
+    let pc = PlayerController::new();
+    let snapshot_json = serde_json::to_value(pc.try_get_state().await.unwrap()).unwrap();
+    assert_eq!(snapshot_json["playback_suspended"], false);
+    assert_eq!(snapshot_json["playback_revision"], 0);
+
+    let suspended_json =
+        serde_json::to_value(PlayerEvent::OutputSuspended { position_ms: 42 }).unwrap();
+    assert_eq!(suspended_json["type"], "output_suspended");
+    assert_eq!(suspended_json["position_ms"], 42);
+
+    let resumed_json =
+        serde_json::to_value(PlayerEvent::OutputResumed { position_ms: 42 }).unwrap();
+    assert_eq!(resumed_json["type"], "output_resumed");
+    assert_eq!(resumed_json["position_ms"], 42);
+}
+
+#[tokio::test]
+async fn stop_while_suspended_invalidates_prepared_output() {
+    let pc = PlayerController::new();
+    pc.play(make_track("A"), test_user()).await.unwrap();
+    pc.enqueue(make_track("B"), test_user()).await.unwrap();
+    pc.suspend_output().await.unwrap();
+    let prepared_revision = pc.try_get_state().await.unwrap().playback_revision;
+
+    pc.stop().await.unwrap();
+    let stopped = pc.try_get_state().await.unwrap();
+    assert!(stopped.playback_suspended);
+    assert!(stopped.playback_revision > prepared_revision);
+    assert!(matches!(stopped.state, PlayStateInfo::Idle));
+    assert!(stopped.queue.is_empty());
+    assert!(!pc.resume_output(prepared_revision).await.unwrap());
+    assert!(pc.resume_output(stopped.playback_revision).await.unwrap());
+
+    let ready = pc.try_get_state().await.unwrap();
+    assert!(!ready.playback_suspended);
+    assert!(matches!(ready.state, PlayStateInfo::Idle));
+}
+
+#[tokio::test]
+async fn try_get_state_reports_a_dead_actor() {
+    let (cmd_tx, cmd_rx) = tokio::sync::mpsc::channel(1);
+    drop(cmd_rx);
+    let (event_tx, _) = broadcast::channel(BROADCAST_CAPACITY);
+    let pc = PlayerController { cmd_tx, event_tx };
+
+    assert!(matches!(
+        pc.try_get_state().await,
+        Err(PlayerError::ActorUnavailable)
+    ));
 }

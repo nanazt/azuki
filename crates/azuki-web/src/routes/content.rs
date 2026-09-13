@@ -326,13 +326,14 @@ pub async fn upload(
         volume: 100,
     };
 
-    let _ = state.web_tx.send(crate::events::WebSeqEvent {
-        seq: 0,
-        event: crate::events::WebEvent::UploadAdded {
+    crate::events::publish_web_event(
+        &state.web_tx,
+        &state.web_seq,
+        crate::events::WebEvent::UploadAdded {
             track: track_info,
             user_id: user_id.clone(),
         },
-    });
+    );
 
     Ok(Json(serde_json::json!({
         "track_id": track_id,

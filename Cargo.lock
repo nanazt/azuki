@@ -317,6 +317,7 @@ dependencies = [
  "serde_json",
  "sqlx",
  "thiserror 2.0.18",
+ "tokio",
  "tracing",
 ]
 
@@ -361,6 +362,7 @@ dependencies = [
  "anyhow",
  "axum",
  "axum-extra",
+ "azuki-bot",
  "azuki-db",
  "azuki-media",
  "azuki-player",

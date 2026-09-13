@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { usePlayer } from "../../../hooks/usePlayer";
 import { usePlayerStore } from "../../../stores/playerStore";
+import { useBotStore } from "../../../stores/botStore";
 import { Slider } from "../../ui/Slider";
 import { TrackThumbnail } from "../../ui/TrackThumbnail";
 import { Skeleton } from "../../ui/Skeleton";
@@ -52,6 +53,10 @@ export function PlayerBar({ onToggleQueue, queueDrawerOpen }: PlayerBarProps) {
 
   const track = playState.status !== "idle" ? playState.track : null;
   const connected = usePlayerStore((s) => s.connected);
+  const playbackSuspended = usePlayerStore((s) => s.playbackSuspended);
+  const botReady = useBotStore((s) => s.status?.status === "ready");
+  // Normal output replacement freezes playback even while the bot is ready.
+  const waitingForOutputRecovery = playbackSuspended && !botReady;
   const isPlaying = playState.status === "playing";
   const positionMs =
     playState.status === "playing" || playState.status === "paused"
@@ -61,7 +66,7 @@ export function PlayerBar({ onToggleQueue, queueDrawerOpen }: PlayerBarProps) {
 
   // Update elapsed with RAF when playing
   useEffect(() => {
-    if (playState.status === "playing" && connected) {
+    if (playState.status === "playing" && connected && !playbackSuspended) {
       lastUpdateRef.current = Date.now();
       const basePosition = playState.position_ms;
 
@@ -86,7 +91,7 @@ export function PlayerBar({ onToggleQueue, queueDrawerOpen }: PlayerBarProps) {
         rafRef.current = null;
       }
     };
-  }, [playState, positionMs, duration, connected]);
+  }, [playState, positionMs, duration, connected, playbackSuspended]);
 
   const handleSeekStart = useCallback(() => {
     setIsSeeking(true);
@@ -152,6 +157,11 @@ export function PlayerBar({ onToggleQueue, queueDrawerOpen }: PlayerBarProps) {
                   {track.artist && (
                     <div className="text-xs text-[var(--color-text-secondary)] truncate">
                       {track.artist}
+                    </div>
+                  )}
+                  {waitingForOutputRecovery && (
+                    <div className="text-xs text-[var(--color-warning-inline)]">
+                      {s.player.outputSuspended}
                     </div>
                   )}
                 </div>
@@ -370,6 +380,11 @@ export function PlayerBar({ onToggleQueue, queueDrawerOpen }: PlayerBarProps) {
               {track.artist && (
                 <div className="text-xs text-[var(--color-text-secondary)] truncate">
                   {track.artist}
+                </div>
+              )}
+              {waitingForOutputRecovery && (
+                <div className="text-xs text-[var(--color-warning-inline)] truncate">
+                  {s.player.outputSuspended}
                 </div>
               )}
             </div>

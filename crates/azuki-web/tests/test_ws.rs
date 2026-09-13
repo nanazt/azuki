@@ -17,7 +17,7 @@ use tokio_tungstenite::{MaybeTlsStream, WebSocketStream, connect_async};
 
 use azuki_web::auth::{AuthRevocation, Claims};
 use azuki_web::build_router;
-use azuki_web::events::{WebEvent, WebSeqEvent};
+use azuki_web::events::{WebEvent, publish_web_event};
 
 type ClientSocket = WebSocketStream<MaybeTlsStream<TcpStream>>;
 
@@ -96,8 +96,31 @@ async fn next_close_code(socket: &mut ClientSocket) -> u16 {
 
 fn assert_snapshot(value: &serde_json::Value) {
     assert_eq!(value["type"], "state_snapshot");
-    assert!(value.get("state").is_some());
+    let state = value.get("state").expect("player state payload");
+    assert!(state.get("playback_suspended").is_some());
+    assert!(state.get("playback_revision").is_some());
     assert!(value.get("active_downloads").is_some());
+}
+
+fn assert_bot_status(value: &serde_json::Value) {
+    assert_eq!(value["type"], "bot_status");
+    let status = value.get("status").expect("bot status payload");
+    for field in [
+        "revision",
+        "status",
+        "target_voice_channel_id",
+        "restart_in_progress",
+        "restart_available_at",
+        "next_retry_at",
+        "last_error",
+        "last_checkpoint_at",
+        "persistence_error",
+    ] {
+        assert!(
+            status.get(field).is_some(),
+            "missing bot status field {field}"
+        );
+    }
 }
 
 fn cookie_for_claims(secret: &str, claims: &Claims) -> String {
@@ -117,6 +140,28 @@ fn assert_handshake_status(error: WsError, expected: StatusCode) {
     }
 }
 
+#[test]
+fn output_recovery_events_keep_their_transport_meaning() {
+    let suspended: WebEvent =
+        azuki_player::PlayerEvent::OutputSuspended { position_ms: 4_200 }.into();
+    let resumed: WebEvent = azuki_player::PlayerEvent::OutputResumed { position_ms: 4_500 }.into();
+
+    assert_eq!(
+        serde_json::to_value(suspended).unwrap(),
+        serde_json::json!({
+            "type": "output_suspended",
+            "position_ms": 4_200,
+        })
+    );
+    assert_eq!(
+        serde_json::to_value(resumed).unwrap(),
+        serde_json::json!({
+            "type": "output_resumed",
+            "position_ms": 4_500,
+        })
+    );
+}
+
 #[tokio::test]
 async fn valid_connection_receives_snapshot_and_ignores_unrelated_revocations() {
     let app = TestApp::new().await;
@@ -125,6 +170,7 @@ async fn valid_connection_receives_snapshot_and_ignores_unrelated_revocations() 
     let mut socket = connect(&server, &cookie).await.unwrap();
 
     assert_snapshot(&next_json(&mut socket).await);
+    assert_bot_status(&next_json(&mut socket).await);
 
     app.state
         .auth_revocations
@@ -145,7 +191,57 @@ async fn valid_connection_receives_snapshot_and_ignores_unrelated_revocations() 
         .await
         .unwrap();
 
-    assert_snapshot(&next_json(&mut socket).await);
+    let sync_snapshot = next_json(&mut socket).await;
+    assert_eq!(sync_snapshot["seq"], 0);
+    assert_snapshot(&sync_snapshot["event"]);
+    assert_bot_status(&next_json(&mut socket).await);
+}
+
+#[tokio::test]
+async fn reconnect_and_sync_receive_latest_bot_status_without_advancing_the_global_sequence() {
+    let app = TestApp::new().await;
+    let cookie = create_test_user(&app, "user1", "testuser", false).await;
+    *app.state.web_seq.lock().unwrap() = 7;
+    let server = RunningServer::start(app.router.clone()).await;
+
+    let mut first_socket = connect(&server, &cookie).await.unwrap();
+    assert_snapshot(&next_json(&mut first_socket).await);
+    let initial_status = next_json(&mut first_socket).await;
+    assert_bot_status(&initial_status);
+    assert_eq!(initial_status["status"]["revision"], 0);
+
+    let _ = app.state.bot_control.restart().await.unwrap();
+
+    let mut reconnected = connect(&server, &cookie).await.unwrap();
+    assert_snapshot(&next_json(&mut reconnected).await);
+    let reconnect_status = next_json(&mut reconnected).await;
+    assert_bot_status(&reconnect_status);
+    assert_eq!(reconnect_status["status"]["revision"], 1);
+    assert_eq!(reconnect_status["status"]["status"], "restarting");
+
+    publish_web_event(
+        &app.state.web_tx,
+        &app.state.web_seq,
+        WebEvent::BotStatus {
+            status: app.state.bot_control.status(),
+        },
+    );
+    let live_status = next_json(&mut reconnected).await;
+    assert_eq!(live_status["seq"], 8);
+    assert_bot_status(&live_status["event"]);
+    assert_eq!(live_status["event"]["status"]["revision"], 1);
+
+    reconnected
+        .send(Message::Text(r#"{"action":"sync"}"#.into()))
+        .await
+        .unwrap();
+    let sync_snapshot = next_json(&mut reconnected).await;
+    assert_eq!(sync_snapshot["seq"], 8);
+    assert_snapshot(&sync_snapshot["event"]);
+    let sync_status = next_json(&mut reconnected).await;
+    assert_bot_status(&sync_status);
+    assert_eq!(sync_status["status"]["revision"], 1);
+    assert_eq!(*app.state.web_seq.lock().unwrap(), 8);
 }
 
 #[tokio::test]
@@ -155,6 +251,7 @@ async fn logout_closes_existing_socket_rejects_old_handshake_and_spares_new_vers
     let server = RunningServer::start(app.router.clone()).await;
     let mut old_socket = connect(&server, &cookie).await.unwrap();
     assert_snapshot(&next_json(&mut old_socket).await);
+    assert_bot_status(&next_json(&mut old_socket).await);
 
     let response = reqwest::Client::new()
         .post(server.http_url("/auth/logout"))
@@ -172,6 +269,7 @@ async fn logout_closes_existing_socket_rejects_old_handshake_and_spares_new_vers
     let new_cookie = create_test_user(&app, "user1", "testuser", false).await;
     let mut new_socket = connect(&server, &new_cookie).await.unwrap();
     assert_snapshot(&next_json(&mut new_socket).await);
+    assert_bot_status(&next_json(&mut new_socket).await);
 
     app.state
         .auth_revocations
@@ -184,7 +282,10 @@ async fn logout_closes_existing_socket_rejects_old_handshake_and_spares_new_vers
         .send(Message::Text(r#"{"action":"sync"}"#.into()))
         .await
         .unwrap();
-    assert_snapshot(&next_json(&mut new_socket).await);
+    let sync_snapshot = next_json(&mut new_socket).await;
+    assert_eq!(sync_snapshot["seq"], 0);
+    assert_snapshot(&sync_snapshot["event"]);
+    assert_bot_status(&next_json(&mut new_socket).await);
 }
 
 #[tokio::test]
@@ -205,6 +306,7 @@ async fn socket_closes_at_credential_expiry() {
     let mut socket = connect(&server, &cookie).await.unwrap();
 
     assert_snapshot(&next_json(&mut socket).await);
+    assert_bot_status(&next_json(&mut socket).await);
     assert_eq!(next_close_code(&mut socket).await, 4001);
 }
 
@@ -215,6 +317,7 @@ async fn authentication_database_failure_closes_socket_as_transient() {
     let server = RunningServer::start(app.router.clone()).await;
     let mut socket = connect(&server, &cookie).await.unwrap();
     assert_snapshot(&next_json(&mut socket).await);
+    assert_bot_status(&next_json(&mut socket).await);
 
     app.db.close().await;
     let _ = socket
@@ -231,6 +334,7 @@ async fn sync_command_revalidates_before_periodic_fallback() {
     let server = RunningServer::start(app.router.clone()).await;
     let mut socket = connect(&server, &cookie).await.unwrap();
     assert_snapshot(&next_json(&mut socket).await);
+    assert_bot_status(&next_json(&mut socket).await);
 
     let new_version =
         azuki_db::queries::users::increment_token_version_if_current(&app.db, "user1", 0)
@@ -285,6 +389,7 @@ async fn lagged_revocation_stream_revalidates_lost_target_notice() {
     let server = RunningServer::start(app.router.clone()).await;
     let mut socket = connect(&server, &cookie).await.unwrap();
     assert_snapshot(&next_json(&mut socket).await);
+    assert_bot_status(&next_json(&mut socket).await);
 
     let new_version =
         azuki_db::queries::users::increment_token_version_if_current(&app.db, "user1", 0)
@@ -322,20 +427,24 @@ async fn lagged_event_stream_recovers_with_sequenced_snapshot() {
     let server = RunningServer::start(app.router.clone()).await;
     let mut socket = connect(&server, &cookie).await.unwrap();
     assert_snapshot(&next_json(&mut socket).await);
+    assert_bot_status(&next_json(&mut socket).await);
+    let _ = app.state.bot_control.restart().await.unwrap();
 
-    for seq in 1..=80 {
-        app.state
-            .web_tx
-            .send(WebSeqEvent {
-                seq,
-                event: snapshot_event.clone(),
-            })
-            .unwrap();
+    for _ in 1..=80 {
+        publish_web_event(
+            &app.state.web_tx,
+            &app.state.web_seq,
+            snapshot_event.clone(),
+        );
     }
 
     let recovery = next_json(&mut socket).await;
-    assert_eq!(recovery["seq"], 0);
+    assert_eq!(recovery["seq"], 80);
     assert_snapshot(&recovery["event"]);
+    let recovered_bot = next_json(&mut socket).await;
+    assert_bot_status(&recovered_bot);
+    assert_eq!(recovered_bot["status"]["revision"], 1);
+    assert_eq!(recovered_bot["status"]["status"], "restarting");
 }
 
 #[tokio::test]
@@ -351,6 +460,7 @@ async fn periodic_recheck_catches_logout_from_another_revocation_channel() {
 
     let mut socket = connect(&first_server, &cookie).await.unwrap();
     assert_snapshot(&next_json(&mut socket).await);
+    assert_bot_status(&next_json(&mut socket).await);
 
     let response = reqwest::Client::new()
         .post(second_server.http_url("/auth/logout"))
@@ -373,6 +483,7 @@ async fn web_shutdown_closes_live_socket_gracefully() {
     let server = RunningServer::start(app.router.clone()).await;
     let mut socket = connect(&server, &cookie).await.unwrap();
     assert_snapshot(&next_json(&mut socket).await);
+    assert_bot_status(&next_json(&mut socket).await);
 
     app.state.web_shutdown.cancel();
 

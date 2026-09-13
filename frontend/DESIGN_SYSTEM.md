@@ -67,6 +67,7 @@ Defined in `src/index.css` `:root` block.
 | --color-danger         | #e53e3e | Delete, error             |
 | --color-success        | #38a169 | Connection status, success |
 | --color-warning        | #92400e | Warning text              |
+| --color-warning-inline | #fbbf24 | Inline warning text on regular app and player surfaces |
 | --color-warning-bg     | #fef3c7 | Warning banner background |
 | --color-warning-border | #d97706 | Warning banner border     |
 
@@ -97,6 +98,7 @@ Defined in `src/index.css` `:root` block.
 | --color-danger         | #c53030 | Delete, error             |
 | --color-success        | #276749 | Success                   |
 | --color-warning        | #92400e | Warning text              |
+| --color-warning-inline | #92400e | Inline warning text on regular app and player surfaces |
 | --color-warning-bg     | #fef3c7 | Warning banner background |
 | --color-warning-border | #d97706 | Warning banner border     |
 
@@ -191,6 +193,9 @@ bg-[var(--color-warning-bg)] border-b border-[var(--color-warning-border)]
 
 - Indicator dot: `bg-[var(--color-warning)]` with `animate-ping`
 - Text: `text-xs font-medium text-[var(--color-warning)]`
+
+- Regular output replacement while the bot is ready freezes the clock without a recovery warning.
+- Actual recovery text on regular player surfaces uses `--color-warning-inline`.
 
 ### Overlay (modal backdrop)
 
@@ -353,7 +358,9 @@ IO options: `{ root: scrollRoot, threshold: 0 }`
 ### Backend Pattern
 
 - Add a `WebEvent` variant in `events.rs` (e.g., `UploadAdded { track, user_id }`)
-- Broadcast via `state.web_tx.send(WebSeqEvent { seq: 0, event })` from route handlers (seq: 0 because route handlers lack the global seq counter; frontend skips dedup for seq=0)
+- Broadcast via `azuki_web::events::publish_web_event(&state.web_tx, &state.web_seq, event)` from route handlers.
+  The shared publisher serializes sequence assignment and delivery across all producers.
+  Per-client snapshots do not consume the live-event cursor because they do not include history or upload notifications.
 - WebSocket hook dispatches a `CustomEvent` (e.g., `"upload-added"`)
 - Page component listens for the CustomEvent
 

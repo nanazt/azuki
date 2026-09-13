@@ -16,7 +16,10 @@ interface PlayerState {
   volume: number;
   loopMode: LoopMode;
   listeners: UserInfo[];
-  lastSeq: number;
+  playbackSuspended: boolean;
+  playbackRevision: number;
+  liveEventSeq: number;
+  snapshotSeq: number;
   connected: boolean;
   hasConnected: boolean;
   boostMode: boolean;
@@ -32,7 +35,8 @@ interface PlayerState {
   setVolume: (v: number) => void;
   setLoopMode: (m: LoopMode) => void;
   setListeners: (l: UserInfo[]) => void;
-  setLastSeq: (s: number) => void;
+  setLiveEventSeq: (seq: number) => void;
+  setOutputSuspended: (suspended: boolean, positionMs: number) => void;
   setConnected: (c: boolean) => void;
   setBoostMode: (v: boolean) => void;
 }
@@ -45,7 +49,10 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   volume: 5,
   loopMode: "off",
   listeners: [],
-  lastSeq: 0,
+  playbackSuspended: false,
+  playbackRevision: 0,
+  liveEventSeq: 0,
+  snapshotSeq: 0,
   connected: false,
   hasConnected: false,
   boostMode: false,
@@ -67,7 +74,9 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       volume: snapshot.volume,
       loopMode: snapshot.loop_mode,
       listeners: snapshot.listeners,
-      ...(seq != null ? { lastSeq: seq } : {}),
+      playbackSuspended: snapshot.playback_suspended,
+      playbackRevision: snapshot.playback_revision,
+      snapshotSeq: seq ?? 0,
     }),
 
   setPlayState: (s) => set({ playState: s }),
@@ -77,7 +86,16 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   setVolume: (v) => set({ volume: v }),
   setLoopMode: (m) => set({ loopMode: m }),
   setListeners: (l) => set({ listeners: l }),
-  setLastSeq: (s) => set({ lastSeq: s }),
+  setOutputSuspended: (suspended, positionMs) =>
+    set((state) => ({
+      playbackSuspended: suspended,
+      playState:
+        state.playState.status === "playing" ||
+        state.playState.status === "paused"
+          ? { ...state.playState, position_ms: positionMs }
+          : state.playState,
+    })),
+  setLiveEventSeq: (seq) => set({ liveEventSeq: seq }),
   setConnected: (c) =>
     set((prev) => ({ connected: c, hasConnected: prev.hasConnected || c })),
   setBoostMode: (v) => set({ boostMode: v }),

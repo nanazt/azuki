@@ -98,7 +98,7 @@ async fn handle_ws(
             close_socket(&mut socket, AUTH_CLOSE_CODE, "authentication expired").await;
             return;
         }
-        result = snapshot_message(&state, false) => {
+        result = snapshot_message(&state, None) => {
             match result {
                 Ok(message) => message,
                 Err(error) => {
@@ -152,6 +152,20 @@ async fn handle_ws(
         }
     }
 
+    let initial_bot_status = match bot_status_message(&state) {
+        Ok(message) => message,
+        Err(error) => {
+            warn!(%error, "failed to serialize initial bot status");
+            close_socket(
+                &mut socket,
+                TRANSIENT_CLOSE_CODE,
+                "state serialization failed",
+            )
+            .await;
+            return;
+        }
+    };
+
     enum InitialSendOutcome {
         Sent,
         Failed,
@@ -159,14 +173,17 @@ async fn handle_ws(
         Shutdown,
     }
     let send_outcome = {
-        let send = tokio::time::timeout(SEND_TIMEOUT, socket.send(initial));
+        let send = async {
+            send_message(&mut socket, initial).await
+                && send_message(&mut socket, initial_bot_status).await
+        };
         tokio::pin!(send);
         tokio::select! {
             biased;
             () = state.web_shutdown.cancelled() => InitialSendOutcome::Shutdown,
             () = &mut expiry => InitialSendOutcome::Expired,
-            result = &mut send => {
-                if matches!(result, Ok(Ok(()))) {
+            sent = &mut send => {
+                if sent {
                     InitialSendOutcome::Sent
                 } else {
                     InitialSendOutcome::Failed
@@ -261,7 +278,12 @@ async fn handle_ws(
                         if command.action == "sync" {
                             if last_sync.elapsed() >= Duration::from_millis(500) {
                                 last_sync = Instant::now();
-                                let message = match snapshot_message(&state, false).await {
+                                let baseline = *state
+                                    .web_seq
+                                    .lock()
+                                    .expect("web event sequence mutex should not be poisoned");
+                                let message =
+                                    match snapshot_message(&state, Some(baseline)).await {
                                     Ok(message) => message,
                                     Err(error) => {
                                         warn!(%error, "failed to serialize WebSocket sync snapshot");
@@ -275,6 +297,9 @@ async fn handle_ws(
                                     }
                                 };
                                 if !send_message(&mut socket, message).await {
+                                    break;
+                                }
+                                if !send_current_bot_status(&mut socket, &state, "sync").await {
                                     break;
                                 }
                             }
@@ -321,7 +346,11 @@ async fn handle_ws(
                         if !revalidate_or_close(&mut socket, &claims, &state).await {
                             break;
                         }
-                        let message = match snapshot_message(&state, true).await {
+                        let baseline = *state
+                            .web_seq
+                            .lock()
+                            .expect("web event sequence mutex should not be poisoned");
+                        let message = match snapshot_message(&state, Some(baseline)).await {
                             Ok(message) => message,
                             Err(error) => {
                                 warn!(%error, "failed to serialize WebSocket recovery snapshot");
@@ -335,6 +364,9 @@ async fn handle_ws(
                             }
                         };
                         if !send_message(&mut socket, message).await {
+                            break;
+                        }
+                        if !send_current_bot_status(&mut socket, &state, "recovery").await {
                             break;
                         }
                     }
@@ -430,8 +462,23 @@ async fn send_message(socket: &mut WebSocket, message: Message) -> bool {
         Ok(Ok(()))
     )
 }
+async fn send_current_bot_status(
+    socket: &mut WebSocket,
+    state: &WebState,
+    context: &'static str,
+) -> bool {
+    let message = match bot_status_message(state) {
+        Ok(message) => message,
+        Err(error) => {
+            warn!(%error, context, "failed to serialize WebSocket bot status");
+            close_socket(socket, TRANSIENT_CLOSE_CODE, "state serialization failed").await;
+            return false;
+        }
+    };
+    send_message(socket, message).await
+}
 
-async fn snapshot_message(state: &WebState, sequenced: bool) -> serde_json::Result<Message> {
+async fn snapshot_message(state: &WebState, sequence: Option<u64>) -> serde_json::Result<Message> {
     let snapshot = state.player.get_state().await;
     let active_downloads = state
         .active_downloads
@@ -442,12 +489,18 @@ async fn snapshot_message(state: &WebState, sequenced: bool) -> serde_json::Resu
         state: snapshot,
         active_downloads,
     };
-    let json = if sequenced {
-        serde_json::to_string(&WebSeqEvent { seq: 0, event })?
-    } else {
-        serde_json::to_string(&event)?
+    let json = match sequence {
+        Some(seq) => serde_json::to_string(&WebSeqEvent { seq, event })?,
+        None => serde_json::to_string(&event)?,
     };
     Ok(Message::Text(json.into()))
+}
+
+fn bot_status_message(state: &WebState) -> serde_json::Result<Message> {
+    let event = WebEvent::BotStatus {
+        status: state.bot_control.status(),
+    };
+    Ok(Message::Text(serde_json::to_string(&event)?.into()))
 }
 
 #[derive(serde::Deserialize)]

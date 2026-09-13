@@ -14,6 +14,7 @@
   --color-danger: #e53e3e;
   --color-success: #38a169;
   --color-warning: #92400e;
+  --color-warning-inline: #fbbf24;
   --color-warning-bg: #fef3c7;
   --color-warning-border: #d97706;
 }
@@ -134,6 +135,7 @@ html.light {
   --color-danger: #c53030;
   --color-success: #276749;
   --color-warning: #92400e;
+  --color-warning-inline: #92400e;
   --color-warning-bg: #fef3c7;
   --color-warning-border: #d97706;
 }

@@ -39,6 +39,8 @@ pub(crate) struct PlayerActor {
     pub(crate) seq: u64,
     pub(crate) listeners: Vec<UserInfo>,
     pub(crate) current_added_by: Option<UserInfo>,
+    pub(crate) playback_suspended: bool,
+    pub(crate) playback_revision: u64,
 }
 
 impl PlayerActor {
@@ -65,10 +67,40 @@ impl PlayerActor {
                 track,
                 started_at,
                 position_ms,
-            } => (position_ms + started_at.elapsed().as_millis() as u64).min(track.duration_ms),
+            } => {
+                let elapsed_ms = if self.playback_suspended {
+                    0
+                } else {
+                    u64::try_from(started_at.elapsed().as_millis()).unwrap_or(u64::MAX)
+                };
+                position_ms
+                    .saturating_add(elapsed_ms)
+                    .min(track.duration_ms)
+            }
             PlayState::Paused { track, position_ms } => (*position_ms).min(track.duration_ms),
             _ => 0,
         }
+    }
+
+    fn advance_playback_revision(&mut self) {
+        self.playback_revision = self
+            .playback_revision
+            .checked_add(1)
+            .expect("playback revision exhausted");
+    }
+
+    fn freeze_playing_position(&mut self) -> u64 {
+        let frozen_position_ms = self.current_position_ms();
+        if let PlayState::Playing {
+            started_at,
+            position_ms,
+            ..
+        } = &mut self.state
+        {
+            *started_at = Instant::now();
+            *position_ms = frozen_position_ms;
+        }
+        frozen_position_ms
     }
 
     fn snapshot(&self) -> PlayerSnapshot {
@@ -77,14 +109,9 @@ impl PlayerActor {
             PlayState::Loading { track } => PlayStateInfo::Loading {
                 track: track.clone(),
             },
-            PlayState::Playing {
-                track,
-                started_at,
-                position_ms,
-            } => PlayStateInfo::Playing {
+            PlayState::Playing { track, .. } => PlayStateInfo::Playing {
                 track: track.clone(),
-                position_ms: (*position_ms + started_at.elapsed().as_millis() as u64)
-                    .min(track.duration_ms),
+                position_ms: self.current_position_ms(),
             },
             PlayState::Paused { track, position_ms } => PlayStateInfo::Paused {
                 track: track.clone(),
@@ -104,6 +131,8 @@ impl PlayerActor {
             loop_mode: self.queue.loop_mode(),
             listeners: self.listeners.clone(),
             current_added_by: self.current_added_by.clone(),
+            playback_suspended: self.playback_suspended,
+            playback_revision: self.playback_revision,
         }
     }
 
@@ -114,6 +143,7 @@ impl PlayerActor {
                 user_info,
                 reply,
             } => {
+                self.advance_playback_revision();
                 self.broadcast(PlayerEvent::TrackLoading {
                     track: track.clone(),
                 });
@@ -137,13 +167,10 @@ impl PlayerActor {
             }
 
             PlayerCommand::Pause { reply } => match &self.state {
-                PlayState::Playing {
-                    track,
-                    started_at,
-                    position_ms,
-                } => {
-                    let pos = *position_ms + started_at.elapsed().as_millis() as u64;
+                PlayState::Playing { track, .. } => {
+                    let pos = self.current_position_ms();
                     let track = track.clone();
+                    self.advance_playback_revision();
                     self.state = PlayState::Paused {
                         track,
                         position_ms: pos,
@@ -160,6 +187,7 @@ impl PlayerActor {
                 PlayState::Paused { track, position_ms } => {
                     let track = track.clone();
                     let pos = *position_ms;
+                    self.advance_playback_revision();
                     self.state = PlayState::Playing {
                         track,
                         started_at: Instant::now(),
@@ -174,6 +202,7 @@ impl PlayerActor {
             },
 
             PlayerCommand::Skip { reply } => {
+                self.advance_playback_revision();
                 let was_paused = matches!(&self.state, PlayState::Paused { .. });
 
                 let current_entry = match &self.state {
@@ -245,6 +274,7 @@ impl PlayerActor {
             }
 
             PlayerCommand::Stop { reply } => {
+                self.advance_playback_revision();
                 if let PlayState::Playing { track, .. }
                 | PlayState::Paused { track, .. }
                 | PlayState::Loading { track }
@@ -267,6 +297,7 @@ impl PlayerActor {
             PlayerCommand::Seek { position_ms, reply } => match &self.state {
                 PlayState::Playing { track, .. } => {
                     let track = track.clone();
+                    self.advance_playback_revision();
                     self.state = PlayState::Playing {
                         track,
                         started_at: Instant::now(),
@@ -280,6 +311,7 @@ impl PlayerActor {
                 }
                 PlayState::Paused { track, .. } => {
                     let track = track.clone();
+                    self.advance_playback_revision();
                     self.state = PlayState::Paused { track, position_ms };
                     self.broadcast(PlayerEvent::Seeked {
                         position_ms,
@@ -295,6 +327,7 @@ impl PlayerActor {
             },
 
             PlayerCommand::SetVolume { volume, reply } => {
+                self.advance_playback_revision();
                 self.volume = volume.min(100);
                 self.broadcast(PlayerEvent::VolumeChanged {
                     volume: self.volume,
@@ -337,19 +370,12 @@ impl PlayerActor {
             PlayerCommand::Previous { reply } => {
                 const RESTART_THRESHOLD_MS: u64 = 3000;
 
-                let (current_pos, has_track, was_paused) = match &self.state {
-                    PlayState::Playing {
-                        started_at,
-                        position_ms,
-                        ..
-                    } => (
-                        *position_ms + started_at.elapsed().as_millis() as u64,
-                        true,
-                        false,
-                    ),
-                    PlayState::Paused { position_ms, .. } => (*position_ms, true, true),
-                    _ => (0, false, false),
+                let (has_track, was_paused) = match &self.state {
+                    PlayState::Playing { .. } => (true, false),
+                    PlayState::Paused { .. } => (true, true),
+                    _ => (false, false),
                 };
+                let current_pos = self.current_position_ms();
 
                 if !has_track {
                     let _ = reply.send(Err(PlayerError::InvalidState(
@@ -357,6 +383,7 @@ impl PlayerActor {
                     )));
                     return;
                 }
+                self.advance_playback_revision();
 
                 // Position > threshold → seek to 0 (restart current track)
                 let should_restart = current_pos > RESTART_THRESHOLD_MS;
@@ -506,6 +533,7 @@ impl PlayerActor {
             PlayerCommand::PlayAt { position, reply } => {
                 let was_paused = matches!(&self.state, PlayState::Paused { .. });
                 if let Some(entry) = self.queue.remove(position) {
+                    self.advance_playback_revision();
                     let current_entry = match &self.state {
                         PlayState::Playing { track, .. }
                         | PlayState::Paused { track, .. }
@@ -596,6 +624,7 @@ impl PlayerActor {
             } => {
                 let action = match &self.state {
                     PlayState::Idle => {
+                        self.advance_playback_revision();
                         self.broadcast(PlayerEvent::TrackLoading {
                             track: track.clone(),
                         });
@@ -621,6 +650,7 @@ impl PlayerActor {
                         track: current,
                         position_ms,
                     } if *position_ms >= current.duration_ms => {
+                        self.advance_playback_revision();
                         self.broadcast(PlayerEvent::TrackLoading {
                             track: track.clone(),
                         });
@@ -670,9 +700,47 @@ impl PlayerActor {
             PlayerCommand::GetState { reply } => {
                 let _ = reply.send(self.snapshot());
             }
+            PlayerCommand::SuspendOutput { reply } => {
+                if !self.playback_suspended {
+                    let position_ms = self.freeze_playing_position();
+                    self.playback_suspended = true;
+                    self.advance_playback_revision();
+                    self.broadcast(PlayerEvent::OutputSuspended { position_ms });
+                }
+                let _ = reply.send(Ok(()));
+            }
 
-            PlayerCommand::OnTrackEnd { track_id, reason } => {
-                // Verify the track_id matches the current track to prevent race conditions
+            PlayerCommand::ResumeOutput {
+                expected_revision,
+                reply,
+            } => {
+                if expected_revision != self.playback_revision {
+                    let _ = reply.send(Ok(false));
+                    return;
+                }
+
+                if self.playback_suspended {
+                    let position_ms = self.current_position_ms();
+                    if let PlayState::Playing {
+                        started_at,
+                        position_ms: base_position_ms,
+                        ..
+                    } = &mut self.state
+                    {
+                        *started_at = Instant::now();
+                        *base_position_ms = position_ms;
+                    }
+                    self.playback_suspended = false;
+                    self.broadcast(PlayerEvent::OutputResumed { position_ms });
+                }
+                let _ = reply.send(Ok(true));
+            }
+
+            PlayerCommand::OnTrackEnd {
+                track_id,
+                reason,
+                playback_revision,
+            } => {
                 let current_matches = match &self.state {
                     PlayState::Playing { track, .. }
                     | PlayState::Loading { track }
@@ -680,10 +748,16 @@ impl PlayerActor {
                     _ => false,
                 };
 
-                if !current_matches {
+                if self.playback_suspended
+                    || playback_revision != self.playback_revision
+                    || !current_matches
+                {
                     warn!(
                         track_id,
-                        "OnTrackEnd ignored: track_id doesn't match current"
+                        playback_revision,
+                        current_revision = self.playback_revision,
+                        playback_suspended = self.playback_suspended,
+                        "OnTrackEnd ignored: stale or non-current playback"
                     );
                     return;
                 }
@@ -707,6 +781,7 @@ impl PlayerActor {
                 let listened_ms = current_track
                     .as_ref()
                     .map_or(0, |t| self.current_position_ms().min(t.duration_ms));
+                self.advance_playback_revision();
 
                 // LoopMode::One → replay same track without touching history
                 if self.queue.loop_mode() == LoopMode::One

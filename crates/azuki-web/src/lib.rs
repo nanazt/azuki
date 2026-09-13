@@ -7,7 +7,7 @@ pub mod ws;
 use std::future::IntoFuture;
 use std::net::SocketAddr;
 use std::sync::atomic::AtomicU64;
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Mutex, RwLock};
 
 use axum::extract::Request;
 use axum::http::{HeaderName, HeaderValue, Method, StatusCode};
@@ -22,6 +22,7 @@ use tower_http::services::{ServeDir, ServeFile};
 use tower_http::set_header::SetResponseHeaderLayer;
 use tracing::info;
 
+use azuki_bot::BotControl;
 use azuki_media::{MediaStore, YouTubeClient, YtDlp};
 use azuki_player::PlayerController;
 
@@ -40,6 +41,7 @@ pub struct DownloadRequest {
 pub struct WebState {
     pub db: SqlitePool,
     pub player: PlayerController,
+    pub bot_control: BotControl,
     pub ytdlp: Arc<YtDlp>,
     pub media_store: Arc<MediaStore>,
     pub youtube: Arc<RwLock<Option<Arc<YouTubeClient>>>>,
@@ -52,6 +54,7 @@ pub struct WebState {
     pub voice_channels: Arc<RwLock<Vec<(u64, String)>>>,
     pub text_channels: Arc<RwLock<Vec<(u64, String)>>>,
     pub web_tx: broadcast::Sender<WebSeqEvent>,
+    pub web_seq: Arc<Mutex<u64>>,
     pub auth_revocations: broadcast::Sender<auth::AuthRevocation>,
     pub web_shutdown: CancellationToken,
     pub active_downloads: Arc<DashMap<String, DownloadStatus>>,
@@ -138,7 +141,7 @@ async fn csrf_check(req: Request, next: Next) -> Result<axum::response::Response
 async fn auth_no_store(req: Request, next: Next) -> axum::response::Response {
     let is_auth = matches!(
         req.uri().path(),
-        "/api/me" | "/api/auth/refresh" | "/auth/logout"
+        "/api/me" | "/api/auth/refresh" | "/auth/logout" | "/api/bot/status" | "/api/bot/restart"
     );
     let mut response = next.run(req).await;
     if is_auth {
@@ -183,6 +186,7 @@ pub fn build_router(state: WebState) -> axum::Router {
     // API routes with CSRF protection
     let api_routes = axum::Router::new()
         .merge(routes::player::player_routes())
+        .merge(routes::bot::bot_routes())
         .merge(routes::content::content_routes(state.max_upload_size_mb))
         .merge(routes::stats::stats_routes())
         .merge(routes::admin::admin_routes())

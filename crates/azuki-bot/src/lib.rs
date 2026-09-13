@@ -1,4 +1,5 @@
 pub mod commands;
+pub mod control;
 pub mod embed;
 pub mod handler;
 pub mod messages;
@@ -8,9 +9,8 @@ use std::sync::atomic::{AtomicU8, AtomicU64};
 use std::sync::{Arc, RwLock};
 
 use serenity::all::GuildId;
-use songbird::Songbird;
 use sqlx::SqlitePool;
-use tokio::sync::Mutex;
+use tokio::sync::{mpsc, oneshot};
 
 use azuki_media::{YouTubeClient, YtDlp};
 use azuki_player::PlayerController;
@@ -21,7 +21,6 @@ pub struct BotState {
     pub youtube: Arc<RwLock<Option<Arc<YouTubeClient>>>>,
     pub db: SqlitePool,
     pub guild_id: GuildId,
-    pub songbird: Mutex<Option<Arc<Songbird>>>,
     pub voice_channels: Arc<RwLock<Vec<(u64, String)>>>,
     pub text_channels: Arc<RwLock<Vec<(u64, String)>>>,
     pub http_tx: tokio::sync::watch::Sender<Option<Arc<serenity::http::Http>>>,
@@ -30,6 +29,8 @@ pub struct BotState {
     pub web_url: String,
     /// Side-channel for history button handler → bridge task: (track_id, discord_message_id)
     pub history_delete_tx: tokio::sync::mpsc::Sender<(String, u64)>,
+    pub control: BotControl,
+    pub checkpoint_tx: mpsc::Sender<oneshot::Sender<Result<(), String>>>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -54,4 +55,8 @@ pub enum BotError {
     NoYouTubeKey,
 }
 
+pub use control::{
+    BotControl, BotErrorStage, BotLifecycleStatus, BotPersistenceError, BotRuntime, BotStatus,
+    BotStatusError, RestartError, RestartOutcome,
+};
 pub use handler::start_bot;

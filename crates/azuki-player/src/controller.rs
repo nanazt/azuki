@@ -74,9 +74,17 @@ pub enum PlayerCommand {
     GetState {
         reply: oneshot::Sender<PlayerSnapshot>,
     },
+    SuspendOutput {
+        reply: oneshot::Sender<Result<(), PlayerError>>,
+    },
+    ResumeOutput {
+        expected_revision: u64,
+        reply: oneshot::Sender<Result<bool, PlayerError>>,
+    },
     OnTrackEnd {
         track_id: String,
         reason: TrackEndReason,
+        playback_revision: u64,
     },
 }
 
@@ -84,6 +92,12 @@ pub enum PlayerCommand {
 pub enum PlayAction {
     PlayedNow,
     Enqueued,
+}
+#[derive(Debug, Clone)]
+pub struct RestoredPlayback {
+    pub entry: QueueEntry,
+    pub position_ms: u64,
+    pub paused: bool,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -98,6 +112,8 @@ pub enum PlayerError {
     QueueFull,
     #[error("track already in queue or playing")]
     Duplicate,
+    #[error("player actor unavailable")]
+    ActorUnavailable,
 }
 
 pub struct PlayerController {
@@ -133,16 +149,35 @@ impl PlayerController {
         queue_items: Vec<QueueEntry>,
         history: Vec<QueueEntry>,
         loop_mode: LoopMode,
-        current_track: Option<QueueEntry>,
+        restored_playback: Option<RestoredPlayback>,
     ) -> Self {
         let (cmd_tx, cmd_rx) = mpsc::channel(64);
         let (event_tx, _) = broadcast::channel(BROADCAST_CAPACITY);
 
-        let current_added_by = current_track.as_ref().map(|e| e.added_by.clone());
-        let initial_state = match current_track {
-            Some(entry) => PlayState::Paused {
+        let playback_suspended = restored_playback.is_some();
+        let volume = restored_playback
+            .as_ref()
+            .map_or(5, |playback| playback.entry.track.volume);
+        let current_added_by = restored_playback
+            .as_ref()
+            .map(|playback| playback.entry.added_by.clone());
+        let initial_state = match restored_playback {
+            Some(RestoredPlayback {
+                entry,
+                position_ms,
+                paused: true,
+            }) => PlayState::Paused {
                 track: entry.track,
-                position_ms: 0,
+                position_ms,
+            },
+            Some(RestoredPlayback {
+                entry,
+                position_ms,
+                paused: false,
+            }) => PlayState::Playing {
+                track: entry.track,
+                started_at: std::time::Instant::now(),
+                position_ms,
             },
             None => PlayState::Idle,
         };
@@ -151,10 +186,12 @@ impl PlayerController {
             event_tx: event_tx.clone(),
             state: initial_state,
             queue: Queue::with_state(queue_items, history, loop_mode),
-            volume: 5,
+            volume,
             seq: 0,
             listeners: Vec::new(),
             current_added_by,
+            playback_suspended,
+            playback_revision: 0,
         };
 
         tokio::spawn(actor.run());
@@ -298,23 +335,64 @@ impl PlayerController {
         rx.await.unwrap_or(Err(PlayerError::NoTrack))
     }
 
-    pub async fn get_state(&self) -> PlayerSnapshot {
+    pub async fn try_get_state(&self) -> Result<PlayerSnapshot, PlayerError> {
         let (tx, rx) = oneshot::channel();
-        self.send_cmd(PlayerCommand::GetState { reply: tx }).await;
-        rx.await.unwrap_or_else(|_| PlayerSnapshot {
-            state: PlayStateInfo::Idle,
-            queue: Vec::new(),
-            history: Vec::new(),
-            volume: 5,
-            loop_mode: LoopMode::Off,
-            listeners: Vec::new(),
-            current_added_by: None,
-        })
+        self.cmd_tx
+            .send(PlayerCommand::GetState { reply: tx })
+            .await
+            .map_err(|_| PlayerError::ActorUnavailable)?;
+        rx.await.map_err(|_| PlayerError::ActorUnavailable)
     }
 
-    pub async fn on_track_end(&self, track_id: String, reason: TrackEndReason) {
-        self.send_cmd(PlayerCommand::OnTrackEnd { track_id, reason })
-            .await;
+    pub async fn get_state(&self) -> PlayerSnapshot {
+        self.try_get_state()
+            .await
+            .unwrap_or_else(|_| PlayerSnapshot {
+                state: PlayStateInfo::Idle,
+                queue: Vec::new(),
+                history: Vec::new(),
+                volume: 5,
+                loop_mode: LoopMode::Off,
+                listeners: Vec::new(),
+                current_added_by: None,
+                playback_suspended: false,
+                playback_revision: 0,
+            })
+    }
+
+    pub async fn suspend_output(&self) -> Result<(), PlayerError> {
+        let (tx, rx) = oneshot::channel();
+        self.cmd_tx
+            .send(PlayerCommand::SuspendOutput { reply: tx })
+            .await
+            .map_err(|_| PlayerError::ActorUnavailable)?;
+        rx.await.map_err(|_| PlayerError::ActorUnavailable)?
+    }
+
+    pub async fn resume_output(&self, expected_revision: u64) -> Result<bool, PlayerError> {
+        let (tx, rx) = oneshot::channel();
+        self.cmd_tx
+            .send(PlayerCommand::ResumeOutput {
+                expected_revision,
+                reply: tx,
+            })
+            .await
+            .map_err(|_| PlayerError::ActorUnavailable)?;
+        rx.await.map_err(|_| PlayerError::ActorUnavailable)?
+    }
+
+    pub async fn on_track_end(
+        &self,
+        track_id: String,
+        reason: TrackEndReason,
+        playback_revision: u64,
+    ) {
+        self.send_cmd(PlayerCommand::OnTrackEnd {
+            track_id,
+            reason,
+            playback_revision,
+        })
+        .await;
     }
 }
 
