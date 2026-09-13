@@ -1,0 +1,46 @@
+[env]
+_.file = ".env"
+
+[tasks.dev]
+description = "Build the frontend and run the server"
+alias = "default"
+run = '''
+#!/usr/bin/env bash
+set -e
+(
+  cd frontend
+  npm run build
+)
+exec cargo run "$@"
+'''
+
+[tasks.build]
+description = "Build the frontend and backend"
+run = '''
+#!/usr/bin/env bash
+set -e
+(
+  cd frontend
+  npm run build
+)
+exec cargo build "$@"
+'''
+
+[tasks.cargo-run]
+description = "Run the server without rebuilding the frontend"
+run = "cargo run"
+
+[tasks.frontend-dev]
+description = "Run the Vite development server"
+dir = "frontend"
+run = "npm run dev --"
+
+[tasks.check]
+description = "Check the Rust workspace with Clippy"
+env = { SQLX_OFFLINE = "true" }
+run = "cargo clippy --workspace --all-targets -- -D warnings"
+
+[tasks.test]
+description = "Run the Rust workspace tests"
+env = { SQLX_OFFLINE = "true" }
+run = "cargo test --workspace"

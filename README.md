@@ -18,24 +18,58 @@ A Discord music bot with a web dashboard.
 - Rust (edition 2024)
 - Node.js
 - libopus — `brew install opus pkg-config`
-- [just](https://github.com/casey/just)
+- [mise](https://mise.jdx.dev/)
 
 ### Setup
 
-The justfile uses `set dotenv-load`. Create a `.env` in the project root:
+After reviewing the repository configuration, trust it to enable mise tasks:
+
+```bash
+mise trust
+```
+
+Tasks use the Rust and Node.js installations already available on `PATH`; toolchain provisioning and Docker versions are unchanged.
+An optional `.env` in the project root supplies development environment variables:
 
 ```
 WEB_ORIGIN=http://localhost:3000
 ```
 
+Unlike the previous just tasks, mise lets `.env` values override already-exported shell variables with the same name.
+Task-specific settings still take precedence, including `SQLX_OFFLINE=true` for `check` and `test`.
+
 ### Commands
 
-| Command             | Description                  |
-| ------------------- | ---------------------------- |
-| `just run`          | Build frontend + cargo run   |
-| `just frontend-dev` | Vite dev server (hot reload) |
-| `just check`        | Clippy with SQLX_OFFLINE     |
-| `just test`         | Run workspace tests          |
+| Command | Description |
+| --- | --- |
+| `mise run dev` | Build frontend + cargo run |
+| `mise run build` | Build frontend + cargo build |
+| `mise run cargo-run` | Cargo run without rebuilding the frontend |
+| `mise run frontend-dev` | Vite dev server (hot reload) |
+| `mise run check` | Clippy with SQLX_OFFLINE |
+| `mise run test` | Run workspace tests |
+
+`default` aliases `dev`.
+Pass Cargo arguments after the task name, for example `mise run test -- -p azuki-web`.
+
+### Releases
+
+The project [release skill](.agents/skills/release/SKILL.md) guides version selection, English release notes, two approval checkpoints, and publication.
+Start OMP in this repository and invoke `/skill:release`, optionally followed by a version.
+Writing or reviewing the skill does not authorize a release.
+
+GitHub CLI calls use a task-local token from the stored `nanazt` account:
+
+```bash
+mise run gh-nanazt -- api user --jq .login
+```
+
+GitHub CLI must already have credentials stored for `nanazt` on `github.com`.
+The task retrieves the token at execution time without storing it in project configuration or exporting it to unrelated tasks.
+Git pushes use the remote's own transport credentials; `GH_TOKEN` does not select an SSH account.
+
+Pushing a `v*` tag intentionally builds and publishes the GHCR image, including `latest`.
+This does not deploy the running server.
 
 ### First Run
 

@@ -251,7 +251,8 @@ media/
 .claude/
 .omx/
 .codex/
-.agents/
+.agents/*
+!.agents/skills/
 data/
 .playwright-mcp/
 

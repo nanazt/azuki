@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+#MISE description="Run GitHub CLI as nanazt"
+#MISE quiet=true
+set -euo pipefail
+set +x
+
+unset GH_TOKEN GITHUB_TOKEN GH_DEBUG
+export GH_HOST=github.com
+
+token="$(gh auth token --hostname github.com --user nanazt)"
+if [[ -z "$token" ]]; then
+  printf '%s\n' 'No GitHub token available for nanazt.' >&2
+  exit 1
+fi
+
+export GH_TOKEN="$token"
+exec gh "$@"

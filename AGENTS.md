@@ -11,7 +11,7 @@ Discord music bot with web dashboard. Rust workspace backend (6 crates) + React 
 | File                  | Description                                            |
 | --------------------- | ------------------------------------------------------ |
 | `Cargo.toml`          | Workspace manifest with all dependency versions        |
-| `justfile`            | Task runner commands (dev, build, check, test)         |
+| `mise.toml`          | Task runner commands (dev, build, check, test)         |
 | `.gitignore`          | Ignore rules for Rust, Node, OS, and project files     |
 | `gaji.config.ts`      | gaji workflow tool configuration                       |
 | `workflows/docker.ts` | Docker build/push GitHub Actions workflow (TypeScript) |
@@ -31,7 +31,7 @@ Discord music bot with web dashboard. Rust workspace backend (6 crates) + React 
 ### Working In This Directory
 
 - Workspace-level `Cargo.toml` defines all shared dependencies — add new deps here first
-- Build check: `just check`
+- Build check: `mise run check`
 - Edition 2024, resolver 3
 - All TEXT NOT NULL columns need `as "col!"` suffix in sqlx queries
 - COUNT queries need `as "count!: i64"` and `ORDER BY 4 DESC` (not `ORDER BY count`)
@@ -39,8 +39,8 @@ Discord music bot with web dashboard. Rust workspace backend (6 crates) + React 
 
 ### Testing Requirements
 
-- `just check` must pass clean
-- `just test` — all tests must pass
+- `mise run check` must pass clean
+- `mise run test` — all tests must pass
 - Frontend: `cd frontend && npx tsc --noEmit && npm run build` (type-check first, then build)
 
 ### API Integration Testing
@@ -95,5 +95,9 @@ Discord music bot with web dashboard. Rust workspace backend (6 crates) + React 
 - **Docker image**: `ghcr.io/nanazt/azuki` — built by GitHub Actions on `v*` tag push
 - **Workflow source**: `workflows/docker.ts` → `.github/workflows/docker.yml`
 - **CRITICAL**: NEVER edit `.github/workflows/*.yml` directly. Always edit the TypeScript source in `workflows/` first, then run `npx gaji build` to regenerate the YAML. Direct YAML edits will be overwritten.
+- **Release requests**: Read `.agents/skills/release/SKILL.md` when explicitly asked to release azuki or resume an interrupted release.
+  The skill defines the required approvals and publication checks; writing or reviewing it is not release authorization.
+- **GitHub CLI account**: Use `mise run gh-nanazt -- ...` for this repository's GitHub CLI operations.
+  It supplies `nanazt` credentials only to the invoked command; Git transport authentication remains separate.
 
 <!-- MANUAL: -->
