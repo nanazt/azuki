@@ -44,3 +44,11 @@ run = "cargo clippy --workspace --all-targets -- -D warnings"
 description = "Run the Rust workspace tests"
 env = { SQLX_OFFLINE = "true" }
 run = "cargo test --workspace"
+
+[tasks.release]
+description = "Inspect, plan, publish, or resume an explicitly approved release"
+run = "node .agents/skills/release/scripts/release.mjs"
+
+[tasks.test-release]
+description = "Test release automation against isolated local Git and GitHub fixtures"
+run = "node --test .agents/skills/release/tests/*.test.mjs"

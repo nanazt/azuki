@@ -96,7 +96,8 @@ Discord music bot with web dashboard. Rust workspace backend (6 crates) + React 
 - **Workflow source**: `workflows/docker.ts` → `.github/workflows/docker.yml`
 - **CRITICAL**: NEVER edit `.github/workflows/*.yml` directly. Always edit the TypeScript source in `workflows/` first, then run `npx gaji build` to regenerate the YAML. Direct YAML edits will be overwritten.
 - **Release requests**: Read `.agents/skills/release/SKILL.md` when explicitly asked to release azuki or resume an interrupted release.
-  The skill defines the required approvals and publication checks; writing or reviewing it is not release authorization.
+  The skill defines one exact-scope approval and scripted publication checks; writing or reviewing it is not release authorization.
+  Validate automation changes with `mise run test-release`, which uses isolated local Git and GitHub fixtures.
 - **GitHub CLI account**: Use `mise run gh-nanazt -- ...` for this repository's GitHub CLI operations.
   It supplies `nanazt` credentials only to the invoked command; Git transport authentication remains separate.
 

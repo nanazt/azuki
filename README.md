@@ -54,9 +54,12 @@ Pass Cargo arguments after the task name, for example `mise run test -- -p azuki
 
 ### Releases
 
-The project [release skill](.agents/skills/release/SKILL.md) guides version selection, English release notes, two approval checkpoints, and publication.
+The project [release skill](.agents/skills/release/SKILL.md) combines semantic change review and English notes with scripted `inspect → plan → publish` execution.
+One explicit approval covers the exact source SHA, version, notes, and publication consequences; version selection alone does not authorize publication.
 Start OMP in this repository and invoke `/skill:release`, optionally followed by a version.
 Writing or reviewing the skill does not authorize a release.
+Run `mise run release -- --help` for the CLI and `mise run test-release` for isolated automation tests.
+Interrupted publication uses the original approved plan and journal through the skill's [recovery procedure](.agents/skills/release/RECOVERY.md), never a speculative retry.
 
 GitHub CLI calls use a task-local token from the stored `nanazt` account:
 
