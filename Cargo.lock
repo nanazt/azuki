@@ -260,7 +260,7 @@ dependencies = [
 
 [[package]]
 name = "azuki"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "axum",
@@ -288,7 +288,7 @@ dependencies = [
 
 [[package]]
 name = "azuki-bot"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "azuki-db",
  "azuki-media",
@@ -310,7 +310,7 @@ dependencies = [
 
 [[package]]
 name = "azuki-db"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "chrono",
  "serde",
@@ -323,7 +323,7 @@ dependencies = [
 
 [[package]]
 name = "azuki-media"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "azuki-db",
  "hex",
@@ -344,7 +344,7 @@ dependencies = [
 
 [[package]]
 name = "azuki-player"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "azuki-db",
  "chrono",
@@ -357,7 +357,7 @@ dependencies = [
 
 [[package]]
 name = "azuki-web"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "axum",
