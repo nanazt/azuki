@@ -1,0 +1,91 @@
+import { Workflow, Job, getAction } from "../generated/index.js";
+
+const checkout = getAction("actions/checkout@v4");
+const environment = {
+  REGISTRY_USERNAME: "${{ github.actor }}",
+  REGISTRY_TOKEN: "${{ secrets.GITHUB_TOKEN }}",
+};
+const shared = `
+import assert from 'node:assert/strict';
+import { appendFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { setTimeout as delay } from 'node:timers/promises';
+import { RegistryClient, GitHubRetentionClient, MANIFEST_MEDIA_TYPE, CONFIG_MEDIA_TYPE } from './scripts/docker-cache.mjs';
+assert.equal(process.env.GITHUB_ACTIONS, 'true');
+assert.equal(process.env.GITHUB_REPOSITORY, 'nanazt/azuki');
+const repository = process.env.GITHUB_REPOSITORY;
+const tag = 'connection-check-' + process.env.GITHUB_RUN_ID + '-' + process.env.GITHUB_RUN_ATTEMPT;
+assert.match(tag, /^connection-check-[0-9]+-[0-9]+$/);
+const client = new RegistryClient({ registry: 'https://ghcr.io', repository: repository + '-build-cache', username: process.env.REGISTRY_USERNAME, token: process.env.REGISTRY_TOKEN, limits: { timeoutMs: 60000 } });
+const config = Buffer.from(JSON.stringify({ architecture: 'amd64', os: 'linux', rootfs: { type: 'layers', diff_ids: [] }, config: { Labels: { 'org.opencontainers.image.source': 'https://github.com/' + repository, 'io.github.nanazt.azuki.connection-check': tag, 'org.opencontainers.image.revision': process.env.GITHUB_SHA } } }));
+`;
+const script = (body: string) => `node --input-type=module <<'NODE'\n${shared}\n${body}\nNODE`;
+
+new Workflow({
+  name: "Temporary GHCR Connection Check",
+  on: { workflow_dispatch: {} },
+  permissions: { contents: "read", packages: "write" },
+}).jobs(j => j
+  .add("write", new Job("ubuntu-latest", {
+    "timeout-minutes": 5,
+    env: environment,
+  }).outputs({ digest: "${{ steps.write.outputs.digest }}" }).steps(s => s
+    .add(checkout())
+    .add({
+      id: "write",
+      name: "Write uniquely tagged connection object",
+      run: script(`
+const descriptor = await client.uploadBytes(config);
+const bytes = Buffer.from(JSON.stringify({ schemaVersion: 2, mediaType: MANIFEST_MEDIA_TYPE, config: { mediaType: CONFIG_MEDIA_TYPE, ...descriptor }, layers: [], annotations: { 'org.opencontainers.image.source': 'https://github.com/' + repository } }));
+const digest = 'sha256:' + createHash('sha256').update(bytes).digest('hex');
+await appendFile(process.env.GITHUB_OUTPUT, 'digest=' + digest + '\\n');
+assert.equal(await client.putManifest(tag, bytes), digest);
+console.log(JSON.stringify({ operation: 'write', repository: client.repository, tag, digest, configBytes: config.length, manifestBytes: bytes.length }));
+`),
+    }),
+  ))
+  .add("read-delete", new Job("ubuntu-latest", {
+    needs: ["write"],
+    if: "${{ always() && needs.write.outputs.digest != '' }}",
+    "timeout-minutes": 5,
+    env: { ...environment, EXPECTED_DIGEST: "${{ needs.write.outputs.digest }}" },
+  }).steps(s => s
+    .add(checkout())
+    .add({
+      name: "Read with fresh job token and verify exact bytes",
+      run: script(`
+const observed = await client.getManifest(tag);
+assert.equal(observed.digest, process.env.EXPECTED_DIGEST);
+const descriptor = observed.manifest.config;
+assert.deepEqual(await client.getBlobBytes(descriptor.digest, descriptor.size), config);
+console.log(JSON.stringify({ operation: 'read', tag, digest: observed.digest, exactConfigBytes: true }));
+`),
+    })
+    .add({
+      name: "Delete only this connection object and confirm removal",
+      if: "${{ always() }}",
+      run: script(`
+const github = new GitHubRetentionClient({ token: process.env.REGISTRY_TOKEN, registry: client.registry });
+const deadline = Date.now() + 60000;
+const scope = await github.repositoryScope(repository, deadline);
+const { value: pkg } = await github.json(scope + '/packages/container/azuki-build-cache', { deadline });
+console.log(JSON.stringify({ operation: 'package', visibility: pkg.visibility, repository: pkg.repository?.full_name ?? null }));
+const versions = await github.listPackageVersions(repository, client.repository, deadline);
+const owned = versions.filter(v => v.name === process.env.EXPECTED_DIGEST && v.metadata?.container?.tags?.includes(tag));
+assert.equal(owned.length, 1, 'Expected exactly this run-owned package version.');
+assert.deepEqual(owned[0].metadata.container.tags, [tag], 'Never delete a version carrying another tag.');
+await github.deletePackageVersion(repository, client.repository, owned[0].id, deadline);
+console.log(JSON.stringify({ operation: 'delete', versionId: owned[0].id, tag, digest: owned[0].name, status: 204 }));
+let missing = false;
+for (let attempt = 0; attempt < 10; attempt++) {
+  if (await client.getManifest(tag, { missing: true }) === null) { missing = true; break; }
+  await delay(2000);
+}
+assert.equal(missing, true, 'Deleted probe tag remains readable.');
+assert.equal(pkg.visibility, 'private');
+assert.equal(pkg.repository?.full_name, repository);
+console.log(JSON.stringify({ operation: 'confirm', registryTagMissing: true, privatePackageLinked: true }));
+`),
+    }),
+  )),
+).build("cache-connection");
