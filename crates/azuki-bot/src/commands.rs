@@ -31,7 +31,7 @@ fn user_info_from(user: &serenity::all::User) -> UserInfo {
     }
 }
 
-pub async fn register_commands(ctx: &Context, guild_id: GuildId) -> Result<(), serenity::Error> {
+pub async fn register_commands(ctx: &Context, guild_id: GuildId) -> Result<(), crate::BotError> {
     let commands = vec![
         CreateCommand::new("play")
             .description("Play a track from YouTube or URL")
@@ -65,7 +65,10 @@ pub async fn register_commands(ctx: &Context, guild_id: GuildId) -> Result<(), s
     ];
 
     let count = commands.len();
-    guild_id.set_commands(&ctx.http, commands).await?;
+    guild_id
+        .set_commands(&ctx.http, commands)
+        .await
+        .map_err(|e| crate::BotError::Serenity(e.to_string()))?;
     info!("registered {} slash commands", count);
     Ok(())
 }
