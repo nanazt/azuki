@@ -5,12 +5,13 @@ const environment = {
   REGISTRY_USERNAME: "${{ github.actor }}",
   REGISTRY_TOKEN: "${{ secrets.GITHUB_TOKEN }}",
 };
+// Gaji strips static import lines even inside generated shell strings.
 const shared = `
-import assert from 'node:assert/strict';
-import { appendFile } from 'node:fs/promises';
-import { createHash } from 'node:crypto';
-import { setTimeout as delay } from 'node:timers/promises';
-import { RegistryClient, GitHubRetentionClient, MANIFEST_MEDIA_TYPE, CONFIG_MEDIA_TYPE } from './scripts/docker-cache.mjs';
+const { default: assert } = await import('node:assert/strict');
+const { appendFile } = await import('node:fs/promises');
+const { createHash } = await import('node:crypto');
+const { setTimeout: delay } = await import('node:timers/promises');
+const { RegistryClient, GitHubRetentionClient, MANIFEST_MEDIA_TYPE, CONFIG_MEDIA_TYPE } = await import('./scripts/docker-cache.mjs');
 assert.equal(process.env.GITHUB_ACTIONS, 'true');
 assert.equal(process.env.GITHUB_REPOSITORY, 'nanazt/azuki');
 const repository = process.env.GITHUB_REPOSITORY;
