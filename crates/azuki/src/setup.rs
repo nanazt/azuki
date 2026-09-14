@@ -6,7 +6,7 @@ use axum::extract::{Request, State};
 use axum::http::HeaderMap;
 use axum::http::{HeaderName, HeaderValue, Method, StatusCode};
 use axum::middleware::{self, Next};
-use axum::response::{Html, IntoResponse, Response};
+use axum::response::{Html, Response};
 use axum::routing::{get, post};
 use rand::RngExt;
 use serde::Deserialize;
@@ -247,21 +247,19 @@ async fn get_setup_config(
 async fn post_setup(
     State(state): State<Arc<SetupState>>,
     Json(form): Json<SetupForm>,
-) -> Result<Json<serde_json::Value>, Response> {
+) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
     if state.submitted.load(Ordering::SeqCst) {
         return Err((
             StatusCode::CONFLICT,
             Json(serde_json::json!({"error": "setup already submitted"})),
-        )
-            .into_response());
+        ));
     }
 
     if !constant_time_eq(form.setup_token.as_bytes(), state.setup_token.as_bytes()) {
         return Err((
             StatusCode::UNAUTHORIZED,
             Json(serde_json::json!({"error": "invalid setup token"})),
-        )
-            .into_response());
+        ));
     }
 
     // In reconfigure mode, merge empty fields with existing config values
@@ -275,7 +273,6 @@ async fn post_setup(
                         StatusCode::INTERNAL_SERVER_ERROR,
                         Json(serde_json::json!({"error": "failed to load existing configuration"})),
                     )
-                        .into_response()
                 })?;
 
             let merge = |submitted: &str, key: &str| -> String {
@@ -319,15 +316,13 @@ async fn post_setup(
             return Err((
                 StatusCode::BAD_REQUEST,
                 Json(serde_json::json!({"error": format!("{key} is required")})),
-            )
-                .into_response());
+            ));
         }
         if value.chars().any(|c| c.is_control() && c != '\n') {
             return Err((
                 StatusCode::BAD_REQUEST,
                 Json(serde_json::json!({"error": format!("{key} contains invalid characters")})),
-            )
-                .into_response());
+            ));
         }
     }
 
@@ -335,8 +330,7 @@ async fn post_setup(
         return Err((
             StatusCode::BAD_REQUEST,
             Json(serde_json::json!({"error": "guild_id must be a numeric Discord server ID"})),
-        )
-            .into_response());
+        ));
     }
 
     let entries: Vec<(&str, &str)> = fields.iter().map(|(k, v)| (*k, v.as_str())).collect();
@@ -348,7 +342,6 @@ async fn post_setup(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({"error": "failed to save configuration"})),
             )
-                .into_response()
         })?;
 
     // Handle youtube_api_key: empty = keep existing, "CLEAR" = delete, other = save
@@ -362,7 +355,6 @@ async fn post_setup(
                         StatusCode::INTERNAL_SERVER_ERROR,
                         Json(serde_json::json!({"error": "failed to save configuration"})),
                     )
-                        .into_response()
                 })?;
         }
         Some(yt_key) if !yt_key.is_empty() => {
@@ -374,7 +366,6 @@ async fn post_setup(
                         StatusCode::INTERNAL_SERVER_ERROR,
                         Json(serde_json::json!({"error": "failed to save configuration"})),
                     )
-                        .into_response()
                 })?;
         }
         _ => {} // empty or None — keep existing value
@@ -386,7 +377,6 @@ async fn post_setup(
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(serde_json::json!({"error": "failed to verify configuration"})),
         )
-            .into_response()
     })?;
 
     state.submitted.store(true, Ordering::SeqCst);
