@@ -372,8 +372,9 @@ async function createBuilder(mode) {
   owned.builder = name;
   const bootstrapped = await run('docker', ['buildx', 'inspect', name, '--bootstrap'], { timeoutMs: HELPER_TIMEOUT_MS });
   const inspectOutput = `${bootstrapped.stdout}\n${bootstrapped.stderr}`;
-  const buildkit = /BuildKit:\s+v?([^\s]+)/u.exec(inspectOutput)?.[1];
-  expect(/^\s*Driver:\s+docker-container\s*$/imu.test(inspectOutput) && buildkit, 'BUILDER_BOOTSTRAP_INVALID', 'Owned builder did not report the docker-container driver and BuildKit version.');
+  await writeFile(path.join(outputDir, 'builder-inspect.log'), Buffer.from(inspectOutput).subarray(-LOG_LIMIT), { mode: 0o600 });
+  const buildkit = /^\s*BuildKit version:\s+v?([^\s]+)\s*$/imu.exec(inspectOutput)?.[1];
+  expect(/^\s*Driver:\s+docker-container\s*$/imu.test(inspectOutput) && buildkit, 'BUILDER_BOOTSTRAP_INVALID', 'Owned builder did not report the docker-container driver and BuildKit version.', { log: 'builder-inspect.log' });
   return { name, driver: 'docker-container', buildkit };
 }
 
