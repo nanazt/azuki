@@ -206,6 +206,11 @@ GHCR 인증정보는 runner의 인증 경계에만 두고 Docker ARG, COPY 대�
 복원 원본을 임의의 PR artifact나 다른 저장소가 제공한 주소로 바꾸지 않아요.
 일시적인 캐시 miss를 이유로 공개 패키지 전환, 새 PAT 발급 또는 권한 확대를 자동 수행하지 않아요.
 
+digest로 지정한 blob GET의 `301`, `302`, `303`, `307`, `308` 응답만 최대 5회 추적하고, 인증 교환·리다이렉트·최종 응답 본문은 최초 HTTP 요청의 deadline을 공유해요.
+운영 환경에서는 원래 GHCR blob 경로 또는 정확한 `https://pkg-containers.githubusercontent.com` origin만 허용해요.
+다른 origin으로 이동한 뒤에는 원래 origin으로 돌아오더라도 인증·쿠키를 포함한 기존 요청 헤더를 다시 전달하지 않아요.
+업로드·manifest·HEAD·인증 endpoint의 리다이렉트는 허용하지 않고, 내려받은 blob의 크기·digest 검증과 부분 파일 제거는 유지해요.
+
 ## migration과 컴파일 입력 정합성
 
 현재 `azuki-db`는 `sqlx::migrate!("../../migrations")`로 SQL 파일을 바이너리에 포함해요.
@@ -324,7 +329,7 @@ GHCR의 실제 인증·패키지 연결·게시·정리와 GitHub의 최종 work
 
 추가로 선택해야 할 저장소 종류나 runner 구조는 없어요.
 DBC-01부터 DBC-05까지의 로컬 source 구현은 direct Cargo와 kache, migration 입력 추적, snapshot 전송·receipt·보관, workflow 실패 경계를 포함해 반영되었어요.
-helper 회귀 검사 28개와 새 builder를 사용한 작은 실제 snapshot 왕복 integration은 통과했어요.
+helper 회귀 검사 36개와 새 builder를 사용한 작은 실제 snapshot 왕복 integration은 통과했어요.
 초기 full application 9-case matrix는 2,048.47초에 통과했고, 복원 case마다 fresh builder를 사용했어요.
 동일 입력 복원에서 Rust compiler 실행은 568회에서 0회로, 지원되는 C/C++ compiler 실행은 261회에서 duplicate 2회로 줄었고, Cargo 시간은 144초에서 19.43초로, complete cache flow는 245.30초에서 210.19초로 관측됐어요.
 source·version·dependency 변경과 migration add/change/delete의 runtime 출력은 해당 matrix에서 올바르게 반영됐어요.
@@ -347,7 +352,14 @@ cache mount 루트 `0755`와 내부 권한은 보존하며, 버퍼 조정에는 
 파일별 `fsync` 제거가 이미 적용된 기준선과 비교해 restore·publish 합계가 약 6.3–6.7초 줄었어요.
 전체 앱의 두 비교는 93.52→89.79초와 96.42→87.74초였으며 빌드 구간 변동·동일 runtime manifest·실패 검증은 [전송 경로 추가 조정](docker-build-cache-tickets.md#전송-경로-추가-조정)에 구분해 기록했어요.
 
-GHCR의 실제 인증·패키지 연결·게시·정리와 GitHub의 최종 workflow conclusion은 여전히 승인된 원격 실행에서만 확인할 수 있으므로 DBC-06이 유일한 원격 권한·검증 blocker예요.
+[GitHub 연결 확인](https://github.com/nanazt/azuki/actions/runs/34852202284)에서는 GHCR 쓰기가 성공했지만, 기존 전송 코드가 정상적인 blob `307` 응답을 거부하는 문제가 드러났어요.
+[다른 job의 표준 Docker 읽기](https://github.com/nanazt/azuki/actions/runs/34852744725)는 성공했고, 마지막 태그 버전의 개별 삭제는 GitHub API 정책으로 거부됐어요.
+이번 확인으로 생긴 공개 캐시 패키지는 [패키지 삭제 `204`와 후속 조회 `404`](https://github.com/nanazt/azuki/actions/runs/34854220437)를 확인한 뒤 정리했어요.
+
+blob 리다이렉트 수정 후 기존 공개 `nanazt/azuki` 이미지의 실제 GHCR config 4,249 bytes와 layer 93 bytes를 각각 메모리·파일 스트리밍 경로로 내려받아 digest를 검증했어요.
+두 다운로드 모두 실제 `307`과 CDN `200`을 관찰했고, CDN 요청에는 인증·쿠키·proxy 인증 헤더가 없었어요.
+같은 회귀 사례가 수정 전에는 `REGISTRY_STATUS`·`307`로 실패하고 수정 후에는 통과하며, 별도로 인증 헤더 누출과 deadline 초기화 결함을 넣으면 각각의 검사가 실패하는 것도 확인했어요.
+이 읽기 검증은 새 패키지나 원격 workflow를 만들지 않았으며, DBC-06의 새 GitHub runner 전체 snapshot 복원과 실제 release 최종 판정까지 검증한 것은 아니에요.
 
 ## 외부 근거
 

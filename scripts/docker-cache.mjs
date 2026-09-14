@@ -52,6 +52,9 @@ const TAR_BLOCK = 512;
 const PAYLOAD_STREAM_CHUNK_BYTES = 1024 * 1024;
 const ZERO_BLOCKS = Buffer.alloc(TAR_BLOCK * 2);
 const SHA256_PATTERN = /^sha256:[0-9a-f]{64}$/u;
+const REGISTRY_REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
+const REGISTRY_REDIRECT_LIMIT = 5;
+const GHCR_BLOB_ORIGIN = 'https://pkg-containers.githubusercontent.com';
 const SOURCE_SHA_PATTERN = /^[0-9a-f]{40}$/u;
 const REFERENCE_PATTERN = /^[A-Za-z0-9_][A-Za-z0-9._-]{0,127}$/u;
 const CACHE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u;
@@ -156,6 +159,27 @@ function normalizeRegistryUrl(raw) {
   expect(url.protocol === 'https:' || (url.protocol === 'http:' && isLoopback), 'INSECURE_REGISTRY', 'Plain HTTP is allowed only for a loopback registry fixture.', { registry: raw });
   expect(isLoopback || url.origin === 'https://ghcr.io', 'UNTRUSTED_REGISTRY', 'Production snapshots are restricted to the configured GHCR origin.', { registry: raw });
   return { origin: url.origin, isLoopback };
+}
+
+function registryBlobRedirect(location, base, registry, blobPath) {
+  if (typeof location !== 'string' || location.trim() === '' || location.includes('#')) {
+    fail('REGISTRY_REDIRECT', 'Registry blob redirect was rejected.');
+  }
+  let target;
+  try {
+    target = new URL(location, base);
+  } catch {
+    fail('REGISTRY_REDIRECT', 'Registry blob redirect was rejected.');
+  }
+  const hostname = target.hostname.replace(/^\[|\]$/gu, '').toLowerCase();
+  const loopback = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1';
+  const safeUrl = target.username === '' && target.password === '' && target.hash === '';
+  const trustedOrigin = registry.isLoopback
+    ? loopback && (target.protocol === 'http:' || target.protocol === 'https:')
+    : target.origin === registry.origin || target.origin === GHCR_BLOB_ORIGIN;
+  expect(safeUrl && trustedOrigin, 'REGISTRY_REDIRECT', 'Registry blob redirect was rejected.');
+  expect(target.origin !== registry.origin || target.pathname === blobPath, 'REGISTRY_REDIRECT', 'Registry blob redirect was rejected.');
+  return target;
 }
 
 function validateRepository(repository) {
@@ -324,6 +348,12 @@ export class RegistryClient {
   async request(url, { method = 'GET', headers = {}, body, expected = [200], scope = `repository:${this.repository}:pull`, maxErrorBytes = 64 * 1024, timeoutMs = this.limits.timeoutMs } = {}) {
     const target = url instanceof URL ? url : this.endpoint(url);
     expect(target.origin === this.registry.origin, 'REGISTRY_ORIGIN', 'Registry request escaped the configured origin.');
+    const blobPrefix = `/v2/${this.repository}/blobs/`;
+    const blobDigest = target.pathname.startsWith(blobPrefix) ? target.pathname.slice(blobPrefix.length) : '';
+    const redirectableBlob = method === 'GET'
+      && target.search === ''
+      && target.hash === ''
+      && SHA256_PATTERN.test(blobDigest);
     const requestDeadline = Date.now() + Math.min(timeoutMs, this.limits.timeoutMs);
     const requestTimeout = () => {
       const remaining = requestDeadline - Date.now();
@@ -334,7 +364,8 @@ export class RegistryClient {
     const knownBearer = this.scopeTokens.get(scope);
     if (knownBearer) requestHeaders.authorization = `Bearer ${knownBearer}`;
     else if (this.token !== undefined) requestHeaders.authorization = `Basic ${Buffer.from(`${this.username}:${this.token}`).toString('base64')}`;
-    let response = await this.fetchWithTimeout(target, { method, headers: requestHeaders, body, duplex: body ? 'half' : undefined, redirect: 'manual', timeoutMs: requestTimeout() });
+    let current = target;
+    let response = await this.fetchWithTimeout(current, { method, headers: requestHeaders, body, duplex: body ? 'half' : undefined, redirect: 'manual', timeoutMs: requestTimeout() });
     if (response.status === 401) {
       const challenge = parseBearerChallenge(response.headers.get('www-authenticate'));
       if (challenge) {
@@ -342,10 +373,33 @@ export class RegistryClient {
         await discardResponse(response);
         expect(replayable, 'AUTH_REPLAY_UNSAFE', 'Registry challenged a streaming request before authentication was established.');
         requestHeaders.authorization = `Bearer ${await this.bearerToken(challenge, scope, requestTimeout())}`;
-        response = await this.fetchWithTimeout(target, { method, headers: requestHeaders, body, duplex: body ? 'half' : undefined, redirect: 'manual', timeoutMs: requestTimeout() });
+        response = await this.fetchWithTimeout(current, { method, headers: requestHeaders, body, duplex: body ? 'half' : undefined, redirect: 'manual', timeoutMs: requestTimeout() });
       }
     }
+    let redirects = 0;
+    let crossedOrigin = false;
+    while (REGISTRY_REDIRECT_STATUSES.has(response.status)) {
+      const location = response.headers.get('location');
+      await discardResponse(response);
+      expect(redirectableBlob, 'REGISTRY_REDIRECT', 'Registry blob redirect was rejected.');
+      expect(redirects < REGISTRY_REDIRECT_LIMIT, 'REGISTRY_REDIRECT_LIMIT', 'Registry blob redirect limit was exceeded.');
+      const redirected = registryBlobRedirect(location, current, this.registry, target.pathname);
+      if (redirected.origin !== current.origin) crossedOrigin = true;
+      current = redirected;
+      redirects += 1;
+      response = await this.fetchWithTimeout(current, {
+        method,
+        headers: crossedOrigin ? {} : requestHeaders,
+        redirect: 'manual',
+        timeoutMs: requestTimeout(),
+      });
+    }
     if (!expected.includes(response.status)) {
+      if (redirects > 0) {
+        const status = response.status;
+        await discardResponse(response);
+        fail('REGISTRY_STATUS', 'Registry returned an unexpected status after a blob redirect.', { method, status, repository: this.repository });
+      }
       const errorBody = await readBounded(response, maxErrorBytes, 'registry error response').catch(() => Buffer.alloc(0));
       fail('REGISTRY_STATUS', 'Registry returned an unexpected status.', {
         method,

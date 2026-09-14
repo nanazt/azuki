@@ -228,6 +228,130 @@ function registryClient(fixture, limits = TEST_LIMITS) {
   return new RegistryClient({ registry: fixture.origin, repository: REPOSITORY, limits });
 }
 
+async function startLoopbackServer(t, handler) {
+  const server = createServer((request, response) => {
+    Promise.resolve(handler(request, response)).catch((error) => {
+      if (!response.headersSent) response.writeHead(500);
+      if (!response.writableEnded && !response.destroyed) response.end(error.message);
+    });
+  });
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
+  t.after(() => new Promise((resolve) => {
+    server.close(resolve);
+    server.closeAllConnections();
+  }));
+  const address = server.address();
+  return {
+    origin: `http://127.0.0.1:${address.port}`,
+  };
+}
+
+function observedRequest(request) {
+  return {
+    method: request.method,
+    url: request.url,
+    headers: { ...request.headers },
+  };
+}
+
+function cancellableRedirect(location, tracker, body = 'redirect response must not be exposed', status = 307) {
+  const stream = new ReadableStream({
+    start(controller) {
+      controller.enqueue(Buffer.from(body));
+    },
+    cancel() {
+      tracker.cancelled = true;
+    },
+  });
+  const headers = location === undefined ? {} : { location };
+  return new Response(stream, { status, headers });
+}
+
+async function blobRedirectFixture(t, {
+  bytes,
+  requireAuth = true,
+  destinationBytes = bytes,
+  omitDestinationLength = false,
+  redirectBack = false,
+  redirectDelays = [0, 0],
+  finalBodyDelayMs = 0,
+} = {}) {
+  const blobDigest = digest(bytes);
+  const blobPath = `/v2/${REPOSITORY}/blobs/${blobDigest}`;
+  const state = {
+    destinationRequests: [],
+    finalBodyStarted: false,
+    registryRequests: [],
+    returnTokenRequests: 0,
+    tokenRequests: 0,
+  };
+  let registryOrigin;
+  const destination = await startLoopbackServer(t, async (request, response) => {
+    state.destinationRequests.push(observedRequest(request));
+    if (redirectBack) {
+      response.writeHead(307, { location: `${registryOrigin}${blobPath}?returned=1` }).end();
+      return;
+    }
+    const headers = { 'content-type': 'application/octet-stream' };
+    if (!omitDestinationLength) headers['content-length'] = String(destinationBytes.length);
+    response.writeHead(200, headers);
+    if (finalBodyDelayMs > 0) {
+      state.finalBodyStarted = true;
+      response.write(destinationBytes.subarray(0, 1));
+      await new Promise((resolve) => setTimeout(resolve, finalBodyDelayMs));
+      response.end(destinationBytes.subarray(1));
+      return;
+    }
+    response.end(destinationBytes);
+  });
+  const registry = await startLoopbackServer(t, async (request, response) => {
+    state.registryRequests.push(observedRequest(request));
+    const url = new URL(request.url, `http://${request.headers.host}`);
+    if (url.pathname === '/token' || url.pathname === '/token-return') {
+      if (url.pathname === '/token-return') state.returnTokenRequests += 1;
+      else state.tokenRequests += 1;
+      response.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({
+        token: url.pathname === '/token-return' ? 'fixture-return-token' : 'fixture-bearer-token',
+      }));
+      return;
+    }
+    if (url.pathname !== blobPath || request.method !== 'GET') {
+      response.writeHead(404).end();
+      return;
+    }
+    if (url.searchParams.has('returned')) {
+      response.writeHead(401, {
+        'www-authenticate': `Bearer realm="${registryOrigin}/token-return",service="fixture-return",scope="repository:${REPOSITORY}:redirect-return"`,
+      }).end();
+      return;
+    }
+    if (requireAuth && request.headers.authorization !== 'Bearer fixture-bearer-token') {
+      response.writeHead(401, {
+        'www-authenticate': `Bearer realm="${registryOrigin}/token",service="fixture",scope="repository:${REPOSITORY}:pull"`,
+      }).end();
+      return;
+    }
+    if (url.searchParams.has('registry-hop')) {
+      if (redirectDelays[1] > 0) await new Promise((resolve) => setTimeout(resolve, redirectDelays[1]));
+      response.writeHead(307, { location: `${destination.origin}${blobPath}?signature=fixture-signed-value` }).end();
+      return;
+    }
+    if (redirectDelays[0] > 0) await new Promise((resolve) => setTimeout(resolve, redirectDelays[0]));
+    response.writeHead(307, { location: `${blobPath}?registry-hop=1` }).end();
+  });
+  registryOrigin = registry.origin;
+  return {
+    blobDigest,
+    blobPath,
+    destination,
+    origin: registry.origin,
+    state,
+  };
+}
+
 async function githubFixture(t, registry) {
   const ids = new Map();
   const digestById = new Map();
@@ -740,6 +864,303 @@ test('authenticated registry exchange keeps credentials out of OCI data', async 
     assert.equal(bytes.includes(Buffer.from('fixture-secret')), false);
     assert.equal(bytes.includes(Buffer.from('fixture-bearer-token')), false);
   }
+});
+
+test('blob redirects follow authenticated same-origin and loopback cross-origin hops for both blob consumers', async (t) => {
+  const bytes = Buffer.from('exact redirected blob bytes');
+  const fixture = await blobRedirectFixture(t, { bytes });
+  const client = new RegistryClient({
+    registry: fixture.origin,
+    repository: REPOSITORY,
+    username: 'fixture-user',
+    token: 'fixture-secret',
+    limits: TEST_LIMITS,
+  });
+  const root = await temporaryDirectory(t);
+  const destination = path.join(root, 'redirected.blob');
+
+  assert.deepEqual(await client.getBlobBytes(fixture.blobDigest, bytes.length), bytes);
+  await client.downloadBlob(fixture.blobDigest, destination, bytes.length);
+
+  assert.deepEqual(await readFile(destination), bytes);
+  assert.equal(fixture.state.tokenRequests, 1);
+  const sameOriginHops = fixture.state.registryRequests.filter(({ url }) => new URL(url, fixture.origin).searchParams.has('registry-hop'));
+  assert.equal(sameOriginHops.length, 2);
+  assert.ok(sameOriginHops.every(({ headers }) => headers.authorization === 'Bearer fixture-bearer-token'));
+  assert.equal(fixture.state.destinationRequests.length, 2);
+  for (const request of fixture.state.destinationRequests) {
+    assert.equal(new URL(request.url, fixture.destination.origin).pathname, fixture.blobPath);
+    assert.equal(request.headers.authorization, undefined);
+    assert.equal(request.headers.cookie, undefined);
+    assert.equal(request.headers['proxy-authorization'], undefined);
+  }
+});
+
+test('blob redirects never reintroduce headers or authentication after crossing origins', async (t) => {
+  const bytes = Buffer.from('redirected authentication boundary');
+  const fixture = await blobRedirectFixture(t, { bytes, redirectBack: true });
+  const client = new RegistryClient({
+    registry: fixture.origin,
+    repository: REPOSITORY,
+    username: 'fixture-user',
+    token: 'fixture-secret',
+    limits: TEST_LIMITS,
+  });
+
+  await assert.rejects(
+    client.request(`blobs/${fixture.blobDigest}`, {
+      headers: {
+        cookie: 'session=registry-cookie',
+        'proxy-authorization': 'Basic proxy-secret',
+        'x-registry-only': 'must-not-return',
+      },
+    }),
+    (error) => error instanceof CacheTransportError
+      && error.code === 'REGISTRY_STATUS'
+      && error.details.status === 401,
+  );
+
+  const sameOriginHop = fixture.state.registryRequests.find(({ url }) => new URL(url, fixture.origin).searchParams.has('registry-hop'));
+  assert.equal(sameOriginHop.headers.authorization, 'Bearer fixture-bearer-token');
+  assert.equal(sameOriginHop.headers.cookie, 'session=registry-cookie');
+  assert.equal(sameOriginHop.headers['proxy-authorization'], 'Basic proxy-secret');
+  assert.equal(fixture.state.destinationRequests.length, 1);
+  assert.equal(fixture.state.destinationRequests[0].headers.authorization, undefined);
+  assert.equal(fixture.state.destinationRequests[0].headers.cookie, undefined);
+  assert.equal(fixture.state.destinationRequests[0].headers['proxy-authorization'], undefined);
+  assert.equal(fixture.state.destinationRequests[0].headers['x-registry-only'], undefined);
+  const returned = fixture.state.registryRequests.filter(({ url }) => new URL(url, fixture.origin).searchParams.has('returned'));
+  assert.equal(returned.length, 1);
+  assert.equal(returned[0].headers.authorization, undefined);
+  assert.equal(returned[0].headers.cookie, undefined);
+  assert.equal(returned[0].headers['proxy-authorization'], undefined);
+  assert.equal(returned[0].headers['x-registry-only'], undefined);
+  assert.equal(fixture.state.returnTokenRequests, 0);
+});
+
+test('blob redirects allow only the exact production blob CDN origin', async (t) => {
+  const bytes = Buffer.from('production redirect bytes');
+  const blobDigest = digest(bytes);
+  const blobPath = `/v2/${REPOSITORY}/blobs/${blobDigest}`;
+  const cdnPath = `/download/${blobDigest.slice('sha256:'.length)}`;
+  const redirect = { cancelled: false };
+  let calls = 0;
+  t.mock.method(globalThis, 'fetch', async (url, options) => {
+    calls += 1;
+    const target = new URL(url);
+    const headers = new Headers(options.headers);
+    if (calls === 1) {
+      assert.equal(target.origin, 'https://ghcr.io');
+      assert.equal(target.pathname, blobPath);
+      assert.match(headers.get('authorization'), /^Basic /u);
+      return cancellableRedirect(`https://pkg-containers.githubusercontent.com${cdnPath}?signature=opaque`, redirect);
+    }
+    assert.equal(redirect.cancelled, true);
+    assert.equal(target.origin, 'https://pkg-containers.githubusercontent.com');
+    assert.equal(target.pathname, cdnPath);
+    assert.equal(target.searchParams.get('signature'), 'opaque');
+    assert.equal(headers.get('authorization'), null);
+    return new Response(bytes, {
+      status: 200,
+      headers: { 'content-length': String(bytes.length), 'content-type': 'application/octet-stream' },
+    });
+  });
+  const client = new RegistryClient({
+    registry: 'https://ghcr.io',
+    repository: REPOSITORY,
+    username: 'fixture-user',
+    token: 'fixture-secret',
+    limits: TEST_LIMITS,
+  });
+
+  assert.deepEqual(await client.getBlobBytes(blobDigest, bytes.length), bytes);
+  assert.equal(calls, 2);
+});
+
+test('blob redirects reject unsafe locations without exposing signed URL material', async (t) => {
+  const bytes = Buffer.from('redirect policy input');
+  const blobDigest = digest(bytes);
+  const blobPath = `/v2/${REPOSITORY}/blobs/${blobDigest}`;
+  const otherDigest = digest(Buffer.from('different blob'));
+  let activeFetch;
+  t.mock.method(globalThis, 'fetch', (...arguments_) => activeFetch(...arguments_));
+  const scenarios = [
+    { name: 'missing location', location: undefined },
+    { name: 'malformed location', location: 'http://[::1?token=policy-secret' },
+    { name: 'embedded credentials', location: `https://fixture-user:policy-secret@pkg-containers.githubusercontent.com${blobPath}?token=policy-secret` },
+    { name: 'fragment', location: `https://pkg-containers.githubusercontent.com${blobPath}?token=policy-secret#policy-secret` },
+    { name: 'HTTPS downgrade', location: `http://pkg-containers.githubusercontent.com${blobPath}?token=policy-secret` },
+    { name: 'untrusted origin', location: `https://objects.githubusercontent.com${blobPath}?token=policy-secret` },
+    { name: 'lookalike CDN', location: `https://pkg-containers.githubusercontent.com.evil.test${blobPath}?token=policy-secret` },
+    { name: 'changed blob path', location: `https://ghcr.io/v2/${REPOSITORY}/blobs/${otherDigest}?token=policy-secret` },
+  ];
+
+  for (const scenario of scenarios) {
+    const tracker = { cancelled: false };
+    let calls = 0;
+    activeFetch = async () => {
+      calls += 1;
+      return cancellableRedirect(scenario.location, tracker, 'https://signed.example.test/blob?token=body-secret');
+    };
+    const client = new RegistryClient({ registry: 'https://ghcr.io', repository: REPOSITORY, limits: TEST_LIMITS });
+    let observedError;
+    await assert.rejects(
+      client.getBlobBytes(blobDigest, bytes.length),
+      (error) => {
+        observedError = error;
+        return error instanceof CacheTransportError && error.code === 'REGISTRY_REDIRECT';
+      },
+      scenario.name,
+    );
+    assert.equal(calls, 1, scenario.name);
+    assert.equal(tracker.cancelled, true, scenario.name);
+    const exposure = `${observedError.message}\n${JSON.stringify(observedError.details)}`;
+    assert.doesNotMatch(exposure, /policy-secret|body-secret|token=|#policy/u, scenario.name);
+  }
+
+  for (const [name, location] of [
+    ['external destination from loopback', `https://pkg-containers.githubusercontent.com${blobPath}?token=policy-secret`],
+    ['non-HTTP loopback destination', `ftp://127.0.0.1${blobPath}?token=policy-secret`],
+  ]) {
+    const tracker = { cancelled: false };
+    let calls = 0;
+    activeFetch = async () => {
+      calls += 1;
+      return cancellableRedirect(location, tracker);
+    };
+    let observedError;
+    const loopbackClient = new RegistryClient({
+      registry: 'http://127.0.0.1:49152',
+      repository: REPOSITORY,
+      limits: TEST_LIMITS,
+    });
+    await assert.rejects(
+      loopbackClient.getBlobBytes(blobDigest, bytes.length),
+      (error) => {
+        observedError = error;
+        return error instanceof CacheTransportError && error.code === 'REGISTRY_REDIRECT';
+      },
+      name,
+    );
+    assert.equal(calls, 1, name);
+    assert.equal(tracker.cancelled, true, name);
+    assert.doesNotMatch(`${observedError.message}\n${JSON.stringify(observedError.details)}`, /policy-secret|token=/u, name);
+  }
+});
+
+test('blob redirects stop after five hops and finish every redirect response', async (t) => {
+  const bytes = Buffer.from('redirect hop limit');
+  const blobDigest = digest(bytes);
+  const trackers = [];
+  const statuses = [301, 302, 303, 307, 308, 307];
+  let calls = 0;
+  t.mock.method(globalThis, 'fetch', async () => {
+    assert.ok(trackers.every(({ cancelled }) => cancelled));
+    calls += 1;
+    const tracker = { cancelled: false };
+    trackers.push(tracker);
+    return cancellableRedirect(`?hop=${calls}`, tracker, `signed-body-${calls}`, statuses[calls - 1]);
+  });
+  const client = new RegistryClient({ registry: 'https://ghcr.io', repository: REPOSITORY, limits: TEST_LIMITS });
+  let observedError;
+
+  await assert.rejects(
+    client.getBlobBytes(blobDigest, bytes.length),
+    (error) => {
+      observedError = error;
+      return error instanceof CacheTransportError && error.code === 'REGISTRY_REDIRECT_LIMIT';
+    },
+  );
+  assert.equal(calls, 6);
+  assert.ok(trackers.every(({ cancelled }) => cancelled));
+  assert.doesNotMatch(`${observedError.message}\n${JSON.stringify(observedError.details)}`, /hop=|signed-body/u);
+});
+
+test('blob redirects share one deadline through the final response body', async (t) => {
+  const bytes = Buffer.from('deadline reaches final redirected body');
+  const fixture = await blobRedirectFixture(t, {
+    bytes,
+    requireAuth: false,
+    redirectDelays: [110, 110],
+    finalBodyDelayMs: 150,
+  });
+  const client = new RegistryClient({
+    registry: fixture.origin,
+    repository: REPOSITORY,
+    limits: { ...TEST_LIMITS, timeoutMs: 300 },
+  });
+
+  await assert.rejects(
+    client.getBlobBytes(fixture.blobDigest, bytes.length),
+    (error) => error instanceof CacheTransportError && error.code === 'REGISTRY_TIMEOUT',
+  );
+  assert.equal(fixture.state.destinationRequests.length, 1);
+  assert.equal(fixture.state.finalBodyStarted, true);
+});
+
+test('blob redirects preserve streamed size and digest enforcement without partial files', async (t) => {
+  const bytes = Buffer.from('verified redirect payload');
+  const corruptBytes = Buffer.from(bytes);
+  corruptBytes[0] ^= 0xff;
+  const corrupt = await blobRedirectFixture(t, {
+    bytes,
+    requireAuth: false,
+    destinationBytes: corruptBytes,
+  });
+  const oversized = await blobRedirectFixture(t, {
+    bytes,
+    requireAuth: false,
+    destinationBytes: Buffer.concat([bytes, Buffer.from('!')]),
+    omitDestinationLength: true,
+  });
+  const root = await temporaryDirectory(t);
+  const corruptDestination = path.join(root, 'corrupt.blob');
+  const oversizedDestination = path.join(root, 'oversized.blob');
+
+  await assert.rejects(
+    registryClient(corrupt).downloadBlob(corrupt.blobDigest, corruptDestination, bytes.length),
+    (error) => error instanceof CacheTransportError && error.code === 'BLOB_DIGEST_MISMATCH',
+  );
+  await assert.rejects(stat(corruptDestination), { code: 'ENOENT' });
+  assert.equal(corrupt.state.destinationRequests.length, 1);
+  await assert.rejects(
+    registryClient(oversized).downloadBlob(oversized.blobDigest, oversizedDestination, bytes.length),
+    (error) => error instanceof CacheTransportError && error.code === 'TRANSFER_LIMIT',
+  );
+  await assert.rejects(stat(oversizedDestination), { code: 'ENOENT' });
+  assert.equal(oversized.state.destinationRequests.length, 1);
+});
+
+test('blob redirects do not reroute manifest reads, blob HEAD requests, or writes', async (t) => {
+  let destinationRequests = 0;
+  const destination = await startLoopbackServer(t, (_request, response) => {
+    destinationRequests += 1;
+    response.writeHead(200).end('must not be reached');
+  });
+  const blockedHeadDigest = digest(Buffer.from('blocked HEAD'));
+  const registry = await startLoopbackServer(t, (request, response) => {
+    const url = new URL(request.url, `http://${request.headers.host}`);
+    const uploadHeadPath = `/v2/${REPOSITORY}/blobs/${digest(Buffer.from('upload write'))}`;
+    if (request.method === 'HEAD' && url.pathname === uploadHeadPath) {
+      response.writeHead(404).end();
+      return;
+    }
+    response.writeHead(307, {
+      location: `${destination.origin}${url.pathname}?signature=non-blob-secret`,
+    }).end('https://signed.example.test/blob?token=non-blob-body-secret');
+  });
+  const client = new RegistryClient({ registry: registry.origin, repository: REPOSITORY, limits: TEST_LIMITS });
+  const rejectsRedirect = (error) => {
+    if (!(error instanceof CacheTransportError) || error.code !== 'REGISTRY_REDIRECT') return false;
+    assert.doesNotMatch(`${error.message}\n${JSON.stringify(error.details)}`, /non-blob-secret/u);
+    return true;
+  };
+
+  await assert.rejects(client.getManifest(COMPATIBILITY.fixedRef), rejectsRedirect);
+  await assert.rejects(client.blobExists(blockedHeadDigest, 12), rejectsRedirect);
+  await assert.rejects(client.putManifest('redirect-write', Buffer.from('{}')), rejectsRedirect);
+  await assert.rejects(client.uploadBytes(Buffer.from('upload write')), rejectsRedirect);
+  assert.equal(destinationRequests, 0);
 });
 
 
