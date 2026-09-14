@@ -52,3 +52,15 @@ run = "node .agents/skills/release/scripts/release.mjs"
 [tasks.test-release]
 description = "Test release automation against isolated local Git and GitHub fixtures"
 run = "node --test .agents/skills/release/tests/*.test.mjs"
+
+[tasks.test-docker-cache]
+description = "Test Docker kache snapshot transport"
+run = "node --test scripts/docker-cache.test.mjs"
+
+[tasks.test-migration-cache]
+description = "Test migration cache invalidation"
+run = "node scripts/test-migration-cache.mjs"
+
+[tasks.test-docker-cache-integration]
+description = "Run the opt-in Docker kache snapshot integration test"
+run = "node scripts/test-docker-cache-integration.mjs"

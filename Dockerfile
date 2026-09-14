@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile:1
+
 # Stage 1: Build frontend
 FROM node:25 AS frontend-builder
 WORKDIR /app/frontend
@@ -7,37 +9,76 @@ COPY frontend/ ./
 RUN npm run build
 
 # Stage 2: Build Rust binary
-FROM rust:trixie AS chef
-RUN cargo install cargo-chef
-WORKDIR /app
+FROM rust:trixie AS rust-builder
 
-FROM chef AS planner
-COPY Cargo.toml Cargo.lock ./
-COPY crates/ crates/
-RUN cargo chef prepare --recipe-path recipe.json
-
-FROM chef AS rust-builder
-
-# Install build dependencies (needed before cook for audiopus_sys, songbird, etc.)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    pkg-config libopus-dev cmake \
+    pkg-config libopus-dev cmake curl ca-certificates util-linux \
     && rm -rf /var/lib/apt/lists/*
 
-# Cook dependencies (re-runs only when Cargo.toml/Cargo.lock change)
-COPY --from=planner /app/recipe.json recipe.json
-ENV SQLX_OFFLINE=true
-RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    --mount=type=cache,target=/usr/local/cargo/git \
-    cargo chef cook --release --recipe-path recipe.json
+RUN set -eux; \
+    archive=/tmp/kache.tar.gz; \
+    curl --fail --location --silent --show-error \
+        "https://github.com/kunobi-ninja/kache/releases/download/v0.20.0/kache-x86_64-unknown-linux-musl.tar.gz" \
+        --output "${archive}"; \
+    echo "fe5ce52406e0dcb8c9a49798671a073440cae13a88731b1b712b7c0fa372b85b *${archive}" | sha256sum --check --strict; \
+    tar --extract --gzip --file "${archive}" --directory /usr/local/bin kache; \
+    chmod 0755 /usr/local/bin/kache; \
+    rm "${archive}"; \
+    kache install-shims --force /opt/kache/shims; \
+    kache --version
 
-# Build application (only recompiles source changes)
-COPY Cargo.toml Cargo.lock ./
+ARG KACHE_CACHE_ID=azuki-kache-linux-amd64-v1-kache-0.20.0
+ARG CARGO_TARGET_CACHE_ID=azuki-target-linux-amd64-v1
+ARG KACHE_MAX_SIZE=3GiB
+ARG KACHE_PROGRESS
+ARG KACHE_LOG
+
+WORKDIR /app
+ENV SQLX_OFFLINE=true \
+    RUSTC_WRAPPER=/usr/local/bin/kache \
+    KACHE_CONFIG=/app/.kache.toml \
+    KACHE_CACHE_DIR=/var/cache/kache \
+    KACHE_RUNTIME_DIR=/run/kache \
+    KACHE_LOCAL_ONLY=true \
+    KACHE_AUTO_GC=false \
+    KACHE_MAX_SIZE="${KACHE_MAX_SIZE}" \
+    KACHE_PREFETCH_ENABLED=false \
+    KACHE_LOCAL_HIT_DAEMON=false \
+    KACHE_ADAPTIVE_INCREMENTAL=false \
+    KACHE_PROGRESS="${KACHE_PROGRESS}" \
+    KACHE_LOG="${KACHE_LOG}" \
+    PATH="/opt/kache/shims:${PATH}"
+
+COPY Cargo.toml Cargo.lock .kache.toml ./
 COPY crates/ crates/
 COPY migrations/ migrations/
-RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    --mount=type=cache,target=/usr/local/cargo/git \
-    cargo build --release --bin azuki \
-    && cp target/release/azuki /usr/local/bin/azuki
+
+RUN --mount=type=cache,id=azuki-cargo-registry-linux-amd64-v1,target=/usr/local/cargo/registry \
+    --mount=type=cache,id=azuki-cargo-git-linux-amd64-v1,target=/usr/local/cargo/git \
+    --mount=type=cache,id=${CARGO_TARGET_CACHE_ID},target=/app/target \
+    --mount=type=cache,id=${KACHE_CACHE_ID},sharing=locked,target=/var/cache/kache \
+    --mount=type=tmpfs,target=/run/kache \
+    cargo build --locked --release --bin azuki \
+    && install -m 0755 /app/target/release/azuki /usr/local/bin/azuki \
+    && snapshot_ready=true \
+    && touch /var/cache/kache/.snapshot-uncertain \
+    && if ! timeout --signal=TERM --kill-after=5s 120s kache gc --json; then \
+        snapshot_ready=false; \
+        echo "warning: bounded kache synchronous GC failed; cache snapshot remains ineligible" >&2; \
+    fi \
+    && if ! timeout --signal=TERM --kill-after=5s 15s kache daemon stop; then \
+        snapshot_ready=false; \
+        echo "warning: bounded kache daemon shutdown request failed; cache snapshot remains ineligible" >&2; \
+    fi \
+    && if ! timeout --signal=TERM --kill-after=5s 50s \
+        flock --exclusive --wait 45 /run/kache/daemon.run.lock true; then \
+        snapshot_ready=false; \
+        echo "warning: kache daemon did not finish draining; cache snapshot remains ineligible" >&2; \
+    fi \
+    && if [ "${snapshot_ready}" = true ] \
+        && ! rm -f /var/cache/kache/.snapshot-uncertain; then \
+        echo "warning: could not clear cache snapshot uncertainty marker" >&2; \
+    fi
 
 # Stage 3: Runtime
 FROM ubuntu:24.04 AS runtime

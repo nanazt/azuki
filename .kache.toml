@@ -1,0 +1,3 @@
+[[workspace.extra_inputs]]
+crates = ["azuki-db"]
+inputs = ["migrations/**/*.sql"]
