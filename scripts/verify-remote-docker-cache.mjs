@@ -10,6 +10,7 @@ import path from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { StringDecoder } from 'node:string_decoder';
 import { fileURLToPath } from 'node:url';
+import { isDeepStrictEqual } from 'node:util';
 import {
   GitHubRetentionClient,
   RegistryClient,
@@ -484,7 +485,7 @@ async function probeCache(cacheId, label, populated) {
 
 async function childOperation(operation, request) {
   const currentProducer = { repository: REPOSITORY, runId: process.env.GITHUB_RUN_ID, runAttempt: process.env.GITHUB_RUN_ATTEMPT, sourceSha: process.env.GITHUB_SHA };
-  if (operation === 'publish' || operation === 'retention') expect(JSON.stringify(request.producer) === JSON.stringify(currentProducer), 'CHILD_PRODUCER_MISMATCH', 'Child mutation producer must equal the current GitHub run identity.');
+  if (operation === 'publish' || operation === 'retention') expect(isDeepStrictEqual(request.producer, currentProducer), 'CHILD_PRODUCER_MISMATCH', 'Child mutation producer must equal the current GitHub run identity.');
   if (operation !== 'retention') {
     expect(request.builder?.startsWith(`azuki-cache-verify-${request.mode}-${process.env.GITHUB_RUN_ID}-`) && request.cacheId?.endsWith(`-${process.env.GITHUB_RUN_ID}-${process.env.GITHUB_RUN_ATTEMPT}`), 'CHILD_RESOURCE_MISMATCH', 'Child helper resources must belong to the current verification run.');
   }
@@ -682,16 +683,16 @@ async function verify(mode) {
   const seed = mode === 'seed' ? null : await readInput('seed', 'seed', process.env.VERIFY_SEED_RUN_ID);
   const warm = mode === 'retain' ? await readInput('warm', 'warm', process.env.VERIFY_COMPARE_RUN_ID) : null;
   if (warm) {
-    expect(warm.layerCache.digest === seed.layerCache.digest && JSON.stringify(warm.baseDigests) === JSON.stringify(seed.baseDigests) && JSON.stringify(warm.sourceFingerprint) === JSON.stringify(seed.sourceFingerprint) && JSON.stringify(warm.tools) === JSON.stringify(seed.tools) && JSON.stringify(warm.images) === JSON.stringify(seed.images), 'WARM_INPUT_PARITY', 'Warm input does not preserve seed source, tool, layer, base, and selected runtime artifact hash parity.');
+    expect(warm.layerCache.digest === seed.layerCache.digest && isDeepStrictEqual(warm.baseDigests, seed.baseDigests) && isDeepStrictEqual(warm.sourceFingerprint, seed.sourceFingerprint) && isDeepStrictEqual(warm.tools, seed.tools) && isDeepStrictEqual(warm.images, seed.images), 'WARM_INPUT_PARITY', 'Warm input does not preserve seed source, tool, layer, base, and selected runtime artifact hash parity.');
   }
   const parityInput = seed;
-  if (parityInput) expect(JSON.stringify(result.sourceFingerprint) === JSON.stringify(parityInput.sourceFingerprint), 'SOURCE_PARITY', 'Source input fingerprint differs from the seed.');
+  if (parityInput) expect(isDeepStrictEqual(result.sourceFingerprint, parityInput.sourceFingerprint), 'SOURCE_PARITY', 'Source input fingerprint differs from the seed.');
   const builder = await createBuilder(mode);
   result.resources.builder = builder;
   result.tools = await toolVersions(builder);
-  if (parityInput) expect(JSON.stringify(result.tools) === JSON.stringify(parityInput.tools), 'TOOL_PARITY', 'Node, Docker, Buildx, or BuildKit version differs from the seed.');
+  if (parityInput) expect(isDeepStrictEqual(result.tools, parityInput.tools), 'TOOL_PARITY', 'Node, Docker, Buildx, or BuildKit version differs from the seed.');
   result.baseDigests = await baseDigests(seed?.baseDigests);
-  if (seed) expect(JSON.stringify(result.baseDigests) === JSON.stringify(seed.baseDigests), 'BASE_PARITY', 'Base image digests differ from the seed.');
+  if (seed) expect(isDeepStrictEqual(result.baseDigests, seed.baseDigests), 'BASE_PARITY', 'Base image digests differ from the seed.');
   const client = registryClient();
   const expectedPrevious = mode === 'warm' ? seed : mode === 'retain' ? warm : null;
   const readsMutableFixedRef = mode === 'seed' || mode === 'warm' || mode === 'retain';
@@ -704,11 +705,11 @@ async function verify(mode) {
   if (mode === 'warm' || mode === 'retain') {
     cacheId = `azuki-kache-verify-${mode}-${producer.runId}-${producer.runAttempt}`;
     restore = await invokeHelper('restore', { builder: builder.name, cacheId });
-    expect(restore.status === 'restored' && restore.manifestDigest === expectedPrevious.snapshot.manifestDigest && JSON.stringify(restore.producer) === JSON.stringify(expectedPrevious.producer), 'RESTORE_MISMATCH', 'Restored snapshot does not match the expected producer and digest.');
+    expect(restore.status === 'restored' && restore.manifestDigest === expectedPrevious.snapshot.manifestDigest && isDeepStrictEqual(restore.producer, expectedPrevious.producer), 'RESTORE_MISMATCH', 'Restored snapshot does not match the expected producer and digest.');
   } else if (mode === 'fault') {
     const failedId = `azuki-kache-verify-failed-${producer.runId}-${producer.runAttempt}`;
     const populated = await invokeHelper('restore', { builder: builder.name, cacheId: failedId, snapshotDigest: seed.snapshot.manifestDigest });
-    expect(populated.status === 'restored' && populated.manifestDigest === seed.snapshot.manifestDigest && JSON.stringify(populated.producer) === JSON.stringify(seed.producer), 'FAULT_SETUP_RESTORE_MISMATCH', 'Fault setup did not populate the mount from the exact seed snapshot and producer.');
+    expect(populated.status === 'restored' && populated.manifestDigest === seed.snapshot.manifestDigest && isDeepStrictEqual(populated.producer, seed.producer), 'FAULT_SETUP_RESTORE_MISMATCH', 'Fault setup did not populate the mount from the exact seed snapshot and producer.');
     await probeCache(failedId, 'populated-before-fault', true);
     restore = await invokeHelper('fault-restore', { builder: builder.name, cacheId: failedId, snapshotDigest: seed.snapshot.manifestDigest });
     expect(restore.status === 'expected-failure', 'FAULT_NOT_DETECTED', 'Fault restore did not fail as expected.');
@@ -757,7 +758,7 @@ async function verify(mode) {
   result.report = reportSummary(rawReport, seed?.report?.rust?.actionCount, mode);
   await cp(rawReportPath, path.join(outputDir, 'kache-report.json'));
   result.images = await inspectRuntime(image, mode);
-  if (seed) expect(JSON.stringify(result.images) === JSON.stringify(seed.images), 'IMAGE_PARITY', 'Selected runtime artifact hashes (app binary, frontend index, or yt-dlp) differ from the seed.', { expected: seed.images, actual: result.images });
+  if (seed) expect(isDeepStrictEqual(result.images, seed.images), 'IMAGE_PARITY', 'Selected runtime artifact hashes (app binary, frontend index, or yt-dlp) differ from the seed.', { expected: seed.images, actual: result.images });
   if (mode === 'seed') {
     const productionLayerDockerfile = path.join(workDir, 'Dockerfile.production-layer');
     await writeFile(productionLayerDockerfile, pinDockerfileBases(productionDockerfile, result.baseDigests), { mode: 0o600 });
