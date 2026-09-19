@@ -3,8 +3,6 @@ use sqlx::SqlitePool;
 use crate::models::Track;
 use crate::{DbError, DbResult};
 
-const TRACK_COLUMNS: &str = "id, title, artist, duration_ms, thumbnail_url, source_url, source_type, file_path, youtube_id, volume, uploaded_by, created_at";
-
 #[allow(clippy::too_many_arguments)]
 pub async fn upsert_track(
     pool: &SqlitePool,
@@ -19,15 +17,14 @@ pub async fn upsert_track(
     youtube_id: Option<&str>,
     uploaded_by: Option<&str>,
 ) -> DbResult<Track> {
-    let sql = format!(
+    sqlx::query_as::<_, Track>(
         "INSERT INTO tracks (id, title, artist, duration_ms, thumbnail_url, source_url, source_type, file_path, youtube_id, uploaded_by)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
          ON CONFLICT(id) DO UPDATE SET
            title = ?2, artist = ?3, duration_ms = ?4, thumbnail_url = ?5,
            file_path = COALESCE(?8, tracks.file_path), youtube_id = COALESCE(?9, tracks.youtube_id)
-         RETURNING {TRACK_COLUMNS}"
-    );
-    sqlx::query_as::<_, Track>(&sql)
+         RETURNING id, title, artist, duration_ms, thumbnail_url, source_url, source_type, file_path, youtube_id, volume, uploaded_by, created_at",
+    )
         .bind(id)
         .bind(title)
         .bind(artist)
@@ -44,8 +41,10 @@ pub async fn upsert_track(
 }
 
 pub async fn get_track(pool: &SqlitePool, id: &str) -> DbResult<Track> {
-    let sql = format!("SELECT {TRACK_COLUMNS} FROM tracks WHERE id = ?1");
-    sqlx::query_as::<_, Track>(&sql)
+    sqlx::query_as::<_, Track>(
+        "SELECT id, title, artist, duration_ms, thumbnail_url, source_url, source_type, file_path, youtube_id, volume, uploaded_by, created_at
+         FROM tracks WHERE id = ?1",
+    )
         .bind(id)
         .fetch_optional(pool)
         .await?
@@ -70,24 +69,22 @@ pub async fn search_tracks_cursor(
 ) -> DbResult<Vec<Track>> {
     let pattern = format!("%{}%", escape_like(query));
     let sql = if cursor.is_some() {
-        format!(
-            "SELECT {TRACK_COLUMNS} FROM tracks
-             WHERE (title LIKE ?1 ESCAPE '\\' OR artist LIKE ?1 ESCAPE '\\')
-               AND EXISTS (SELECT 1 FROM play_history WHERE play_history.track_id = tracks.id)
-               AND (created_at < ?3 OR (created_at = ?3 AND id < ?4))
-             ORDER BY created_at DESC, id DESC
-             LIMIT ?2"
-        )
+        "SELECT id, title, artist, duration_ms, thumbnail_url, source_url, source_type, file_path, youtube_id, volume, uploaded_by, created_at
+         FROM tracks
+         WHERE (title LIKE ?1 ESCAPE '\\' OR artist LIKE ?1 ESCAPE '\\')
+           AND EXISTS (SELECT 1 FROM play_history WHERE play_history.track_id = tracks.id)
+           AND (created_at < ?3 OR (created_at = ?3 AND id < ?4))
+         ORDER BY created_at DESC, id DESC
+         LIMIT ?2"
     } else {
-        format!(
-            "SELECT {TRACK_COLUMNS} FROM tracks
-             WHERE (title LIKE ?1 ESCAPE '\\' OR artist LIKE ?1 ESCAPE '\\')
-               AND EXISTS (SELECT 1 FROM play_history WHERE play_history.track_id = tracks.id)
-             ORDER BY created_at DESC, id DESC
-             LIMIT ?2"
-        )
+        "SELECT id, title, artist, duration_ms, thumbnail_url, source_url, source_type, file_path, youtube_id, volume, uploaded_by, created_at
+         FROM tracks
+         WHERE (title LIKE ?1 ESCAPE '\\' OR artist LIKE ?1 ESCAPE '\\')
+           AND EXISTS (SELECT 1 FROM play_history WHERE play_history.track_id = tracks.id)
+         ORDER BY created_at DESC, id DESC
+         LIMIT ?2"
     };
-    let mut q = sqlx::query_as::<_, Track>(&sql)
+    let mut q = sqlx::query_as::<_, Track>(sql)
         .bind(&pattern)
         .bind(limit + 1); // +1 for has_more detection
     if let Some((cursor_at, cursor_id)) = cursor {
@@ -120,21 +117,19 @@ pub async fn list_uploads(
     before_created_at: Option<&str>,
 ) -> DbResult<Vec<Track>> {
     let sql = if before_created_at.is_some() {
-        format!(
-            "SELECT {TRACK_COLUMNS} FROM tracks
-             WHERE source_type = 'upload' AND created_at < ?2
-             ORDER BY created_at DESC
-             LIMIT ?1"
-        )
+        "SELECT id, title, artist, duration_ms, thumbnail_url, source_url, source_type, file_path, youtube_id, volume, uploaded_by, created_at
+         FROM tracks
+         WHERE source_type = 'upload' AND created_at < ?2
+         ORDER BY created_at DESC
+         LIMIT ?1"
     } else {
-        format!(
-            "SELECT {TRACK_COLUMNS} FROM tracks
-             WHERE source_type = 'upload'
-             ORDER BY created_at DESC
-             LIMIT ?1"
-        )
+        "SELECT id, title, artist, duration_ms, thumbnail_url, source_url, source_type, file_path, youtube_id, volume, uploaded_by, created_at
+         FROM tracks
+         WHERE source_type = 'upload'
+         ORDER BY created_at DESC
+         LIMIT ?1"
     };
-    let mut query = sqlx::query_as::<_, Track>(&sql).bind(limit);
+    let mut query = sqlx::query_as::<_, Track>(sql).bind(limit);
     if let Some(ca) = before_created_at {
         query = query.bind(ca);
     }
@@ -185,14 +180,13 @@ pub async fn update_track_metadata(
     title: Option<&str>,
     artist: Option<&str>,
 ) -> DbResult<Track> {
-    let sql = format!(
+    sqlx::query_as::<_, Track>(
         "UPDATE tracks SET
            title = COALESCE(?1, title),
            artist = COALESCE(?2, artist)
          WHERE id = ?3
-         RETURNING {TRACK_COLUMNS}"
-    );
-    sqlx::query_as::<_, Track>(&sql)
+         RETURNING id, title, artist, duration_ms, thumbnail_url, source_url, source_type, file_path, youtube_id, volume, uploaded_by, created_at",
+    )
         .bind(title)
         .bind(artist)
         .bind(track_id)
