@@ -4,7 +4,7 @@ edition.workspace = true
 version.workspace = true
 
 [dependencies]
-azuki-db = { path = "../azuki-db" }
+azuki-db.workspace = true
 tokio.workspace = true
 serde.workspace = true
 serde_json.workspace = true

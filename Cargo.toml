@@ -20,6 +20,13 @@ edition = "2024"
 version = "0.5.0"
 
 [workspace.dependencies]
+# Workspace crates
+azuki-bot = { path = "crates/azuki-bot" }
+azuki-db = { path = "crates/azuki-db" }
+azuki-media = { path = "crates/azuki-media" }
+azuki-player = { path = "crates/azuki-player" }
+azuki-web = { path = "crates/azuki-web" }
+
 # Async runtime
 tokio = { version = "1", features = ["full"] }
 
@@ -53,6 +60,7 @@ tokio-tungstenite = "0.30"
 
 # HTTP client
 reqwest = { version = "0.13", features = ["json", "form"] }
+rustls = { version = "0.23", default-features = false, features = ["aws_lc_rs"] }
 
 # Auth
 jsonwebtoken = { version = "11", features = ["aws_lc_rs"] }
@@ -71,9 +79,14 @@ songbird = { git = "https://github.com/beerpsi-forks/songbird", branch = "davey"
 ] }
 symphonia = { version = "0.5", default-features = false, features = ["all"] }
 
+# Media metadata
+lofty = "0.23"
+matroska = "0.30"
+
 # Utilities
 uuid = { version = "1", features = ["v4"] }
 chrono = { version = "0.4", features = ["serde"] }
+chrono-tz = "0.10"
 secrecy = { version = "0.10", features = ["serde"] }
 rand = "0.10"
 sha2 = "0.11"
@@ -86,3 +99,9 @@ dotenvy = "0.15"
 cookie = "0.18"
 dashmap = "6"
 base64 = "0.23"
+regex = "1"
+
+# Testing
+http-body-util = "0.1"
+tempfile = "3"
+wiremock = "0.6"
