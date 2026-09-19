@@ -329,7 +329,7 @@ GHCR의 실제 인증·패키지 연결·게시·정리와 GitHub의 최종 work
 
 추가로 선택해야 할 저장소 종류나 runner 구조는 없어요.
 DBC-01부터 DBC-05까지의 로컬 source 구현은 direct Cargo와 kache, migration 입력 추적, snapshot 전송·receipt·보관, workflow 실패 경계를 포함해 반영되었어요.
-helper 회귀 검사 36개와 새 builder를 사용한 작은 실제 snapshot 왕복 integration은 통과했어요.
+인증 보정 전 helper 회귀 검사 36개와 새 builder를 사용한 작은 실제 snapshot 왕복 integration은 통과했어요.
 초기 full application 9-case matrix는 2,048.47초에 통과했고, 복원 case마다 fresh builder를 사용했어요.
 동일 입력 복원에서 Rust compiler 실행은 568회에서 0회로, 지원되는 C/C++ compiler 실행은 261회에서 duplicate 2회로 줄었고, Cargo 시간은 144초에서 19.43초로, complete cache flow는 245.30초에서 210.19초로 관측됐어요.
 source·version·dependency 변경과 migration add/change/delete의 runtime 출력은 해당 matrix에서 올바르게 반영됐어요.
@@ -360,6 +360,10 @@ blob 리다이렉트 수정 후 기존 공개 `nanazt/azuki` 이미지의 실제
 두 다운로드 모두 실제 `307`과 CDN `200`을 관찰했고, CDN 요청에는 인증·쿠키·proxy 인증 헤더가 없었어요.
 같은 회귀 사례가 수정 전에는 `REGISTRY_STATUS`·`307`로 실패하고 수정 후에는 통과하며, 별도로 인증 헤더 누출과 deadline 초기화 결함을 넣으면 각각의 검사가 실패하는 것도 확인했어요.
 이 읽기 검증은 새 패키지나 원격 workflow를 만들지 않았으며, DBC-06의 새 GitHub runner 전체 snapshot 복원과 실제 release 최종 판정까지 검증한 것은 아니에요.
+
+이후 승인된 [v0.5.0 workflow](https://github.com/nanazt/azuki/actions/runs/35433871371)는 runtime 이미지와 BuildKit layer cache를 게시하고 전체 `success`로 완료됐지만, 별도 kache snapshot은 `AUTH_REPLAY_UNSAFE`로 중단됐어요.
+권한 순서가 다른 Bearer scope의 토큰 재사용 결함을 로컬에서 재현해 보정했으며, 실제 원격 실패와 로컬 수정의 근거·한계는 [v0.5.0 인증 보정 기록](docker-build-cache-tickets.md#v050-인증-보정)에 구분해 남겼어요.
+수정 후 GHCR 게시와 새 runner의 snapshot 복원·보관 검증은 아직 수행하지 않았으므로 DBC-06은 완료하지 않았어요.
 
 ## 외부 근거
 

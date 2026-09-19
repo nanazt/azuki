@@ -12,7 +12,7 @@ Docker 컴파일 경로와 스냅샷 전송은 독립적으로 구현할 수 있
 이 티켓 분해는 기본안을 새 사용자 승인으로 바꾸거나 명세의 범위를 줄이지 않아요.
 
 계획 작성 이후 DBC-01부터 DBC-05까지의 로컬 구현·검증을 진행하라는 요청을 받았어요.
-GHCR 게시·삭제, push, 원격 이슈 생성, 릴리스와 배포는 승인되지 않았으며 DBC-06의 원격 확인은 별도로 대기해요.
+당시 승인 범위는 로컬 작업이었으며, 이후 별도로 승인된 원격 확인과 v0.5.0 릴리스 결과는 아래 실행 기록에 구분해 남겨요.
 상태 변경은 완료 근거를 대신하지 않으며, 로컬 구현·로컬 검증·실제 GHCR 확인을 구분해 기록해요.
 
 ## 의존성과 공통 실행 계약
@@ -254,7 +254,7 @@ DBC-06에는 검증한 소스·도구 버전, 실제 helper 명령, 참조·삭�
 <a id="dbc-06"></a>
 
 **근거:** [명세](docker-build-cache.md)의 실제 GHCR 확인, workflow와 릴리스 호환성, 원격 작업 권한 경계를 따라요.
-**상태:** 원격 실행 권한과 대상 실행이 정해지지 않아 대기해요.
+**상태:** 일부 원격 근거를 확보했지만 v0.5.0의 snapshot 게시가 실패해, 후속 runner 복원·보관 검증은 대상 실행과 별도 권한을 기다려요.
 **선행 산출물:** DBC-05의 로컬 결합 검증 결과와 확인할 소스 버전이 필요해요.
 대상 저장소·참조·실행, 캐시 package 게시·정리와 필요한 태그·workflow 동작을 포함한 명시적 원격 권한도 필요해요.
 **담당:** 사용자가 직접 실행한 결과를 인계하거나, 해당 원격 동작과 범위를 명시적으로 승인받은 실행자가 진행해요.
@@ -312,11 +312,11 @@ DBC-05는 결합된 로컬 경로, DBC-06은 실제 GHCR·GitHub 동작만 증�
 
 ### 구현과 권한
 
-기준 소스는 `807c5637fc8b5829e32fd239cfa405cb54f66ec7`이며, 이 작업의 변경은 아직 로컬 작업 트리에 있어요.
+초기 로컬 구현의 기준 소스는 `807c5637fc8b5829e32fd239cfa405cb54f66ec7`이며, 당시 변경은 로컬 작업 트리에 있었어요.
 `Dockerfile`의 cargo-chef를 직접 Cargo 빌드로 교체하고 `.kache.toml`, `crates/azuki-db/build.rs`, `scripts/docker-cache.mjs`와 집중·통합 검증 명령을 연결했어요.
 `workflows/docker.ts`가 workflow의 유일한 편집 원본이며 `.github/workflows/docker.yml`은 `npx gaji build`로 생성했어요.
 실제 DB·WAL·미디어를 사용하거나 Discord에 접속하지 않았고, registry 쓰기는 이번 세션 소유의 loopback registry로만 제한했어요.
-GitHub·GHCR의 게시·삭제·push·릴리스는 실행하지 않았어요.
+초기 로컬 구현 단계에서는 GitHub·GHCR의 게시·삭제·push·릴리스를 실행하지 않았어요.
 
 ### 고정된 구현 접점
 
@@ -629,3 +629,25 @@ helper 회귀 검사 28개, `mise run check && mise run test`, frontend `npx tsc
 전용 builder는 각 사례에서 제거했고 마지막에 registry·runtime container와 익명 volume 세 개의 부재를 확인했어요.
 기록한 runtime image 참조 다섯 개와 임시 비교 스크립트·snapshot·staging도 제거했어요.
 전역 prune이나 원격 작업은 하지 않았으며 실제 GHCR·GitHub runner 검증은 여전히 DBC-06에 남아 있어요.
+
+### v0.5.0 인증 보정
+
+별도로 승인된 [v0.5.0 릴리스](https://github.com/nanazt/azuki/releases/tag/v0.5.0)는 소스 `173107b2f81066587db0ac32b28d3c31606697ff`의 [workflow 실행](https://github.com/nanazt/azuki/actions/runs/35433871371)에서 전체 `success`로 완료됐어요.
+runtime 이미지와 BuildKit layer cache는 게시됐지만, 별도 kache snapshot은 restore가 `not-found`였고 publish의 `upload-payload` 단계에서 `PUBLISH_FAILED`·`AUTH_REPLAY_UNSAFE`로 중단됐어요.
+실패 보고의 publication은 `abandoned`, `immutableRef`와 `manifestDigest`는 `null`이었으며 새 snapshot의 검증·고정 참조 승격은 완료되지 않았어요.
+이 캐시 단계의 `continue-on-error: true` 때문에 전체 workflow 성공과 snapshot 게시 실패가 함께 나타났어요.
+
+원격 로그에는 실제 Bearer challenge의 scope가 없으므로 그 문자열이 권한 순서 차이였다고 확정하지 않아요.
+다만 기존 클라이언트에서 요청의 `pull,push`와 challenge의 `push,pull`을 서로 다른 토큰 캐시 키로 취급해, 인증을 마친 뒤에도 스트리밍 PATCH에 Bearer 대신 Basic을 보내는 결함을 로컬에서 재현했어요.
+`scripts/docker-cache.mjs`는 scope 항목과 각 항목의 action 순서만 정규화한 키를 토큰 저장·조회에 공통으로 사용하도록 보정했어요.
+토큰 서버에 전달하는 원래 challenge, repository·권한 집합 구분, 스트리밍 요청의 `401` 재전송 금지는 유지해요.
+수정된 클라이언트 직접 실행에서는 `push,pull` challenge 뒤의 PATCH와 PUT에 Bearer가 전달되고 업로드가 완료됐으며, source와 호출 경로의 독립 리뷰에서도 수정으로 생긴 결함은 발견되지 않았어요.
+
+같은 file-backed OCI 게시 회귀 사례는 v0.5.0 원본 소스에서 `upload-payload`의 `PUBLISH_FAILED`·`AUTH_REPLAY_UNSAFE`로 실패하고, 수정본에서 검증·승격까지 통과했어요.
+서로 다른 repository·권한 집합의 토큰으로 각 스트림을 인증하는 검사와, 반복 `401`에서 스트림을 재전송하거나 blob을 확정하지 않는 검사도 통과했어요.
+격리된 복사본에서 모든 scope를 같은 키로 합치는 결함을 넣었을 때 토큰 분리 검사가 실제 인증 거부로 실패하는 것도 확인했어요.
+`mise run test-docker-cache` 38개, `mise run test-release` 36개, `mise run check && mise run test`, frontend `npx tsc --noEmit && npm run build`가 모두 통과했어요.
+원본 비교와 결함 주입에 사용한 임시 디렉터리는 제거했어요.
+
+이번 인증 보정은 로컬 수정·검증 범위이며 push, workflow 재실행, 새 릴리스는 수행하지 않아요.
+수정 후 실제 GHCR snapshot 게시·후속 runner 복원·receipt와 보관 검증은 아직 수행하지 않았고 DBC-06에 남아 있어요.

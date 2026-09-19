@@ -278,6 +278,16 @@ function parseBearerChallenge(value) {
   return fields.realm ? fields : null;
 }
 
+function registryScopeKey(scope) {
+  // Scope entries and their actions are unordered, but resource names and permission sets remain distinct.
+  return (scope ?? '').split(/\s+/u).filter(Boolean).map((entry) => {
+    const separator = entry.lastIndexOf(':');
+    if (separator < 0) return entry;
+    const actions = entry.slice(separator + 1).split(',').sort().join(',');
+    return `${entry.slice(0, separator + 1)}${actions}`;
+  }).sort().join(' ');
+}
+
 export class RegistryClient {
   constructor({ registry, repository, username, token, limits = {} }) {
     this.registry = normalizeRegistryUrl(registry);
@@ -309,7 +319,8 @@ export class RegistryClient {
     expect(realm.protocol === 'https:' || (this.registry.isLoopback && loopbackRealm && realm.protocol === 'http:'), 'AUTH_REALM', 'Registry authentication realm is not trusted.', { realm: realm.origin });
     if (!this.registry.isLoopback) expect(realm.hostname === new URL(this.registry.origin).hostname, 'AUTH_REALM', 'Production registry authentication must stay on the registry host.', { realm: realm.origin });
     const effectiveScope = challenge.scope || scope;
-    const key = `${realm.href}\n${challenge.service || ''}\n${effectiveScope || ''}`;
+    const scopeKey = registryScopeKey(effectiveScope);
+    const key = `${realm.href}\n${challenge.service || ''}\n${scopeKey}`;
     if (this.bearerTokens.has(key)) return this.bearerTokens.get(key);
     if (challenge.service) realm.searchParams.set('service', challenge.service);
     if (effectiveScope) realm.searchParams.set('scope', effectiveScope);
@@ -327,7 +338,7 @@ export class RegistryClient {
     const value = parsed.token ?? parsed.access_token;
     expect(typeof value === 'string' && value.length > 0 && value.length <= 64 * 1024, 'AUTH_FAILED', 'Registry token exchange returned no bounded token.');
     this.bearerTokens.set(key, value);
-    this.scopeTokens.set(effectiveScope, value);
+    this.scopeTokens.set(scopeKey, value);
     return value;
   }
 
@@ -361,7 +372,7 @@ export class RegistryClient {
       return remaining;
     };
     const requestHeaders = { ...headers };
-    const knownBearer = this.scopeTokens.get(scope);
+    const knownBearer = this.scopeTokens.get(registryScopeKey(scope));
     if (knownBearer) requestHeaders.authorization = `Bearer ${knownBearer}`;
     else if (this.token !== undefined) requestHeaders.authorization = `Basic ${Buffer.from(`${this.username}:${this.token}`).toString('base64')}`;
     let current = target;

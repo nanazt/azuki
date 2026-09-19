@@ -72,7 +72,7 @@ async function collectRequest(request, limit = 8 * 1024 * 1024) {
   return Buffer.concat(chunks, size);
 }
 
-async function registryFixture(t) {
+async function registryFixture(t, { authChallengeScope = `repository:${REPOSITORY}:pull,push`, streamUploadChallenge = false } = {}) {
   const blobs = new Map();
   const manifests = new Map();
   const tags = new Map();
@@ -84,7 +84,11 @@ async function registryFixture(t) {
     fixedPutAttempts: 0,
     failReceipt: false,
     requireAuth: false,
-    tokenRequests: 0,
+    authChallengeScope,
+    authScopeTokens: false,
+    expectedScopes: new Map(),
+    streamUploadChallenge,
+    streamUploadChallenges: 0,
     beforeFixedPromotion: null,
   };
   let nextUpload = 1;
@@ -97,13 +101,26 @@ async function registryFixture(t) {
           response.writeHead(401).end();
           return;
         }
-        state.tokenRequests += 1;
-        response.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ token: 'fixture-bearer-token' }));
+        const scope = url.searchParams.get('scope') ?? '';
+        const token = state.authScopeTokens ? `fixture-bearer-token:${scope}` : 'fixture-bearer-token';
+        response.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ token }));
         return;
       }
-      if (state.requireAuth && request.headers.authorization !== 'Bearer fixture-bearer-token') {
+      const expectedScope = state.expectedScopes.get(`${request.method} ${url.pathname}`);
+      const expectedToken = state.authScopeTokens && expectedScope !== undefined
+        ? `fixture-bearer-token:${expectedScope}`
+        : 'fixture-bearer-token';
+      const acceptsScopedToken = state.authScopeTokens
+        && expectedScope === undefined
+        && request.headers.authorization?.startsWith('Bearer fixture-bearer-token:');
+      const challengesStreamingUpload = state.streamUploadChallenge
+        && request.method === 'PATCH'
+        && url.pathname.startsWith(`${prefix}blobs/uploads/`);
+      if (state.requireAuth && (challengesStreamingUpload || (!acceptsScopedToken && request.headers.authorization !== `Bearer ${expectedToken}`))) {
+        if (challengesStreamingUpload) state.streamUploadChallenges += 1;
+        const scope = state.authChallengeScope === null ? '' : `,scope=\"${state.authChallengeScope}\"`;
         response.writeHead(401, {
-          'www-authenticate': `Bearer realm=\"http://${request.headers.host}/token\",service=\"fixture\",scope=\"repository:${REPOSITORY}:pull,push\"`,
+          'www-authenticate': `Bearer realm=\"http://${request.headers.host}/token\",service=\"fixture\"${scope}`,
         }).end();
         return;
       }
@@ -139,6 +156,12 @@ async function registryFixture(t) {
         blobs.set(expected, bytes);
         uploads.delete(upload[1]);
         response.writeHead(201, { 'docker-content-digest': expected, location: `${prefix}blobs/${expected}` }).end();
+        return;
+      }
+      const authProbe = /^auth-probes\/[^/]+$/u.exec(suffix);
+      if (authProbe && request.method === 'PUT') {
+        await collectRequest(request);
+        response.writeHead(204).end();
         return;
       }
       const blob = /^blobs\/(sha256:[0-9a-f]{64})$/u.exec(decodeURIComponent(suffix));
@@ -836,8 +859,8 @@ test('real OCI data API round trip verifies immutable metadata and payload', asy
   assert.equal(await readFile(path.join(restored, 'index.db'), 'utf8'), 'sqlite-fixture-first');
 });
 
-test('authenticated registry exchange keeps credentials out of OCI data', async (t) => {
-  const fixture = await registryFixture(t);
+test('authenticated OCI publication reuses reordered bearer scope without leaking credentials', async (t) => {
+  const fixture = await registryFixture(t, { authChallengeScope: `repository:${REPOSITORY}:push,pull` });
   fixture.state.requireAuth = true;
   const client = new RegistryClient({
     registry: fixture.origin,
@@ -859,11 +882,72 @@ test('authenticated registry exchange keeps credentials out of OCI data', async 
   });
 
   assert.equal(published.publication, 'promoted');
-  assert.ok(fixture.state.tokenRequests >= 1);
   for (const bytes of [...fixture.blobs.values(), ...fixture.manifests.values()]) {
     assert.equal(bytes.includes(Buffer.from('fixture-secret')), false);
     assert.equal(bytes.includes(Buffer.from('fixture-bearer-token')), false);
   }
+});
+
+test('scoped bearer credentials keep permission sets and repositories distinct', async (t) => {
+  const fixture = await registryFixture(t, { authChallengeScope: null });
+  fixture.state.requireAuth = true;
+  fixture.state.authScopeTokens = true;
+  const client = new RegistryClient({
+    registry: fixture.origin,
+    repository: REPOSITORY,
+    username: 'fixture-user',
+    token: 'fixture-secret',
+    limits: TEST_LIMITS,
+  });
+  const scopes = [
+    `repository:${REPOSITORY}:pull,push`,
+    `repository:${REPOSITORY}:pull`,
+    'repository:nanazt/another-build-cache:pull,push',
+  ];
+
+  for (const [index, scope] of scopes.entries()) {
+    const response = await client.request(`auth-probes/preauth-${index}`, { method: 'HEAD', expected: [404], scope });
+    await response.body?.cancel();
+  }
+  for (const [index, scope] of scopes.entries()) {
+    const path = `/v2/${REPOSITORY}/auth-probes/stream-${index}`;
+    fixture.state.expectedScopes.set(`PUT ${path}`, scope);
+    const response = await client.request(`auth-probes/stream-${index}`, {
+      method: 'PUT',
+      body: new ReadableStream({
+        start(controller) {
+          controller.enqueue(Buffer.from(`stream scope ${index}`));
+          controller.close();
+        },
+      }),
+      expected: [204],
+      scope,
+    });
+    await response.body?.cancel();
+  }
+});
+
+test('a repeated streaming upload challenge is not replayed or committed', async (t) => {
+  const fixture = await registryFixture(t, { streamUploadChallenge: true });
+  fixture.state.requireAuth = true;
+  const client = new RegistryClient({
+    registry: fixture.origin,
+    repository: REPOSITORY,
+    username: 'fixture-user',
+    token: 'fixture-secret',
+    limits: TEST_LIMITS,
+  });
+  const root = await temporaryDirectory(t);
+  const payload = Buffer.from('streaming registry upload must not be replayed');
+  const file = path.join(root, 'payload');
+  await writeFile(file, payload);
+
+  await assert.rejects(
+    client.uploadFile(file, digest(payload), payload.length),
+    (error) => error instanceof CacheTransportError && error.code === 'AUTH_REPLAY_UNSAFE',
+  );
+  assert.equal(fixture.state.streamUploadChallenges, 1);
+  assert.equal(fixture.blobs.size, 0);
 });
 
 test('blob redirects follow authenticated same-origin and loopback cross-origin hops for both blob consumers', async (t) => {
