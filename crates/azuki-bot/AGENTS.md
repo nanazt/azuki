@@ -23,7 +23,7 @@ Discord bot integration using serenity. Handles slash commands, voice channel op
 ### Working In This Directory
 - `BotState` holds player, ytdlp (Arc<YtDlp>), db pool, guild_id, songbird mutex, locale
 - serenity `CacheRef` is `!Send` — extract voice channel info BEFORE any `.await`
-- songbird uses DAVE fork: `beerpsi-forks/songbird` branch `davey`
+- songbird 0.6 from crates.io includes DAVE support; keep `symphonia` on the same minor version songbird depends on
 - YtDlp doesn't impl Clone — wrapped in `Arc<YtDlp>`
 - Bot locale: `Arc<AtomicU8>` shared with `WebState` (0=ko, 1=en), changed via admin API
 - `messages::Messages::get(&AtomicU8)` returns `&'static Messages` for current locale

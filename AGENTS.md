@@ -59,7 +59,7 @@ Discord music bot with web dashboard. Rust workspace backend (6 crates) + React 
 - Dependency flow: azuki-db → azuki-player, azuki-media → azuki-bot, azuki-web → azuki (binary)
 - PlayerController uses actor pattern with mpsc command channel (actor.rs separated from controller.rs)
 - Web uses axum + cookie-based JWT auth + WebSocket hub
-- songbird DAVE fork: `beerpsi-forks/songbird` branch `davey`
+- songbird 0.6 from crates.io (DAVE support via its `driver` feature)
 - Config stored in SQLite `app_config` table (DB-based, not .env)
 - Setup wizard runs on first launch if no config exists
 

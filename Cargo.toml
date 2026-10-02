@@ -73,10 +73,7 @@ serenity = { version = "0.12", default-features = false, features = [
     "cache",
     "voice",
 ] }
-songbird = { git = "https://github.com/beerpsi-forks/songbird", branch = "davey", features = [
-    "serenity",
-    "driver",
-] }
+songbird = { version = "0.6", features = ["serenity", "driver"] }
 symphonia = { version = "0.5", default-features = false, features = ["all"] }
 
 # Media metadata

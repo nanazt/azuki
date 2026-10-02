@@ -1,3 +1,4 @@
+use std::num::NonZeroU8;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -488,8 +489,14 @@ impl BotGeneration {
         client_cancel: CancellationToken,
     ) -> Result<Self, BotError> {
         let intents = GatewayIntents::non_privileged() | GatewayIntents::MESSAGE_CONTENT;
+        // Voice recovery owns reconnection and its backoff, so songbird's own retries stay
+        // minimal. songbird 0.6 still documents `Some(0)` as "no retries", but `retry_limit`
+        // became `Option<NonZeroU8>` (serenity-rs/songbird#276), so one retry ~250 ms after a
+        // failed attempt is the floor. The limit only governs full connects (joins, and full
+        // reconnects after a session resume fails); there it delays `DriverDisconnect`, and
+        // therefore recovery, by that one extra attempt.
         let retry = Retry {
-            retry_limit: Some(0),
+            retry_limit: Some(NonZeroU8::MIN),
             ..Retry::default()
         };
         let songbird_config = SongbirdConfig::default()
@@ -1086,13 +1093,11 @@ impl SongbirdEventHandler for VoiceDriverEvent {
 
         match context {
             EventContext::DriverConnect(data) => {
-                if let Some(channel_id) = data.channel_id {
-                    self.control
-                        .voice_connected(self.generation, channel_id.0.get());
-                }
+                self.control
+                    .voice_connected(self.generation, data.channel_id.0.get());
             }
             EventContext::DriverReconnect(data) => {
-                let channel_id = data.channel_id.map_or(0, |channel_id| channel_id.0.get());
+                let channel_id = data.channel_id.0.get();
                 if self.control.status().status == BotLifecycleStatus::Ready {
                     self.control.voice_reconnected(self.generation, channel_id);
                 } else {
