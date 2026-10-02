@@ -1,4 +1,5 @@
 use std::future::Future;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -8,6 +9,11 @@ use songbird::Songbird;
 use songbird::events::{Event, EventContext, EventHandler as SongbirdEventHandler, TrackEvent};
 use songbird::input::File as AudioFile;
 use songbird::tracks::{Track, TrackHandle};
+use symphonia::core::formats::FormatOptions;
+use symphonia::core::io::MediaSourceStream;
+use symphonia::core::meta::MetadataOptions;
+use symphonia::core::probe::Hint;
+use symphonia::core::units::TimeBase;
 use tokio::sync::{Mutex, MutexGuard};
 use tokio::time::timeout;
 use tokio_util::sync::CancellationToken;
@@ -273,9 +279,12 @@ impl GenerationOutput {
                 })?;
 
             if position_ms > 0 {
+                let seek_ms = self
+                    .until_cancelled(seekable_position_ms(file_path, position_ms))
+                    .await?;
                 self.until_cancelled(timeout(
                     PREPARE_TIMEOUT,
-                    handle.seek_async(Duration::from_millis(position_ms)),
+                    handle.seek_async(Duration::from_millis(seek_ms)),
                 ))
                 .await?
                 .map_err(|_| ReconcileError {
@@ -430,6 +439,51 @@ fn stop_prepared(prepared: &Option<(TrackHandle, bool, &str)>) {
     }
 }
 
+/// Limits a restore position to what the native decoder can seek to.
+///
+/// The player clock is bounded by the track's metadata duration, which can be longer than the
+/// decoded file (yt-dlp reports whole seconds). Symphonia rejects seeks past the final frame
+/// with `SeekErrorKind::OutOfRange`, and the frozen position would fail identically on every
+/// recovery attempt. Clamping lets the track end naturally so the player advances instead.
+async fn seekable_position_ms(file_path: &str, position_ms: u64) -> u64 {
+    let path = PathBuf::from(file_path);
+    match tokio::task::spawn_blocking(move || last_seekable_ms(&path)).await {
+        Ok(Some(last_ms)) if position_ms > last_ms => {
+            debug!(
+                position_ms,
+                last_ms, "clamping restore position to the decodable end"
+            );
+            last_ms
+        }
+        _ => position_ms,
+    }
+}
+
+/// Returns the last whole millisecond before the decodable end of `path`, when the container
+/// reports its length.
+fn last_seekable_ms(path: &Path) -> Option<u64> {
+    let file = std::fs::File::open(path).ok()?;
+    let probed = symphonia::default::get_probe()
+        .format(
+            &Hint::new(),
+            MediaSourceStream::new(Box::new(file), Default::default()),
+            &FormatOptions::default(),
+            &MetadataOptions::default(),
+        )
+        .ok()?;
+    let params = &probed.format.default_track()?.codec_params;
+    let time_base = params
+        .time_base
+        .or_else(|| params.sample_rate.map(|rate| TimeBase::new(1, rate)))?;
+    let end = time_base.calc_time(params.start_ts.checked_add(params.n_frames?)?);
+    let end_ms = end
+        .seconds
+        .checked_mul(1000)?
+        .checked_add((end.frac * 1000.0) as u64)?;
+    // Some demuxers (e.g. isomp4) cannot seek to the exact end timestamp.
+    end_ms.checked_sub(1)
+}
+
 struct TrackEndNotifier {
     player: PlayerController,
     control: BotControl,
@@ -451,5 +505,63 @@ impl SongbirdEventHandler for TrackEndNotifier {
                 .await;
         }
         None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use symphonia::core::errors::{Error as SymphoniaError, SeekErrorKind};
+    use symphonia::core::formats::{SeekMode, SeekTo, SeekedTo};
+    use symphonia::core::units::Time;
+
+    // 0.7 s of Ogg Opus silence; symphonia reports 720 ms of decodable frames.
+    const SHORT_OPUS: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/testdata/short.opus");
+    // yt-dlp reports whole seconds, so metadata can exceed the decoded length.
+    const ROUNDED_UP_METADATA_MS: u64 = 1_000;
+
+    /// Seeks the way songbird's mixer pool does for a parsed file input.
+    fn native_seek(path: &str, position_ms: u64) -> Result<SeekedTo, SymphoniaError> {
+        let file = std::fs::File::open(path).unwrap();
+        let mut probed = symphonia::default::get_probe()
+            .format(
+                &Hint::new(),
+                MediaSourceStream::new(Box::new(file), Default::default()),
+                &FormatOptions::default(),
+                &MetadataOptions::default(),
+            )
+            .unwrap();
+        let track_id = probed.format.default_track().unwrap().id;
+        probed.format.seek(
+            SeekMode::Accurate,
+            SeekTo::Time {
+                time: Time::from(Duration::from_millis(position_ms).as_secs_f64()),
+                track_id: Some(track_id),
+            },
+        )
+    }
+
+    #[tokio::test]
+    async fn restore_past_decodable_end_seeks_within_the_file() {
+        assert!(matches!(
+            native_seek(SHORT_OPUS, ROUNDED_UP_METADATA_MS),
+            Err(SymphoniaError::SeekError(SeekErrorKind::OutOfRange))
+        ));
+
+        let seek_ms = seekable_position_ms(SHORT_OPUS, ROUNDED_UP_METADATA_MS).await;
+
+        assert!(seek_ms < ROUNDED_UP_METADATA_MS);
+        native_seek(SHORT_OPUS, seek_ms).unwrap();
+    }
+
+    #[tokio::test]
+    async fn restore_within_decodable_range_keeps_position() {
+        assert_eq!(seekable_position_ms(SHORT_OPUS, 300).await, 300);
+    }
+
+    #[tokio::test]
+    async fn unreadable_file_keeps_position() {
+        let missing = concat!(env!("CARGO_MANIFEST_DIR"), "/testdata/missing.opus");
+        assert_eq!(seekable_position_ms(missing, 5_000).await, 5_000);
     }
 }
