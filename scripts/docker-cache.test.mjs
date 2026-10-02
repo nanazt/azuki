@@ -888,6 +888,32 @@ test('authenticated OCI publication reuses reordered bearer scope without leakin
   }
 });
 
+test('authenticated OCI publication streams after a pull-only challenge on push requests', async (t) => {
+  // GHCR answers upload requests with a pull-only challenge whose token still authorizes the push.
+  const fixture = await registryFixture(t, { authChallengeScope: `repository:${REPOSITORY}:pull` });
+  fixture.state.requireAuth = true;
+  const client = new RegistryClient({
+    registry: fixture.origin,
+    repository: REPOSITORY,
+    username: 'fixture-user',
+    token: 'fixture-secret',
+    limits: TEST_LIMITS,
+  });
+  const root = await temporaryDirectory(t);
+  const source = path.join(root, 'source');
+  await kacheFixture(source);
+
+  const published = await publishSnapshotFromDirectory({
+    client,
+    sourceDir: source,
+    compatibility: COMPATIBILITY,
+    producer: PRODUCER_A,
+    limits: TEST_LIMITS,
+  });
+
+  assert.equal(published.publication, 'promoted');
+});
+
 test('scoped bearer credentials keep permission sets and repositories distinct', async (t) => {
   const fixture = await registryFixture(t, { authChallengeScope: null });
   fixture.state.requireAuth = true;

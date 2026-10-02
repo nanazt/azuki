@@ -376,6 +376,7 @@ export class RegistryClient {
     if (knownBearer) requestHeaders.authorization = `Bearer ${knownBearer}`;
     else if (this.token !== undefined) requestHeaders.authorization = `Basic ${Buffer.from(`${this.username}:${this.token}`).toString('base64')}`;
     let current = target;
+    let acceptedBearer;
     let response = await this.fetchWithTimeout(current, { method, headers: requestHeaders, body, duplex: body ? 'half' : undefined, redirect: 'manual', timeoutMs: requestTimeout() });
     if (response.status === 401) {
       const challenge = parseBearerChallenge(response.headers.get('www-authenticate'));
@@ -383,8 +384,10 @@ export class RegistryClient {
         const replayable = body === undefined || typeof body?.getReader !== 'function';
         await discardResponse(response);
         expect(replayable, 'AUTH_REPLAY_UNSAFE', 'Registry challenged a streaming request before authentication was established.');
-        requestHeaders.authorization = `Bearer ${await this.bearerToken(challenge, scope, requestTimeout())}`;
+        const bearer = await this.bearerToken(challenge, scope, requestTimeout());
+        requestHeaders.authorization = `Bearer ${bearer}`;
         response = await this.fetchWithTimeout(current, { method, headers: requestHeaders, body, duplex: body ? 'half' : undefined, redirect: 'manual', timeoutMs: requestTimeout() });
+        if (response.ok || REGISTRY_REDIRECT_STATUSES.has(response.status)) acceptedBearer = bearer;
       }
     }
     let redirects = 0;
@@ -419,6 +422,9 @@ export class RegistryClient {
         response: errorBody.toString('utf8').slice(0, 1024),
       });
     }
+    // The registry picks the challenge scope, and GHCR answers push requests with a pull-only
+    // challenge, so a bearer the registry has just accepted for this scope is the one later streams reuse.
+    if (acceptedBearer !== undefined) this.scopeTokens.set(registryScopeKey(scope), acceptedBearer);
     return response;
   }
 

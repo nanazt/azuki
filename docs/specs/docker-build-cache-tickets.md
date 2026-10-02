@@ -12,7 +12,7 @@ Docker 컴파일 경로와 스냅샷 전송은 독립적으로 구현할 수 있
 이 티켓 분해는 기본안을 새 사용자 승인으로 바꾸거나 명세의 범위를 줄이지 않아요.
 
 계획 작성 이후 DBC-01부터 DBC-05까지의 로컬 구현·검증을 진행하라는 요청을 받았어요.
-당시 승인 범위는 로컬 작업이었으며, 이후 별도로 승인된 원격 확인과 v0.5.0 릴리스 결과는 아래 실행 기록에 구분해 남겨요.
+당시 승인 범위는 로컬 작업이었으며, 이후 별도로 승인된 원격 확인과 v0.5.0·v0.5.1 릴리스 결과는 아래 실행 기록에 구분해 남겨요.
 상태 변경은 완료 근거를 대신하지 않으며, 로컬 구현·로컬 검증·실제 GHCR 확인을 구분해 기록해요.
 
 ## 의존성과 공통 실행 계약
@@ -254,7 +254,7 @@ DBC-06에는 검증한 소스·도구 버전, 실제 helper 명령, 참조·삭�
 <a id="dbc-06"></a>
 
 **근거:** [명세](docker-build-cache.md)의 실제 GHCR 확인, workflow와 릴리스 호환성, 원격 작업 권한 경계를 따라요.
-**상태:** 일부 원격 근거를 확보했지만 v0.5.0의 snapshot 게시가 실패해, 후속 runner 복원·보관 검증은 대상 실행과 별도 권한을 기다려요.
+**상태:** 일부 원격 근거를 확보했지만 v0.5.0과 v0.5.1의 snapshot 게시가 모두 실패해, 후속 runner 복원·보관 검증은 대상 실행과 별도 권한을 기다려요.
 **선행 산출물:** DBC-05의 로컬 결합 검증 결과와 확인할 소스 버전이 필요해요.
 대상 저장소·참조·실행, 캐시 package 게시·정리와 필요한 태그·workflow 동작을 포함한 명시적 원격 권한도 필요해요.
 **담당:** 사용자가 직접 실행한 결과를 인계하거나, 해당 원격 동작과 범위를 명시적으로 승인받은 실행자가 진행해요.
@@ -650,4 +650,39 @@ runtime 이미지와 BuildKit layer cache는 게시됐지만, 별도 kache snaps
 원본 비교와 결함 주입에 사용한 임시 디렉터리는 제거했어요.
 
 이번 인증 보정은 로컬 수정·검증 범위이며 push, workflow 재실행, 새 릴리스는 수행하지 않아요.
-수정 후 실제 GHCR snapshot 게시·후속 runner 복원·receipt와 보관 검증은 아직 수행하지 않았고 DBC-06에 남아 있어요.
+보정 당시에는 실제 GHCR snapshot 게시·후속 runner 복원·receipt와 보관 검증을 수행하지 않았어요.
+이 보정을 처음 실제 GHCR에서 실행한 결과는 [v0.5.1 인증 보정](#v051-인증-보정)에 기록했어요.
+
+### v0.5.1 인증 보정
+
+별도로 승인된 [v0.5.1 릴리스](https://github.com/nanazt/azuki/releases/tag/v0.5.1)는 소스 `dc20eeb7a460bff5d203e2108ec7cd9e0164c9bf`의 [workflow 실행](https://github.com/nanazt/azuki/actions/runs/37025876994) attempt 1에서 전체 `success`로 완료됐어요.
+runtime 이미지 `sha256:34e278a3381f0a547584e0364982298fe9ffd6f24a8b5b7c674b7676ee625ae9`가 `0.5.1`·`0.5`·`latest` 태그로 게시됐어요.
+BuildKit layer cache manifest `sha256:3bcd7a9d2ea823f1e03cca99bf9052d7831bbe0d96e207d339c4aaa4a4242882`도 기록됐어요.
+kache snapshot restore는 `not-found`였고, publish는 v0.5.0과 같은 `upload-payload` 단계에서 `PUBLISH_FAILED`·`AUTH_REPLAY_UNSAFE`로 중단됐어요.
+publication은 `abandoned`, `immutableRef`와 `manifestDigest`는 `null`이었어요.
+따라서 [v0.5.0 인증 보정](#v050-인증-보정)의 권한 순서 정규화는 실제 GHCR 실패를 막지 못했어요.
+
+2026-10-03에 인증 없이 보낸 GHCR 요청은 blob `HEAD`와 업로드 시작 `POST` 모두에 `scope="repository:nanazt/azuki-build-cache:pull"` challenge를 돌려줬어요.
+기존 클라이언트는 challenge 뒤 받은 Bearer를 challenge scope인 `pull` 키로만 저장했어요.
+그래서 업로드 `POST`는 그 Bearer로 재전송돼 통과해도, 이어지는 스트리밍 `PATCH`는 `pull,push` 키에서 Bearer를 찾지 못하고 Basic을 보내요.
+GHCR이 이 `PATCH`에 다시 challenge하면 스트림을 재전송할 수 없어 `AUTH_REPLAY_UNSAFE`로 끝나요.
+인증된 요청이 받은 challenge 문자열은 원격 로그에 남지 않아요.
+실패가 `POST`가 아니라 `PATCH`에서 났으므로, `pull` challenge로 받은 Bearer가 GHCR에서 push 요청도 통과시켰다고 추론해요.
+이전 [GitHub 연결 확인](https://github.com/nanazt/azuki/actions/runs/34852202284)의 GHCR 쓰기는 `uploadBytes`의 Buffer 본문만 사용해, 같은 challenge를 받아도 재전송으로 통과할 수 있는 경로였어요.
+
+`RegistryClient.request`는 challenge 뒤 재전송한 요청을 registry가 2xx나 따라갈 수 있는 redirect로 받아들이고 요청 전체가 기대한 상태로 끝나면, 그 Bearer를 요청 자신의 scope 키에도 저장하도록 보정했어요.
+`404`처럼 기대 목록에만 들어 있는 상태는 Bearer가 그 scope에서 통했다는 근거로 쓰지 않아요.
+엄격한 registry에서는 pull 전용 토큰으로 보낸 push 요청이 거부되므로, 그 토큰이 push 키에 저장되지 않아요.
+토큰 서버에 전달하는 원래 challenge, repository·권한 집합 구분, 스트리밍 요청의 `401` 재전송 금지는 유지해요.
+
+모든 요청에 `pull` challenge를 보내고 하나의 토큰으로 push까지 허용하는 fixture 회귀 사례를 추가했어요.
+이 사례는 수정 전 소스에서 원격과 같은 `upload-payload`의 `PUBLISH_FAILED`·`AUTH_REPLAY_UNSAFE`로 실패했어요.
+수정 후에는 검증·승격까지 통과했어요.
+`mise run test-docker-cache` 39개가 모두 통과했어요.
+source와 호출 경로의 독립 리뷰는 관찰된 GHCR 순서에서 payload `PATCH`·`PUT`, config blob, manifest `PUT`이 모두 저장된 Bearer를 찾고, Bearer가 registry origin 밖으로 나가는 새 경로가 없다고 판단했어요.
+같은 리뷰는 캐시된 Bearer가 만료되면 다시 받지 않고 같은 토큰을 재사용하는 기존 동작을 지적했어요.
+로컬 측정의 gzip payload는 약 430 MB라 한 번의 게시 중 만료될 가능성은 낮다고 보지만, 실제 GHCR 토큰 수명은 확인하지 않았어요.
+
+이번 인증 보정은 로컬 수정·검증 범위이며 push, workflow 재실행, 새 릴리스는 수행하지 않아요.
+인증된 GHCR 요청의 실제 challenge와 보정 후 스트리밍 `PATCH`의 통과는 아직 관찰하지 않았어요.
+실제 GHCR snapshot 게시·후속 runner 복원·receipt와 보관 검증도 DBC-06에 남아 있어요.
