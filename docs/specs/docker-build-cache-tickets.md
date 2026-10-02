@@ -682,7 +682,45 @@ GHCR이 이 `PATCH`에 다시 challenge하면 스트림을 재전송할 수 없�
 source와 호출 경로의 독립 리뷰는 관찰된 GHCR 순서에서 payload `PATCH`·`PUT`, config blob, manifest `PUT`이 모두 저장된 Bearer를 찾고, Bearer가 registry origin 밖으로 나가는 새 경로가 없다고 판단했어요.
 같은 리뷰는 캐시된 Bearer가 만료되면 다시 받지 않고 같은 토큰을 재사용하는 기존 동작을 지적했어요.
 로컬 측정의 gzip payload는 약 430 MB라 한 번의 게시 중 만료될 가능성은 낮다고 보지만, 실제 GHCR 토큰 수명은 확인하지 않았어요.
+이 지적은 [만료된 Bearer 갱신](#만료된-bearer-갱신)에서 보정했어요.
 
 이번 인증 보정은 로컬 수정·검증 범위이며 push, workflow 재실행, 새 릴리스는 수행하지 않아요.
 인증된 GHCR 요청의 실제 challenge와 보정 후 스트리밍 `PATCH`의 통과는 아직 관찰하지 않았어요.
 실제 GHCR snapshot 게시·후속 runner 복원·receipt와 보관 검증도 DBC-06에 남아 있어요.
+
+### 만료된 Bearer 갱신
+
+v0.5.1 인증 보정 뒤에도 `RegistryClient`는 받은 Bearer를 버리지 않았어요.
+캐시된 Bearer가 만료되면 다음 요청이 그 토큰을 보내 challenge를 받고, challenge별 토큰 캐시가 같은 토큰을 다시 돌려줬어요.
+그래서 스트리밍이 아닌 요청도 한 번뿐인 재시도에서 다시 `401`을 받아 `REGISTRY_STATUS`로 실패했어요.
+스트리밍 요청은 `AUTH_REPLAY_UNSAFE`로 실패했고, 만료된 토큰은 이후 요청에도 계속 쓰였어요.
+
+2026-10-03에 GHCR 공개 이미지의 anonymous 토큰 응답을 확인했어요.
+응답에는 `token`만 있고 `expires_in`이나 `issued_at`이 없어, 만료 시점을 미리 계산할 수 없어요.
+따라서 registry의 challenge를 만료 신호로 다뤄요.
+
+- challenge별 토큰 캐시를 없애고, challenge마다 토큰을 새로 교환해요.
+  대신 처음 쓰는 scope마다 토큰 교환이 한 번 늘 수 있어요.
+- registry가 `401`로 거절한 Bearer는 모든 scope 키에서 지워요.
+  이미 저장된 Bearer는 challenge 헤더가 없는 `401`에도 지우고, 새로 받은 Bearer는 재시도가 `401`을 받으면 지워요.
+  스트리밍 요청은 여전히 재전송하지 않고 `AUTH_REPLAY_UNSAFE`로 끝나지만, 이후 요청은 거절된 토큰을 보내지 않아요.
+- 토큰 서버에 전달하는 원래 challenge scope, repository·권한 집합 구분, 요청당 한 번의 재시도는 유지해요.
+
+registry fixture는 토큰 교체, 거절될 토큰 발급, challenge 헤더 없는 `401`을 흉내 낼 수 있게 했어요.
+다음 네 사례를 추가했고, 모두 거절된 토큰이 거절된 요청에만 실렸는지 확인해요.
+
+- 만료 뒤 스트리밍이 아닌 업로드가 같은 요청 안에서 새 토큰으로 회복해요.
+- 만료된 토큰으로 보낸 스트림이 `AUTH_REPLAY_UNSAFE`로 끝난 뒤, 이어진 파일 업로드가 새 토큰으로 완료돼요.
+- 재시도에서 거절된 새 토큰은 다음 요청에 실리지 않아요.
+- challenge 헤더 없이 거절된 토큰도 다음 요청에 실리지 않아요.
+
+앞의 두 사례는 수정 전 소스에서 `HEAD`의 `REGISTRY_STATUS`·`401`로 실패했어요.
+저장된 토큰 퇴출만 빼거나 challenge별 토큰 캐시만 되살린 복사본에서도 두 사례가 모두 실패했어요.
+재시도 토큰 퇴출만 뺀 복사본에서는 세 번째 사례만, challenge가 있을 때만 퇴출하는 복사본에서는 네 번째 사례만 실패했어요.
+수정 후 `mise run test-docker-cache` 43개가 모두 통과했어요.
+source와 호출 경로의 독립 리뷰는 Bearer가 이전보다 넓은 origin·repository·권한 집합으로 가는 경로가 없다고 판단했어요.
+같은 리뷰는 남은 만료 구간으로, 업로드 `POST`가 받아들인 토큰이 바로 뒤의 스트리밍 `PATCH` 전에 만료되는 경우를 지적했어요.
+이 경우는 스트림을 다시 만들어 `POST`부터 반복해야 해 이번 보정에 넣지 않았어요.
+
+이 보정은 로컬 수정·검증 범위이며 push, workflow 재실행, 새 릴리스는 수행하지 않아요.
+실제 GHCR 토큰 수명과 만료 뒤 challenge 동작은 관찰하지 않았어요.

@@ -297,7 +297,6 @@ export class RegistryClient {
     this.username = username;
     this.token = token;
     this.limits = normalizeLimits(limits);
-    this.bearerTokens = new Map();
     this.scopeTokens = new Map();
   }
 
@@ -318,10 +317,9 @@ export class RegistryClient {
     const loopbackRealm = ['localhost', '127.0.0.1', '::1'].includes(realmHost);
     expect(realm.protocol === 'https:' || (this.registry.isLoopback && loopbackRealm && realm.protocol === 'http:'), 'AUTH_REALM', 'Registry authentication realm is not trusted.', { realm: realm.origin });
     if (!this.registry.isLoopback) expect(realm.hostname === new URL(this.registry.origin).hostname, 'AUTH_REALM', 'Production registry authentication must stay on the registry host.', { realm: realm.origin });
+    // Every challenge exchanges a fresh token. Registry tokens expire without saying when (GHCR
+    // returns no `expires_in`), and a challenged request has only one retry to spend.
     const effectiveScope = challenge.scope || scope;
-    const scopeKey = registryScopeKey(effectiveScope);
-    const key = `${realm.href}\n${challenge.service || ''}\n${scopeKey}`;
-    if (this.bearerTokens.has(key)) return this.bearerTokens.get(key);
     if (challenge.service) realm.searchParams.set('service', challenge.service);
     if (effectiveScope) realm.searchParams.set('scope', effectiveScope);
     const headers = {};
@@ -337,9 +335,14 @@ export class RegistryClient {
     }
     const value = parsed.token ?? parsed.access_token;
     expect(typeof value === 'string' && value.length > 0 && value.length <= 64 * 1024, 'AUTH_FAILED', 'Registry token exchange returned no bounded token.');
-    this.bearerTokens.set(key, value);
-    this.scopeTokens.set(scopeKey, value);
+    this.scopeTokens.set(registryScopeKey(effectiveScope), value);
     return value;
+  }
+
+  forgetBearer(value) {
+    for (const [scopeKey, token] of this.scopeTokens) {
+      if (token === value) this.scopeTokens.delete(scopeKey);
+    }
   }
 
   async fetchWithTimeout(url, { timeoutMs = this.limits.timeoutMs, ...options }) {
@@ -379,6 +382,8 @@ export class RegistryClient {
     let acceptedBearer;
     let response = await this.fetchWithTimeout(current, { method, headers: requestHeaders, body, duplex: body ? 'half' : undefined, redirect: 'manual', timeoutMs: requestTimeout() });
     if (response.status === 401) {
+      // A rejected bearer has expired or been revoked, so no later request may send it.
+      if (knownBearer) this.forgetBearer(knownBearer);
       const challenge = parseBearerChallenge(response.headers.get('www-authenticate'));
       if (challenge) {
         const replayable = body === undefined || typeof body?.getReader !== 'function';
@@ -388,6 +393,7 @@ export class RegistryClient {
         requestHeaders.authorization = `Bearer ${bearer}`;
         response = await this.fetchWithTimeout(current, { method, headers: requestHeaders, body, duplex: body ? 'half' : undefined, redirect: 'manual', timeoutMs: requestTimeout() });
         if (response.ok || REGISTRY_REDIRECT_STATUSES.has(response.status)) acceptedBearer = bearer;
+        else if (response.status === 401) this.forgetBearer(bearer);
       }
     }
     let redirects = 0;

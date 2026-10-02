@@ -365,7 +365,8 @@ blob 리다이렉트 수정 후 기존 공개 `nanazt/azuki` 이미지의 실제
 별도 kache snapshot은 두 실행 모두 `upload-payload` 단계에서 `AUTH_REPLAY_UNSAFE`로 중단됐어요.
 v0.5.0 뒤의 권한 순서 정규화는 v0.5.1 실패를 막지 못했어요.
 GHCR은 업로드 요청에도 `pull` scope만 담은 challenge를 보내므로, challenge 뒤 실제로 요청을 통과시킨 Bearer를 그 요청의 scope에도 저장하도록 다시 보정했어요.
-두 보정의 원격 실패와 로컬 근거·한계는 [v0.5.0 인증 보정](docker-build-cache-tickets.md#v050-인증-보정)과 [v0.5.1 인증 보정](docker-build-cache-tickets.md#v051-인증-보정)에 구분해 남겼어요.
+GHCR 토큰 응답에는 만료 시점이 없으므로, challenge마다 토큰을 새로 받고 registry가 `401`로 거절한 Bearer는 이후 요청에서 쓰지 않아요.
+보정별 원격 실패와 로컬 근거·한계는 [v0.5.0 인증 보정](docker-build-cache-tickets.md#v050-인증-보정), [v0.5.1 인증 보정](docker-build-cache-tickets.md#v051-인증-보정), [만료된 Bearer 갱신](docker-build-cache-tickets.md#만료된-bearer-갱신)에 구분해 남겼어요.
 수정 후 GHCR 게시와 새 runner의 snapshot 복원·보관 검증은 아직 수행하지 않았으므로 DBC-06은 완료하지 않았어요.
 
 ## 외부 근거

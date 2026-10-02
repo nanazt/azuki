@@ -86,6 +86,10 @@ async function registryFixture(t, { authChallengeScope = `repository:${REPOSITOR
     requireAuth: false,
     authChallengeScope,
     authScopeTokens: false,
+    bearerToken: 'fixture-bearer-token',
+    issuedBearerToken: null,
+    omitAuthChallenge: false,
+    sentAuthorizations: [],
     expectedScopes: new Map(),
     streamUploadChallenge,
     streamUploadChallenges: 0,
@@ -102,14 +106,15 @@ async function registryFixture(t, { authChallengeScope = `repository:${REPOSITOR
           return;
         }
         const scope = url.searchParams.get('scope') ?? '';
-        const token = state.authScopeTokens ? `fixture-bearer-token:${scope}` : 'fixture-bearer-token';
+        const token = state.authScopeTokens ? `fixture-bearer-token:${scope}` : state.issuedBearerToken ?? state.bearerToken;
         response.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ token }));
         return;
       }
+      state.sentAuthorizations.push(request.headers.authorization ?? null);
       const expectedScope = state.expectedScopes.get(`${request.method} ${url.pathname}`);
       const expectedToken = state.authScopeTokens && expectedScope !== undefined
         ? `fixture-bearer-token:${expectedScope}`
-        : 'fixture-bearer-token';
+        : state.bearerToken;
       const acceptsScopedToken = state.authScopeTokens
         && expectedScope === undefined
         && request.headers.authorization?.startsWith('Bearer fixture-bearer-token:');
@@ -118,6 +123,10 @@ async function registryFixture(t, { authChallengeScope = `repository:${REPOSITOR
         && url.pathname.startsWith(`${prefix}blobs/uploads/`);
       if (state.requireAuth && (challengesStreamingUpload || (!acceptsScopedToken && request.headers.authorization !== `Bearer ${expectedToken}`))) {
         if (challengesStreamingUpload) state.streamUploadChallenges += 1;
+        if (state.omitAuthChallenge) {
+          response.writeHead(401).end();
+          return;
+        }
         const scope = state.authChallengeScope === null ? '' : `,scope=\"${state.authChallengeScope}\"`;
         response.writeHead(401, {
           'www-authenticate': `Bearer realm=\"http://${request.headers.host}/token\",service=\"fixture\"${scope}`,
@@ -912,6 +921,126 @@ test('authenticated OCI publication streams after a pull-only challenge on push 
   });
 
   assert.equal(published.publication, 'promoted');
+});
+
+test('a rejected cached bearer is exchanged again within the same non-streaming request', async (t) => {
+  const fixture = await registryFixture(t);
+  fixture.state.requireAuth = true;
+  const client = new RegistryClient({
+    registry: fixture.origin,
+    repository: REPOSITORY,
+    username: 'fixture-user',
+    token: 'fixture-secret',
+    limits: TEST_LIMITS,
+  });
+  await client.uploadBytes(Buffer.from('uploaded before the bearer expired'));
+
+  fixture.state.bearerToken = 'fixture-bearer-token-renewed';
+  const sentBeforeExpiry = fixture.state.sentAuthorizations.length;
+  const uploaded = await client.uploadBytes(Buffer.from('uploaded after the bearer expired'));
+
+  assert.equal(fixture.blobs.has(uploaded.digest), true);
+  const sentAfterExpiry = fixture.state.sentAuthorizations.slice(sentBeforeExpiry);
+  assert.equal(sentAfterExpiry.filter((value) => value === 'Bearer fixture-bearer-token').length, 1);
+});
+
+test('a bearer rejected on a streaming request is not reused by later requests', async (t) => {
+  const fixture = await registryFixture(t);
+  fixture.state.requireAuth = true;
+  const client = new RegistryClient({
+    registry: fixture.origin,
+    repository: REPOSITORY,
+    username: 'fixture-user',
+    token: 'fixture-secret',
+    limits: TEST_LIMITS,
+  });
+  await client.uploadBytes(Buffer.from('uploaded before the bearer expired'));
+
+  fixture.state.bearerToken = 'fixture-bearer-token-renewed';
+  const sentBeforeExpiry = fixture.state.sentAuthorizations.length;
+  await assert.rejects(
+    client.request('auth-probes/stale-stream', {
+      method: 'PUT',
+      body: new ReadableStream({
+        start(controller) {
+          controller.enqueue(Buffer.from('stream sent with an expired bearer'));
+          controller.close();
+        },
+      }),
+      expected: [204],
+      scope: `repository:${REPOSITORY}:pull,push`,
+    }),
+    (error) => error instanceof CacheTransportError && error.code === 'AUTH_REPLAY_UNSAFE',
+  );
+  const root = await temporaryDirectory(t);
+  const payload = Buffer.from('streamed after the expired bearer was rejected');
+  const file = path.join(root, 'payload');
+  await writeFile(file, payload);
+  await client.uploadFile(file, digest(payload), payload.length);
+
+  assert.equal(fixture.blobs.has(digest(payload)), true);
+  const sentAfterExpiry = fixture.state.sentAuthorizations.slice(sentBeforeExpiry);
+  assert.equal(sentAfterExpiry.filter((value) => value === 'Bearer fixture-bearer-token').length, 1);
+});
+
+test('a bearer rejected on its own retry is not sent again', async (t) => {
+  const fixture = await registryFixture(t);
+  fixture.state.requireAuth = true;
+  const client = new RegistryClient({
+    registry: fixture.origin,
+    repository: REPOSITORY,
+    username: 'fixture-user',
+    token: 'fixture-secret',
+    limits: TEST_LIMITS,
+  });
+  const probe = (name) => client.request(`auth-probes/${name}`, {
+    method: 'PUT',
+    body: Buffer.from(name),
+    expected: [204],
+    scope: `repository:${REPOSITORY}:pull,push`,
+  });
+
+  fixture.state.issuedBearerToken = 'fixture-bearer-token-rejected';
+  await assert.rejects(
+    probe('rejected-retry'),
+    (error) => error instanceof CacheTransportError && error.code === 'REGISTRY_STATUS',
+  );
+  fixture.state.issuedBearerToken = null;
+  await (await probe('after-rejected-retry')).body?.cancel();
+
+  assert.equal(fixture.state.sentAuthorizations.filter((value) => value === 'Bearer fixture-bearer-token-rejected').length, 1);
+});
+
+test('a bearer rejected without a challenge is not sent again', async (t) => {
+  const fixture = await registryFixture(t);
+  fixture.state.requireAuth = true;
+  const client = new RegistryClient({
+    registry: fixture.origin,
+    repository: REPOSITORY,
+    username: 'fixture-user',
+    token: 'fixture-secret',
+    limits: TEST_LIMITS,
+  });
+  const probe = (name) => client.request(`auth-probes/${name}`, {
+    method: 'PUT',
+    body: Buffer.from(name),
+    expected: [204],
+    scope: `repository:${REPOSITORY}:pull,push`,
+  });
+  await (await probe('before-expiry')).body?.cancel();
+
+  fixture.state.bearerToken = 'fixture-bearer-token-renewed';
+  fixture.state.omitAuthChallenge = true;
+  const sentBeforeExpiry = fixture.state.sentAuthorizations.length;
+  await assert.rejects(
+    probe('unchallenged-rejection'),
+    (error) => error instanceof CacheTransportError && error.code === 'REGISTRY_STATUS',
+  );
+  fixture.state.omitAuthChallenge = false;
+  await (await probe('after-unchallenged-rejection')).body?.cancel();
+
+  const sentAfterExpiry = fixture.state.sentAuthorizations.slice(sentBeforeExpiry);
+  assert.equal(sentAfterExpiry.filter((value) => value === 'Bearer fixture-bearer-token').length, 1);
 });
 
 test('scoped bearer credentials keep permission sets and repositories distinct', async (t) => {
