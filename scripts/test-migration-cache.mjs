@@ -28,7 +28,11 @@ use sqlx::SqlitePool;
 
 async fn inspect(pool: &SqlitePool) -> Result<Value, sqlx::Error> {
     let mut probes = Map::new();
-    for table in ["dbc_added_probe", "dbc_changed_probe", "dbc_removed_probe"] {
+    for (table, query) in [
+        ("dbc_added_probe", "SELECT value FROM dbc_added_probe LIMIT 1"),
+        ("dbc_changed_probe", "SELECT value FROM dbc_changed_probe LIMIT 1"),
+        ("dbc_removed_probe", "SELECT value FROM dbc_removed_probe LIMIT 1"),
+    ] {
         let present = sqlx::query_scalar::<_, i64>(
             "SELECT COUNT(*) FROM sqlite_schema WHERE type = 'table' AND name = ?1",
         )
@@ -37,8 +41,7 @@ async fn inspect(pool: &SqlitePool) -> Result<Value, sqlx::Error> {
         .await?
             == 1;
         let value = if present {
-            let query = format!("SELECT value FROM {table} LIMIT 1");
-            Some(sqlx::query_scalar::<_, String>(&query).fetch_one(pool).await?)
+            Some(sqlx::query_scalar::<_, String>(query).fetch_one(pool).await?)
         } else {
             None
         };
