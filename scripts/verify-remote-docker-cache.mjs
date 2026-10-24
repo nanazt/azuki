@@ -390,7 +390,7 @@ async function toolVersions(builder) {
 }
 
 async function baseDigests(seed) {
-  const refs = ['node:25', 'rust:trixie', 'ubuntu:24.04'];
+  const refs = ['node:24', 'rust:trixie', 'ubuntu:24.04'];
   if (!seed) {
     const entries = [];
     for (const ref of refs) entries.push([ref, await rawManifestDigest(ref)]);
@@ -401,9 +401,9 @@ async function baseDigests(seed) {
 }
 
 function pinDockerfileBases(production, bases) {
-  for (const required of ['FROM node:25 AS frontend-builder', 'FROM rust:trixie AS rust-builder', 'FROM ubuntu:24.04 AS runtime']) expect(production.includes(required), 'DOCKERFILE_DRIFT', 'Production Dockerfile base stages no longer match verification.', { required });
+  for (const required of ['FROM node:24 AS frontend-builder', 'FROM rust:trixie AS rust-builder', 'FROM ubuntu:24.04 AS runtime']) expect(production.includes(required), 'DOCKERFILE_DRIFT', 'Production Dockerfile base stages no longer match verification.', { required });
   return production
-    .replace('FROM node:25 AS frontend-builder', `FROM node:25@${bases['node:25']} AS frontend-builder`)
+    .replace('FROM node:24 AS frontend-builder', `FROM node:24@${bases['node:24']} AS frontend-builder`)
     .replace('FROM rust:trixie AS rust-builder', `FROM rust:trixie@${bases['rust:trixie']} AS rust-builder`)
     .replace('FROM ubuntu:24.04 AS runtime', `FROM ubuntu:24.04@${bases['ubuntu:24.04']} AS runtime`);
 }
