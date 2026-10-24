@@ -9,11 +9,11 @@ jobs:
       packages: write
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
     - id: buildx
       name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
-    - uses: docker/login-action@v3
+      uses: docker/setup-buildx-action@v4
+    - uses: docker/login-action@v4
       with:
         password: ${{ secrets.GITHUB_TOKEN }}
         registry: ghcr.io
@@ -48,7 +48,7 @@ jobs:
         printf 'cache_id=%s\n' "${{ env.RESTORE_ID }}" >> "$GITHUB_OUTPUT"
       timeout-minutes: 15
     - id: meta
-      uses: docker/metadata-action@v5
+      uses: docker/metadata-action@v6
       with:
         images: ghcr.io/${{ github.repository }}
         tags: |-
@@ -56,7 +56,7 @@ jobs:
           type=semver,pattern={{major}}.{{minor}}
           type=raw,value=latest
     - id: image
-      uses: docker/build-push-action@v6
+      uses: docker/build-push-action@v7
       with:
         build-args: |-
           KACHE_CACHE_ID=${{ steps.restore.outputs.cache_id || env.FALLBACK_ID }}
