@@ -256,9 +256,5 @@ media/
 data/
 .playwright-mcp/
 
-# gaji generated files
-generated/
-.gaji-cache.json
-gaji.config.local.ts
 deploy/nginx/
 .codegraph/

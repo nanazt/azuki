@@ -82,4 +82,4 @@ For an interrupted invocation or explicit resume request, read [RECOVERY.md](REC
 Run `mise run test-release` after changing the automation.
 The suite exercises the real CLI with isolated Git repositories and bare remotes, substituting only external transport, GitHub, and build services.
 It must never publish to the real repository as a test.
-Keep `workflows/docker.ts` and its generated YAML unchanged when optimizing this skill.
+Keep `.github/workflows/docker.yml` unchanged when optimizing this skill.

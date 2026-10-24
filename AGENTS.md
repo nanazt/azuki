@@ -8,13 +8,12 @@ Discord music bot with web dashboard. Rust workspace backend (6 crates) + React 
 
 ## Key Files
 
-| File                  | Description                                            |
-| --------------------- | ------------------------------------------------------ |
-| `Cargo.toml`          | Workspace manifest with all dependency versions        |
-| `mise.toml`          | Task runner commands (dev, build, check, test)         |
-| `.gitignore`          | Ignore rules for Rust, Node, OS, and project files     |
-| `gaji.config.ts`      | gaji workflow tool configuration                       |
-| `workflows/docker.ts` | Docker build/push GitHub Actions workflow (TypeScript) |
+| File                           | Description                                        |
+| ------------------------------ | -------------------------------------------------- |
+| `Cargo.toml`                   | Workspace manifest with all dependency versions    |
+| `mise.toml`                    | Task runner commands (dev, build, check, test)     |
+| `.gitignore`                   | Ignore rules for Rust, Node, OS, and project files |
+| `.github/workflows/docker.yml` | Docker build/push GitHub Actions workflow          |
 
 ## Subdirectories
 
@@ -24,7 +23,6 @@ Discord music bot with web dashboard. Rust workspace backend (6 crates) + React 
 | `frontend/`   | React SPA web dashboard (see `frontend/AGENTS.md`)  |
 | `migrations/` | SQLite migration files (see `migrations/AGENTS.md`) |
 | `deploy/`     | nginx config + deployment scripts for Lightsail     |
-| `workflows/`  | gaji workflow source files (TypeScript → YAML)      |
 
 ## For AI Agents
 
@@ -91,10 +89,9 @@ Discord music bot with web dashboard. Rust workspace backend (6 crates) + React 
 
 ### CI/CD
 
-- **gaji**: TypeScript-based GitHub Actions workflow tool. `npx gaji dev` (type generation), `npx gaji build` (TS→YAML compilation)
 - **Docker image**: `ghcr.io/nanazt/azuki` — built by GitHub Actions on `v*` tag push
-- **Workflow source**: `workflows/docker.ts` → `.github/workflows/docker.yml`
-- **CRITICAL**: NEVER edit `.github/workflows/*.yml` directly. Always edit the TypeScript source in `workflows/` first, then run `npx gaji build` to regenerate the YAML. Direct YAML edits will be overwritten.
+- **Workflows**: Edit `.github/workflows/*.yml` directly. `docker.yml` builds and pushes the image; `cache-verify.yml` is the manually dispatched Docker cache verification.
+  Release automation matches `docker.yml`'s `on:` trigger and the metadata `tags: |-` block as exact text, so keep their layout and run `mise run test-release` after changing `docker.yml`.
 - **Release requests**: Read `.agents/skills/release/SKILL.md` when explicitly asked to release azuki or resume an interrupted release.
   The skill defines one exact-scope approval and scripted publication checks; writing or reviewing it is not release authorization.
   Validate automation changes with `mise run test-release`, which uses isolated local Git and GitHub fixtures.

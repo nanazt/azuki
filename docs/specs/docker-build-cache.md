@@ -11,7 +11,7 @@ kache 저장소만 원격 보관하는 구성, 일반 레이어 캐시의 GHCR �
 이하 계약은 그 기본안을 구체화한 것이며, 각 항목에 대해 별도로 받은 사용자 승인이라고 기록하지 않아요.
 이 명세에 따른 DBC-01부터 DBC-05까지의 로컬 구현은 후속 요청으로 승인되어 소스에 반영되었어요.
 이 명세와 로컬 구현은 GHCR 패키지 생성·게시·삭제, push, 릴리스 또는 운영 서버 변경을 승인하지 않아요.
-근거가 되는 현재 파일은 [Dockerfile](../../Dockerfile), [workflow 원본](../../workflows/docker.ts), [Cargo 설정](../../Cargo.toml), [의존성 잠금](../../Cargo.lock), [migration 포함 지점](../../crates/azuki-db/src/lib.rs), [릴리스 workflow 검증](../../.agents/skills/release/scripts/core.mjs), [릴리스 완료 판정](../../.agents/skills/release/scripts/publish.mjs)이에요.
+근거가 되는 현재 파일은 [Dockerfile](../../Dockerfile), [release workflow](../../.github/workflows/docker.yml), [Cargo 설정](../../Cargo.toml), [의존성 잠금](../../Cargo.lock), [migration 포함 지점](../../crates/azuki-db/src/lib.rs), [릴리스 workflow 검증](../../.agents/skills/release/scripts/core.mjs), [릴리스 완료 판정](../../.agents/skills/release/scripts/publish.mjs)이에요.
 외부 동작 계약의 출처는 문서 마지막에 정리해요.
 
 ## 문제와 완료 결과
@@ -235,11 +235,12 @@ SQLx 0.8.6은 기존 파일을 `include_str!`로 추적하지만 Rust 소스 변
 
 ## workflow와 릴리스 호환성
 
-workflow 원본은 계속 `workflows/docker.ts`이고 생성 YAML은 `npx gaji build`로 재생성해요.
+workflow는 `.github/workflows/docker.yml`을 직접 고쳐요.
+2026-10-25에 gaji를 제거하기 전에는 `workflows/docker.ts`를 고친 뒤 `npx gaji build`로 YAML을 생성했어요.
 `docker.yml` 경로, `v*` push trigger, GitHub 제공 runner, 런타임 이미지 참조와 기존 버전·major.minor·latest 태그 규칙을 유지해요.
 캐시 이미지를 런타임용 metadata 태그 규칙에 섞지 않아요.
 
-로컬 workflow 원본은 기존 `type=gha` 레이어 캐시를 별도의 GHCR registry cache 참조로 전환했어요.
+로컬 workflow는 기존 `type=gha` 레이어 캐시를 별도의 GHCR registry cache 참조로 전환했어요.
 이름 붙인 setup-buildx step의 builder output은 실제 image build와 restore·publish helper 모두에 전달해 같은 BuildKit builder와 `/var/cache/kache` mount를 선택해요.
 restore는 run·attempt 고유 `RESTORE_ID`를 대상으로 하며 helper가 성공한 뒤에만 그 ID를 output으로 기록해요.
 build와 publish는 restore output 또는 별도의 run·attempt 고유 `FALLBACK_ID`를 선택하므로 실패하거나 부분적으로 reset된 restore mount가 컴파일에 도달하지 않아요.
@@ -249,7 +250,7 @@ cache 복원은 빌드 전에 실행하고 kache 추출·게시는 명시적 ima
 정리 시 생산 workflow 상태를 확인하도록 build job에 최소 읽기 권한인 `actions: read`를 선언해요.
 이 권한은 캐시 후보의 종료 상태를 조회하는 데만 사용하고, workflow 재실행·취소·수정 권한을 추가하지 않아요.
 
-현재 release 자동화는 workflow 원본과 생성 YAML의 fingerprint, 소스 SHA, 정확한 태그·SHA의 workflow 실행, 최종 `completed/success`를 검증해요.
+현재 release 자동화는 `docker.yml`의 fingerprint, 소스 SHA, 정확한 태그·SHA의 workflow 실행, 최종 `completed/success`를 검증해요.
 캐시 단계를 추가한 새 workflow에는 새 inspect/plan이 필요하며, 오래된 승인 계획이 무효화되는 기존 동작을 유지해요.
 이를 피하려고 fingerprint 검사를 약화하거나 기존 승인 계획을 고치지 않아요.
 
@@ -262,7 +263,7 @@ cache 복원은 빌드 전에 실행하고 kache 추출·게시는 명시적 ima
 | 지점 | 책임 |
 |---|---|
 | 기존 `Dockerfile` | chef를 제거하고 직접 빌드, kache·mount 구성, 명시적인 입력과 바이너리 복사를 소유해요. |
-| 기존 `workflows/docker.ts`와 생성 YAML | 레이어 캐시와 snapshot 작업의 순서·조건·실패 경계를 소유해요. |
+| 기존 `.github/workflows/docker.yml` | 레이어 캐시와 snapshot 작업의 순서·조건·실패 경계를 소유해요. |
 | 신규 CI cache helper | GHCR 후보 조회, mount 반출입, 스냅샷 게시·정리와 제한을 한곳에서 소유해요. |
 | 신규 helper 회귀 테스트 | 격리된 명령·registry/API fixture로 실패 처리와 보호 경계를 검증해요. |
 | 신규 루트 `.kache.toml` | workspace의 숨은 컴파일 입력을 선언해요. |
@@ -314,7 +315,7 @@ migration 누락과 손상된 snapshot은 검사가 의도한 오류를 실제�
 실제 이미지는 운영 설정이 없는 임시 DB와 격리된 포트에서 기동해 확인해요.
 실제 Discord 연결·서버 조작과 운영 DB 읽기·쓰기는 이 검증에 포함하지 않아요.
 
-필수 저장소 검사는 `mise run check`, `mise run test`, `mise run test-release`, 신규 helper 테스트, 프런트엔드의 `npx tsc --noEmit` 후 `npm run build`, gaji workflow 재생성이에요.
+필수 저장소 검사는 `mise run check`, `mise run test`, `mise run test-release`, 신규 helper 테스트, 프런트엔드의 `npx tsc --noEmit` 후 `npm run build`예요.
 기존 release 실패·취소·정확한 실행 식별·자동 재실행 금지 테스트를 약화하지 않아요.
 캐시만을 위해 기존 release fixture에 production이 읽지 않는 가짜 job/step 상태를 추가하지 않아요.
 

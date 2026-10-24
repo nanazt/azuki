@@ -262,18 +262,17 @@ function validTag(name) {
 }
 
 async function workflowInfo(ctx) {
-  const source = await readFile(path.join(ctx.root, 'workflows/docker.ts'), 'utf8');
-  const generated = await readFile(path.join(ctx.root, '.github/workflows/docker.yml'), 'utf8');
-  const lines = generated.replaceAll('\r\n', '\n').split('\n');
+  const workflow = await readFile(path.join(ctx.root, '.github/workflows/docker.yml'), 'utf8');
+  const lines = workflow.replaceAll('\r\n', '\n').split('\n');
   const start = lines.indexOf('on:');
   let end = start + 1;
   while (end < lines.length && (!lines[end] || /^\s/.test(lines[end]))) end++;
   const trigger = lines.slice(start, end).join('\n').trimEnd();
   expect(start >= 0 && trigger === 'on:\n  push:\n    tags:\n    - v*', 'unsupported_workflow', 'Review the Docker publication trigger before using release automation.');
   const expectedTags = ['type=semver,pattern={{version}}', 'type=semver,pattern={{major}}.{{minor}}', 'type=raw,value=latest'];
-  const tagBlock = /^        tags: \|-\r?\n((?:          [^\r\n]+\r?\n)+)/m.exec(generated);
+  const tagBlock = /^        tags: \|-\r?\n((?:          [^\r\n]+\r?\n)+)/m.exec(workflow);
   expect(tagBlock && stableJson(tagBlock[1].trim().split(/\r?\n/).map((line) => line.trim())) === stableJson(expectedTags), 'unsupported_workflow', 'Review the Docker image tag templates before releasing.');
-  return { fingerprint: sha256(stableJson({ source, generated })), tagPattern: 'v*', latestUnconditional: true, semverTemplates: ['{{version}}', '{{major}}.{{minor}}'] };
+  return { fingerprint: sha256(workflow), tagPattern: 'v*', latestUnconditional: true, semverTemplates: ['{{version}}', '{{major}}.{{minor}}'] };
 }
 
 export async function captureSnapshot(ctx, { fetch = true } = {}) {
