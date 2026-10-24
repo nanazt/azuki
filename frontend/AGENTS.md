@@ -28,7 +28,7 @@ React SPA web dashboard for azuki. Spotify-style player UI with queue, search, f
 
 ### Working In This Directory
 
-- Stack: React 19 + Vite 7 + TypeScript + Tailwind CSS v4 + Zustand + lucide-react + clsx
+- Stack: React 19 + Vite 8 + TypeScript + Tailwind CSS v4 + Zustand + lucide-react + clsx
 - Build: `npm run build` → `dist/`
 - Dev: `npm run dev` (proxies /api, /auth, /ws to localhost:3000)
 - React 19: `useRef` requires initial value (e.g., `useRef<T>(null)`)
