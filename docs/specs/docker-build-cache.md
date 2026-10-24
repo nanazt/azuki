@@ -240,9 +240,10 @@ SQLx 0.8.6은 기존 파일을 `include_str!`로 추적하지만 Rust 소스 변
 ## workflow와 릴리스 호환성
 
 workflow는 `.github/workflows/docker.yml`을 직접 고쳐요.
-2026-10-25에 gaji를 제거하기 전에는 `workflows/docker.ts`를 고친 뒤 `npx gaji build`로 YAML을 생성했어요.
 `docker.yml` 경로, `v*` push trigger, GitHub 제공 runner, 런타임 이미지 참조와 기존 버전·major.minor·latest 태그 규칙을 유지해요.
 캐시 이미지를 런타임용 metadata 태그 규칙에 섞지 않아요.
+
+2026-10-25에 gaji를 제거하기 전에는 `workflows/docker.ts`를 고친 뒤 `npx gaji build`로 YAML을 생성했어요.
 
 로컬 workflow는 기존 `type=gha` 레이어 캐시를 별도의 GHCR registry cache 참조로 전환했어요.
 이름 붙인 setup-buildx step의 builder output은 실제 image build와 restore·publish helper 모두에 전달해 같은 BuildKit builder와 `/var/cache/kache` mount를 선택해요.
