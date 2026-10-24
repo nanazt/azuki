@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # https://github.com/Lakelezz/audiopus_sys/issues/21
 #
