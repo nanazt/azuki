@@ -12,7 +12,7 @@ Docker 컴파일 경로와 스냅샷 전송은 독립적으로 구현할 수 있
 이 티켓 분해는 기본안을 새 사용자 승인으로 바꾸거나 명세의 범위를 줄이지 않아요.
 
 계획 작성 이후 DBC-01부터 DBC-05까지의 로컬 구현·검증을 진행하라는 요청을 받았어요.
-당시 승인 범위는 로컬 작업이었으며, 이후 별도로 승인된 원격 확인과 v0.5.0·v0.5.1 릴리스 결과는 아래 실행 기록에 구분해 남겨요.
+당시 승인 범위는 로컬 작업이었으며, 이후 별도로 승인된 원격 확인과 v0.5.0부터 v0.5.2까지의 릴리스 결과는 아래 실행 기록에 구분해 남겨요.
 상태 변경은 완료 근거를 대신하지 않으며, 로컬 구현·로컬 검증·실제 GHCR 확인을 구분해 기록해요.
 
 ## 의존성과 공통 실행 계약
@@ -254,7 +254,7 @@ DBC-06에는 검증한 소스·도구 버전, 실제 helper 명령, 참조·삭�
 <a id="dbc-06"></a>
 
 **근거:** [명세](docker-build-cache.md)의 실제 GHCR 확인, workflow와 릴리스 호환성, 원격 작업 권한 경계를 따라요.
-**상태:** [원격 캐시 검증](#원격-캐시-검증)에서 비공개 package 접근, 새 runner의 snapshot 복원, 보관 정리의 실제 삭제를 확인했어요. 실제 release workflow의 snapshot 게시와 release 판정 연결은 다음 승인된 release 실행을 기다려요.
+**상태:** [원격 캐시 검증](#원격-캐시-검증)과 [v0.5.2 release 실행](#v052-release-실행)에서 비공개 package 접근, 새 runner의 snapshot 복원, release workflow의 snapshot 게시와 release 판정 연결, 보관 정리의 실제 삭제를 확인했어요. release 실행의 kache 적중 수, 태그 실행이 게시한 snapshot의 다음 태그 실행 복원, 런타임 package의 태그 없는 version은 확인하지 못해 완료하지 않았어요.
 **선행 산출물:** DBC-05의 로컬 결합 검증 결과와 확인할 소스 버전이 필요해요.
 대상 저장소·참조·실행, 캐시 package 게시·정리와 필요한 태그·workflow 동작을 포함한 명시적 원격 권한도 필요해요.
 **담당:** 사용자가 직접 실행한 결과를 인계하거나, 해당 원격 동작과 범위를 명시적으로 승인받은 실행자가 진행해요.
@@ -809,3 +809,43 @@ package는 모든 job에서 비공개 container package이자 `nanazt/azuki`에 
 
 정리 뒤 cache package에는 kache 0.20.0 snapshot 두 개와 각 receipt, 태그 없는 BuildKit layer cache version 네 개가 남아 있어요.
 보관 정리는 현재 고정 참조의 snapshot만 다루므로 이 version들을 지우지 않으며, 삭제 여부는 정하지 않았어요.
+
+### v0.5.2 release 실행
+
+2026-10-25에 승인된 [v0.5.2 release](https://github.com/nanazt/azuki/releases/tag/v0.5.2)의 [`docker.yml` 실행 40120875375](https://github.com/nanazt/azuki/actions/runs/40120875375) attempt 1에서, release workflow가 처음으로 kache snapshot을 복원하고 게시했어요.
+소스는 `5317edd39f912f05fda0568fc00743492973ac61`이고 job의 모든 step과 실행 전체가 `completed/success`로 끝났어요.
+release 자동화는 태그 `v0.5.2`와 최종 SHA가 일치하는 이 실행의 `completed/success`를 기다린 뒤 release를 만들고 검증했어요.
+
+| 단계 | snapshot | 생산 실행 | gzip payload | raw tar | 파일 수 | helper 시간 |
+|---|---|---|---|---|---|---|
+| 복원 | `ac7a268f497d` | [retain 40117552302](https://github.com/nanazt/azuki/actions/runs/40117552302), `b1a0266` | 459,753,524 bytes | 1,284,810,240 bytes | 7,677 | 내려받기 9.9초, 해제 4.4초, 주입 26.2초 |
+| 게시 | `627488e660f1` | 이 실행, `5317edd` | 484,089,160 bytes | 1,351,178,240 bytes | 7,728 | 추출 19.4초, 압축 9.7초, 업로드 16.2초 |
+
+복원한 `ac7a268f497d`는 [원격 캐시 검증](#원격-캐시-검증) 2단계의 retain이 `chore/update-dependencies`에서 `workflow_dispatch`로 실행돼 게시한 snapshot이에요.
+태그 push 실행이 같은 고정 참조 `kache-linux-amd64-s1-kache-1.2.2`로 이 snapshot을 복원했으므로, 고정 참조가 실행 종류와 Git ref를 넘어 복원되는 것을 확인했어요.
+태그 실행이 게시한 snapshot을 다음 태그 실행이 복원하는 경우는 아직 관찰하지 않았어요.
+
+복원 뒤 Cargo release 빌드는 53.94초에 끝났어요.
+이 소스는 `b1a0266`과 외부 Rust 의존성이 같고, workspace 버전만 0.5.1에서 0.5.2로 바뀌어 workspace crate는 다시 컴파일돼야 해요.
+`docker.yml`은 kache report를 내보내지 않아서, Rust·build script·C/C++ 컴파일의 적중과 miss는 세지 못했어요.
+게시한 snapshot의 파일이 복원한 것보다 51개 많은 것은 새 항목이 생긴 것과 맞지만, 적중 수를 대신하지는 않아요.
+verifier의 측정 경로와 달라서, 2단계 warm·retain의 43.7초·36.1초와 직접 비교하지 않아요.
+
+게시는 `promoted`로 끝나 고정 참조가 `627488e660f1`을 가리키게 됐고, receipt `4cf53cc3bf6e`는 `acknowledged`였어요.
+보관 정리는 현재 `627488e660f1`과 직전 `ac7a268f497d`를 남기고, 2단계 warm이 게시한 `9a55e871bf22`와 그 receipt를 삭제했어요.
+보호 대상은 4개였고 경고는 없었어요.
+
+runtime 이미지 manifest list `sha256:66c53b2912886187647fb09d8f8872b76f880e566139a15c113e86316888fef5`는 `0.5.2`·`0.5`·`latest` 태그로 게시됐어요.
+BuildKit layer cache는 `buildkit-linux-amd64-v1` 참조에 cache manifest `sha256:eec34ebb26ff5a03b95297f8db78b1a6fdc42e74ca4a7cf927da9c48f51ebcb3`으로 기록됐어요.
+이 실행은 `docker.yml`에만 있는 `docker/setup-buildx-action@v4`, `docker/metadata-action@v6`, `docker/build-push-action@v7`로 실행됐어요.
+
+run log에서 GitHub token·Bearer·Basic 인증 문자열 형식을 찾았지만 발견되지 않았고, 이미지 빌드 인수는 `KACHE_CACHE_ID`와 `KACHE_MAX_SIZE`뿐이었어요.
+2026-10-25에 공개 런타임 package `nanazt/azuki`를 anonymous 토큰으로 조회하니 태그 20개가 모두 버전 태그와 `latest`였고, cache 참조 형식의 태그는 없었어요.
+
+이 실행으로 확인하지 못한 것은 다음과 같아요.
+
+- release 실행의 kache 적중과 miss 수는 `docker.yml`이 kache report를 내보내지 않아 세지 못했어요.
+- 태그 실행이 게시한 `627488e660f1`을 다음 태그 실행이 복원하는지는 다음 승인된 release를 기다려요.
+- 런타임 package의 태그 없는 version은 로컬 `gh` 자격 증명에 `read:packages` 권한이 없어 조회하지 못했어요.
+- 게시한 snapshot과 runtime 이미지의 내용에서 자격 증명 형식을 직접 찾지는 않았어요.
+- 이 실행에서는 캐시 전용 실패와 실제 이미지 빌드 실패가 일어나지 않았어요. 실제 캐시 전용 실패는 [v0.5.0 인증 보정](#v050-인증-보정)과 [v0.5.1 인증 보정](#v051-인증-보정)에 기록한 두 release 실행에서만 관찰했어요.

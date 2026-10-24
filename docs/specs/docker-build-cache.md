@@ -374,7 +374,11 @@ GHCR은 업로드 요청에도 `pull` scope만 담은 challenge를 보내므로,
 GHCR 토큰 응답에는 만료 시점이 없으므로, challenge마다 토큰을 새로 받고 registry가 `401`로 거절한 Bearer는 이후 요청에서 쓰지 않아요.
 보정별 원격 실패와 로컬 근거·한계는 [v0.5.0 인증 보정](docker-build-cache-tickets.md#v050-인증-보정), [v0.5.1 인증 보정](docker-build-cache-tickets.md#v051-인증-보정), [만료된 Bearer 갱신](docker-build-cache-tickets.md#만료된-bearer-갱신)에 구분해 남겼어요.
 수정 후 2026-10-25 [원격 캐시 검증](docker-build-cache-tickets.md#원격-캐시-검증)에서 kache 0.20.0과 1.2.2 모두 GHCR 게시, 새 runner의 snapshot 복원과 적중, 보관 정리의 실제 삭제를 확인했어요.
-실제 release workflow의 snapshot 게시와 release 판정 연결은 아직 관찰하지 않아 DBC-06은 완료하지 않았어요.
+
+같은 날 승인된 [v0.5.2 release 실행](docker-build-cache-tickets.md#v052-release-실행)에서 release workflow가 처음으로 kache snapshot을 복원하고 게시했어요.
+태그 실행은 `workflow_dispatch` 검증 실행이 게시한 snapshot을 같은 고정 참조로 복원했고, 새 snapshot을 승격한 뒤 현재·직전 snapshot을 남기고 그보다 오래된 관리 snapshot 하나를 삭제했어요.
+runtime 이미지 게시와 정확한 태그·SHA의 `completed/success`도 release 판정에 연결됐어요.
+release 실행의 kache 적중 수, 태그 실행이 게시한 snapshot의 다음 태그 실행 복원, 런타임 package의 태그 없는 version은 확인하지 못해 DBC-06은 완료하지 않았어요.
 
 ## 외부 근거
 
