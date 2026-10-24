@@ -17,6 +17,7 @@ import {
   downloadSnapshotToDirectory,
   extractTarToDirectory,
   makeTarHeader,
+  publishSnapshot,
   publishSnapshotFromDirectory,
   resolveSnapshot,
   runPostPublicationRetention,
@@ -644,6 +645,24 @@ test('publisher rejects open SQLite state, active staging, and uncertain quiesce
   await assert.rejects(
     createTarFromDirectory(source, path.join(root, 'uncertain.tar'), TEST_LIMITS),
     (error) => error instanceof CacheTransportError && error.code === 'UNCERTAIN_SNAPSHOT',
+  );
+});
+test('mount transfers read the registry from the snapshot client', async () => {
+  // The remote verifier passes only the client, so the transfer image check must not need a separate registry option.
+  const client = new RegistryClient({ registry: 'https://ghcr.io', repository: REPOSITORY, limits: TEST_LIMITS });
+  await assert.rejects(
+    publishSnapshot({
+      client,
+      builder: 'azuki-cache-test',
+      cacheId: 'azuki-kache-transfer-test',
+      cacheTarget: '/var/cache/kache',
+      transferImage: 'busybox:1.37',
+      producer: PRODUCER_A,
+      compatibility: COMPATIBILITY,
+      limits: TEST_LIMITS,
+      secrets: [],
+    }),
+    (error) => error instanceof CacheTransportError && error.code === 'UNPINNED_TRANSFER_IMAGE',
   );
 });
 test('gzip payload round trip preserves the verified raw tar and separates size measurements', async (t) => {

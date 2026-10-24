@@ -1977,8 +1977,8 @@ async function executeBounded(binary, args, {
   return details;
 }
 
-async function runMountTransfer({ mode, builder, cacheId, cacheTarget, transferImage, localDirectory, registry, limits, secrets }) {
-  validateMount({ builder, cacheId, cacheTarget, transferImage, registry });
+async function runMountTransfer({ mode, client, builder, cacheId, cacheTarget, transferImage, localDirectory, limits, secrets }) {
+  validateMount({ builder, cacheId, cacheTarget, transferImage, registry: client.registry });
   const workspace = await mkdtemp(path.join(tmpdir(), 'azuki-cache-mount-'));
   const dockerfile = path.join(workspace, 'Dockerfile');
   const nonce = randomUUID();
@@ -2113,7 +2113,6 @@ function parseArguments(argv) {
     cacheId: take('cache-id'),
     cacheTarget: take('cache-target'),
     transferImage: take('transfer-image'),
-    registry,
     registryRaw,
     repository,
     compatibility: { platform, kacheVersion, schemaVersion, fixedRef },
@@ -2208,7 +2207,6 @@ export async function main(argv = process.argv.slice(2)) {
       cacheId: options.cacheId,
       cacheTarget: options.cacheTarget,
       transferImage: options.transferImage,
-      registry: options.registry,
       compatibility: options.compatibility,
       limits: options.limits,
       secrets: [options.username, options.token, options.github?.token],
