@@ -44,7 +44,6 @@ anyhow = "1"
 
 # Database
 sqlx = { version = "0.9", features = ["runtime-tokio", "sqlite", "migrate"] }
-libsqlite3-sys = { version = "0.38", features = ["bundled"] }
 
 # Web
 axum = { version = "0.8", features = ["macros", "ws", "multipart"] }
