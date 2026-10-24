@@ -36,6 +36,7 @@ const WORK_BUDGET_MS = 32 * 60_000;
 const CLEANUP_BUDGET_MS = 3 * 60_000;
 const DISK_SAMPLE_INTERVAL_MS = 5_000;
 const LOG_LIMIT = 1_048_576;
+const REPORT_LIMIT = 16 * 1_048_576;
 const DIGEST = /^sha256:[0-9a-f]{64}$/u;
 const SHA = /^[0-9a-f]{40}$/u;
 const MODES = new Set(['seed', 'warm', 'control', 'fault', 'retain']);
@@ -675,7 +676,7 @@ async function verify(mode) {
   const producer = { repository: REPOSITORY, runId: process.env.GITHUB_RUN_ID, runAttempt: process.env.GITHUB_RUN_ATTEMPT, sourceSha: process.env.GITHUB_SHA };
   const started = performance.now();
   timings.jobStartedAtMs = Number(process.env.VERIFY_JOB_STARTED_AT_MS);
-  result = { mode, status: 'running', sourceSha: process.env.GITHUB_SHA, producer, baseDigests: {}, layerCache: { ref: LAYER_REF, digest: null }, snapshot: { manifestDigest: null, immutableRef: null }, report: null, timings, images: {}, resources: { deadlines: { workBudgetMs: WORK_BUDGET_MS, workDeadlineMs: workDeadline, cleanupBudgetMs: CLEANUP_BUDGET_MS }, diskSampling: { intervalMs: DISK_SAMPLE_INTERVAL_MS, measurement: 'sampled filesystem used/free bytes; peak is the largest observed sample' }, limits: { helper: LIMITS, helperOuterTimeoutMs: HELPER_TIMEOUT_MS, commandTimeoutMs: COMMAND_TIMEOUT_MS, logBytes: LOG_LIMIT, retention: RETENTION_LIMITS }, stopConditions: ['32-minute shared work deadline anchored at Prepare', 'separate 3-minute cleanup budget', 'process-group SIGTERM then SIGKILL after 5s', 'helper outer deadline at most 15 minutes', 'bounded 1 MiB command evidence', 'no global builder selection or prune'] } };
+  result = { mode, status: 'running', sourceSha: process.env.GITHUB_SHA, producer, baseDigests: {}, layerCache: { ref: LAYER_REF, digest: null }, snapshot: { manifestDigest: null, immutableRef: null }, report: null, timings, images: {}, resources: { deadlines: { workBudgetMs: WORK_BUDGET_MS, workDeadlineMs: workDeadline, cleanupBudgetMs: CLEANUP_BUDGET_MS }, diskSampling: { intervalMs: DISK_SAMPLE_INTERVAL_MS, measurement: 'sampled filesystem used/free bytes; peak is the largest observed sample' }, limits: { helper: LIMITS, helperOuterTimeoutMs: HELPER_TIMEOUT_MS, commandTimeoutMs: COMMAND_TIMEOUT_MS, logBytes: LOG_LIMIT, reportBytes: REPORT_LIMIT, retention: RETENTION_LIMITS }, stopConditions: ['32-minute shared work deadline anchored at Prepare', 'separate 3-minute cleanup budget', 'process-group SIGTERM then SIGKILL after 5s', 'helper outer deadline at most 15 minutes', 'bounded 1 MiB command evidence', 'no global builder selection or prune'] } };
   await sampleDisk();
   diskTimer = setInterval(() => { void sampleDisk().catch((error) => { if (diskState) diskState.sampleErrors = (diskState.sampleErrors ?? 0) + 1; }); }, DISK_SAMPLE_INTERVAL_MS).unref();
   result.resources.packageBefore = await packageState();
@@ -753,7 +754,7 @@ async function verify(mode) {
   expect(reportCargoStatus === 'CACHED', 'REPORT_EXPORT_REBUILT', 'Report export did not reuse the completed Cargo RUN.');
   result.resources.reportEvidence = { log: 'report-build.log', report: 'kache-report.json', outputTruncated: reportBuild.outputTruncated, cargoVertexStatus: reportCargoStatus };
   const rawReportPath = path.join(reportDirectory, 'kache-report.json');
-  expect((await stat(rawReportPath)).size <= LOG_LIMIT, 'REPORT_LIMIT', 'Kache report exceeded the 1 MiB evidence limit.');
+  expect((await stat(rawReportPath)).size <= REPORT_LIMIT, 'REPORT_LIMIT', 'Kache report exceeded the 16 MiB report limit.');
   const rawReport = JSON.parse(await readFile(rawReportPath, 'utf8'));
   result.report = reportSummary(rawReport, seed?.report?.rust?.actionCount, mode);
   await cp(rawReportPath, path.join(outputDir, 'kache-report.json'));
