@@ -254,7 +254,7 @@ DBC-06에는 검증한 소스·도구 버전, 실제 helper 명령, 참조·삭�
 <a id="dbc-06"></a>
 
 **근거:** [명세](docker-build-cache.md)의 실제 GHCR 확인, workflow와 릴리스 호환성, 원격 작업 권한 경계를 따라요.
-**상태:** 일부 원격 근거를 확보했지만 v0.5.0과 v0.5.1의 snapshot 게시가 모두 실패해, 후속 runner 복원·보관 검증은 대상 실행과 별도 권한을 기다려요.
+**상태:** [원격 캐시 검증](#원격-캐시-검증)에서 비공개 package 접근, 새 runner의 snapshot 복원, 보관 정리의 실제 삭제를 확인했어요. 실제 release workflow의 snapshot 게시와 release 판정 연결은 다음 승인된 release 실행을 기다려요.
 **선행 산출물:** DBC-05의 로컬 결합 검증 결과와 확인할 소스 버전이 필요해요.
 대상 저장소·참조·실행, 캐시 package 게시·정리와 필요한 태그·workflow 동작을 포함한 명시적 원격 권한도 필요해요.
 **담당:** 사용자가 직접 실행한 결과를 인계하거나, 해당 원격 동작과 범위를 명시적으로 승인받은 실행자가 진행해요.
@@ -724,3 +724,88 @@ source와 호출 경로의 독립 리뷰는 Bearer가 이전보다 넓은 origin
 
 이 보정은 로컬 수정·검증 범위이며 push, workflow 재실행, 새 릴리스는 수행하지 않아요.
 실제 GHCR 토큰 수명과 만료 뒤 challenge 동작은 관찰하지 않았어요.
+
+### 원격 캐시 검증
+
+2026-10-25에 승인된 [`cache-verify.yml`](../../.github/workflows/cache-verify.yml) 실행으로 kache 0.20.0과 1.2.2 각각에서 seed·compare·retain 세 단계를 모두 통과했어요.
+비공개 cache package를 workflow token으로 읽고 게시했고, 새 runner가 앞선 실행의 snapshot을 복원해 Rust 컴파일을 모두 적중시켰으며, 보관 정리가 실제 package version을 삭제했어요.
+실제 release workflow의 snapshot 게시와 release 판정 연결은 이 실행의 범위 밖이라 관찰하지 않았어요.
+
+사용자는 `chore/update-dependencies` 브랜치 push, `cache-verify.yml` dispatch, cache package 쓰기를 승인했어요.
+master push, 태그, release는 승인 범위에 없었고 실행하지 않았어요.
+첫 실행 [40109670871](https://github.com/nanazt/azuki/actions/runs/40109670871)은 공개 상태였던 `nanazt/azuki-build-cache`를 `PACKAGE_SCOPE_MISMATCH`로 거부했고, 사용자가 package를 비공개로 바꾼 뒤 다시 실행했어요.
+
+[`scripts/verify-remote-docker-cache.mjs`](../../scripts/verify-remote-docker-cache.mjs)는 production Dockerfile의 base image를 digest로 고정해 job마다 새 builder에서 빌드하고, release workflow와 같은 고정 참조에 snapshot을 게시해요.
+
+- `seed`는 빈 cache로 빌드하고 첫 snapshot을 게시해요.
+- `compare`의 `warm`은 새 runner에서 seed의 snapshot을 복원해 빌드하고 다음 snapshot을 게시해요.
+- `compare`의 `control`은 복원 없이 빌드해 비교 기준을 만들어요.
+- `compare`의 `fault`는 내려받은 payload의 gzip 압축 방식 byte를 바꿔 복원이 거부되는지 확인한 뒤 빈 cache로 빌드해요.
+- `retain`은 warm의 snapshot을 복원해 빌드·게시한 뒤 보관 정리를 실행해요.
+
+warm과 retain은 고정 참조가 바로 앞 단계의 snapshot을 가리키고 Rust compiler 실행이 0회일 때만 통과해요.
+
+1단계는 kache 0.20.0인 소스 `9740356`에서 실행해, kache를 바꾸기 전에 [v0.5.1 인증 보정](#v051-인증-보정)과 [만료된 Bearer 갱신](#만료된-bearer-갱신)이 실제 GHCR에서 통하는지 먼저 확인했어요.
+2단계는 kache 1.2.2와 의존성 갱신을 포함한 소스 `b1a0266`에서 실행했어요.
+kache version이 고정 참조에 들어가므로 2단계 seed는 1단계 snapshot을 읽지 않고 비어 있는 고정 참조에서 시작했어요.
+
+원격 검증을 진행하면서 검증 도구의 결함 두 가지를 보정했어요.
+`d7e7056`은 kache report 내보내기를 명령 로그와 같은 1 MiB 상한에서 분리해 16 MiB 상한을 따로 두었어요.
+원격 seed의 kache report는 0.20.0에서 1,816,660 bytes, 1.2.2에서 2,112,046 bytes로 모두 1 MiB를 넘었어요.
+
+`9740356`은 mount 전송이 registry를 snapshot client에서 읽도록 고쳤어요.
+`publishSnapshot`·`restoreSnapshot`은 transfer image 검사에 CLI만 넘기던 별도 `registry` 옵션을 썼기 때문에, client만 넘기는 verifier의 seed [40114102572](https://github.com/nanazt/azuki/actions/runs/40114102572)가 `registry.isLoopback`을 읽다가 `TypeError`로 실패했어요.
+client만 넘겨 게시를 시도하는 단위 테스트가 수정 전에는 같은 `TypeError`로 실패하고 수정 후에는 통과했어요.
+
+1단계 결과는 다음과 같아요.
+snapshot digest는 앞 12자리로 적어요.
+
+| 실행 | job | 복원한 snapshot | Rust 적중 | 빌드 | 게시한 snapshot |
+|---|---|---|---|---|---|
+| [seed](https://github.com/nanazt/azuki/actions/runs/40115092055) | seed | 없음 | 0/585 | 357.1초 | `b8fc05e27671` |
+| [compare](https://github.com/nanazt/azuki/actions/runs/40115721272) | warm | `b8fc05e27671` | 585/585 | 72.3초 | `0d8676dee1db` |
+| [compare](https://github.com/nanazt/azuki/actions/runs/40115721272) | control | 복원 안 함 | 0/585 | 317.1초 | 게시 안 함 |
+| [compare](https://github.com/nanazt/azuki/actions/runs/40115721272) | fault | 손상된 payload 거부 | 0/585 | 326.1초 | 게시 안 함 |
+| [retain](https://github.com/nanazt/azuki/actions/runs/40116249339) | retain | `0d8676dee1db` | 585/585 | 69.2초 | `69422ae00618` |
+
+1단계 warm과 retain의 C/C++ 컴파일 398개 중 395개가 적중했고, 3개는 kache가 `dup`으로 기록했어요.
+
+2단계 결과는 다음과 같아요.
+
+| 실행 | job | 복원한 snapshot | Rust 적중 | build script 적중 | 빌드 | 게시한 snapshot |
+|---|---|---|---|---|---|---|
+| [seed](https://github.com/nanazt/azuki/actions/runs/40116618621) | seed | 없음 | 0/585 | 0/61 | 246.7초 | `f29a5a528a75` |
+| [compare](https://github.com/nanazt/azuki/actions/runs/40117096264) | warm | `f29a5a528a75` | 585/585 | 61/61 | 43.7초 | `9a55e871bf22` |
+| [compare](https://github.com/nanazt/azuki/actions/runs/40117096264) | control | 복원 안 함 | 0/585 | 0/61 | 195.2초 | 게시 안 함 |
+| [compare](https://github.com/nanazt/azuki/actions/runs/40117096264) | fault | 손상된 payload 거부 | 0/585 | 0/61 | 255.2초 | 게시 안 함 |
+| [retain](https://github.com/nanazt/azuki/actions/runs/40117552302) | retain | `9a55e871bf22` | 585/585 | 61/61 | 36.1초 | `ac7a268f497d` |
+
+2단계 cold 빌드에는 C/C++ 컴파일 427개가 있었어요.
+warm과 retain에서는 build script가 모두 적중해 실행되지 않았고, 그 안의 C/C++ 컴파일도 기록되지 않았어요.
+fault는 두 단계 모두 손상된 payload를 `INVALID_GZIP_PAYLOAD`로 거부한 뒤 빈 cache로 빌드를 마쳤어요.
+단계마다 모든 job의 app binary digest가 같았어요: 1단계는 `00a79fca3d34`, 2단계는 `a577c5a7b955`예요.
+두 단계는 Rust 의존성이 달라 digest와 빌드 시간을 서로 비교하지 않아요.
+
+게시한 gzip payload는 453,868,505–459,754,572 bytes, raw tar는 1,272,367,616–1,297,318,400 bytes였어요.
+helper의 정상 복원은 31.0–45.4초, 게시는 49.5–64.0초, 보관 정리는 1단계 9.7초와 2단계 7.9초가 걸렸어요.
+5초 간격으로 표본을 뜬 runner 파일 시스템의 추가 사용량은 job마다 최대 6,672,195,584–14,379,220,992 bytes였어요.
+
+보관 정리는 두 단계 모두 현재·직전 snapshot을 남기고, seed가 게시한 가장 오래된 snapshot과 그 receipt를 삭제했어요.
+1단계는 `b8fc05e27671`을, 2단계는 `f29a5a528a75`를 지웠어요.
+2단계의 보호 대상은 4개였고, 정리 뒤에도 kache 0.20.0 snapshot `69422ae00618`·`0d8676dee1db`와 각 receipt가 남았어요.
+package는 모든 job에서 비공개 container package이자 `nanazt/azuki`에 연결된 상태로 관찰됐어요.
+
+2단계는 직접 편집한 `cache-verify.yml`의 `actions/checkout@v7`, `docker/login-action@v4`, `actions/upload-artifact@v7`, `actions/download-artifact@v8`로 실행됐어요.
+
+내려받은 artifact와 run log에서 GitHub token·Bearer·Basic 인증 문자열 형식을 찾았지만 발견되지 않았어요.
+
+이 검증으로 확인하지 못한 것은 다음과 같아요.
+
+- 실제 release workflow의 kache 1.2.2 snapshot 복원·게시와 정확한 태그·SHA의 `completed/success` 연결은 다음 승인된 release를 기다려요.
+- `docker.yml`에만 있는 `docker/setup-buildx-action@v4`, `docker/metadata-action@v6`, `docker/build-push-action@v7`은 실행되지 않았어요.
+- release workflow는 같은 고정 참조 `kache-linux-amd64-s1-kache-1.2.2`를 쓰므로 다음 release가 `ac7a268f497d`를 복원할 것으로 예상하지만, 태그 실행에서의 복원은 관찰하지 않았어요.
+- 런타임 package `nanazt/azuki`에 cache version이 섞이지 않았는지는 로컬 `gh` 자격 증명에 `read:packages` 권한이 없어 조회하지 못했어요.
+- 원격 장애 주입은 손상된 gzip payload 한 가지뿐이고, 나머지 장애 경로는 로컬 근거만 있어요.
+
+정리 뒤 cache package에는 kache 0.20.0 snapshot 두 개와 각 receipt, 태그 없는 BuildKit layer cache version 네 개가 남아 있어요.
+보관 정리는 현재 고정 참조의 snapshot만 다루므로 이 version들을 지우지 않으며, 삭제 여부는 정하지 않았어요.

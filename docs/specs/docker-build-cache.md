@@ -99,7 +99,8 @@ runtime stage는 그 복사본만 사용하며, 실행 시 `target`이나 kache 
 기본 저장 위치는 런타임 패키지와 분리한 `ghcr.io/nanazt/azuki-build-cache`예요.
 새 패키지는 비공개를 기본으로 하고, 연결된 저장소의 기존 `GITHUB_TOKEN` 권한으로 접근해요.
 패키지 생성·접근 권한의 실제 동작은 승인된 원격 workflow 실행에서 확인해야 해요.
-GitHub 문서는 `GITHUB_TOKEN`의 package 삭제·복원 REST API 접근에 package admin 권한이 필요하고 이 기능이 public preview임을 명시하므로, 해당 원격 권한과 동작은 승인된 DBC-06 실행 전에는 미확인으로 유지해요.
+GitHub 문서는 `GITHUB_TOKEN`의 package 삭제·복원 REST API 접근에 package admin 권한이 필요하고 이 기능이 public preview임을 명시해요.
+삭제 권한은 2026-10-25 [원격 캐시 검증](docker-build-cache-tickets.md#원격-캐시-검증)에서 workflow token으로 관리 snapshot version을 실제로 삭제해 확인했어요.
 
 일반 레이어 캐시와 kache 스냅샷은 같은 저장 위치를 사용하더라도 서로 다른 참조와 종류 식별자를 가져야 해요.
 런타임 패키지 `ghcr.io/nanazt/azuki`의 버전·major.minor·latest 참조는 캐시 대상으로 사용하지 않아요.
@@ -370,7 +371,8 @@ v0.5.0 뒤의 권한 순서 정규화는 v0.5.1 실패를 막지 못했어요.
 GHCR은 업로드 요청에도 `pull` scope만 담은 challenge를 보내므로, challenge 뒤 실제로 요청을 통과시킨 Bearer를 그 요청의 scope에도 저장하도록 다시 보정했어요.
 GHCR 토큰 응답에는 만료 시점이 없으므로, challenge마다 토큰을 새로 받고 registry가 `401`로 거절한 Bearer는 이후 요청에서 쓰지 않아요.
 보정별 원격 실패와 로컬 근거·한계는 [v0.5.0 인증 보정](docker-build-cache-tickets.md#v050-인증-보정), [v0.5.1 인증 보정](docker-build-cache-tickets.md#v051-인증-보정), [만료된 Bearer 갱신](docker-build-cache-tickets.md#만료된-bearer-갱신)에 구분해 남겼어요.
-수정 후 GHCR 게시와 새 runner의 snapshot 복원·보관 검증은 아직 수행하지 않았으므로 DBC-06은 완료하지 않았어요.
+수정 후 2026-10-25 [원격 캐시 검증](docker-build-cache-tickets.md#원격-캐시-검증)에서 kache 0.20.0과 1.2.2 모두 GHCR 게시, 새 runner의 snapshot 복원과 적중, 보관 정리의 실제 삭제를 확인했어요.
+실제 release workflow의 snapshot 게시와 release 판정 연결은 아직 관찰하지 않아 DBC-06은 완료하지 않았어요.
 
 ## 외부 근거
 
