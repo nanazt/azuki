@@ -8,9 +8,9 @@ import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
-const KACHE_VERSION = '0.20.0';
+const KACHE_VERSION = '1.2.2';
 const TRANSFER_IMAGE = 'docker.io/library/debian:trixie-slim@sha256:abc9cb88a5587630d7f915f47b23b0668fe250fbfc6457aa4d52b534c1bbf73f';
-const FIXED_REF = 'kache-linux-amd64-s1-kache-0.20.0';
+const FIXED_REF = 'kache-linux-amd64-s1-kache-1.2.2';
 const CACHE_TARGET = '/var/cache/kache';
 const RESULT = 'cache-regression-ok';
 const OUTPUT_LIMIT = 128 * 1024;
@@ -177,7 +177,7 @@ RUN --mount=type=cache,id=\${KACHE_CACHE_ID},sharing=locked,target=/var/cache/ka
     test -z "$(find /workspace/target -mindepth 1 -print -quit)"; \
     : "\${SNAPSHOT_NONCE}"; \
     chmod 0755 /usr/local/bin/kache; \
-    export RUSTC_WRAPPER=/usr/local/bin/kache KACHE_CACHE_DIR=/var/cache/kache KACHE_RUNTIME_DIR=/run/kache KACHE_LOCAL_ONLY=true KACHE_AUTO_GC=false KACHE_PREFETCH_ENABLED=false KACHE_LOCAL_HIT_DAEMON=false KACHE_ADAPTIVE_INCREMENTAL=false KACHE_EVENT_ROOT=/workspace; \
+    export RUSTC_WRAPPER=/usr/local/bin/kache KACHE_CACHE_DIR=/var/cache/kache KACHE_RUNTIME_DIR=/run/kache KACHE_LOCAL_ONLY=true KACHE_AUTO_GC=false KACHE_PREFETCH_ENABLED=false KACHE_ADAPTIVE_INCREMENTAL=false KACHE_EVENT_ROOT=/workspace; \
     cargo build --release --offline; \
     /workspace/target/release/cache-fixture > /out-result; \
     mkdir /out; \
@@ -185,7 +185,7 @@ RUN --mount=type=cache,id=\${KACHE_CACHE_ID},sharing=locked,target=/var/cache/ka
     kache report --format json --last-build --root /workspace > /out/kache-report.json; \
     touch /var/cache/kache/.snapshot-uncertain; \
     timeout --signal=TERM --kill-after=5s 120s kache gc --json; \
-    timeout --signal=TERM --kill-after=5s 15s kache daemon stop; \
+    timeout --signal=TERM --kill-after=5s 45s kache daemon stop; \
     timeout --signal=TERM --kill-after=5s 50s flock --exclusive --wait 45 /run/kache/daemon.run.lock true; \
     rm -f /var/cache/kache/.snapshot-uncertain; \
     find /var/cache/kache -mindepth 1 -type f -print -quit > /out/store-file; \

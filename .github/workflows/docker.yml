@@ -1,8 +1,8 @@
 jobs:
   build:
     env:
-      FALLBACK_ID: azuki-kache-linux-amd64-v1-kache-0.20.0-fallback-${{ github.run_id }}-${{ github.run_attempt }}
-      RESTORE_ID: azuki-kache-linux-amd64-v1-kache-0.20.0-restore-${{ github.run_id }}-${{ github.run_attempt }}
+      FALLBACK_ID: azuki-kache-linux-amd64-v1-kache-1.2.2-fallback-${{ github.run_id }}-${{ github.run_attempt }}
+      RESTORE_ID: azuki-kache-linux-amd64-v1-kache-1.2.2-restore-${{ github.run_id }}-${{ github.run_attempt }}
     permissions:
       actions: read
       contents: read
@@ -33,9 +33,9 @@ jobs:
           --transfer-image docker.io/library/debian:trixie-slim@sha256:abc9cb88a5587630d7f915f47b23b0668fe250fbfc6457aa4d52b534c1bbf73f \
           --registry https://ghcr.io \
           --repository "${{ github.repository }}-build-cache" \
-          --fixed-ref kache-linux-amd64-s1-kache-0.20.0 \
+          --fixed-ref kache-linux-amd64-s1-kache-1.2.2 \
           --platform linux/amd64 \
-          --kache-version 0.20.0 \
+          --kache-version 1.2.2 \
           --schema-version 1 \
           --max-transfer-bytes 4294967296 \
           --max-unpacked-bytes 4294967296 \
@@ -84,9 +84,9 @@ jobs:
           --transfer-image docker.io/library/debian:trixie-slim@sha256:abc9cb88a5587630d7f915f47b23b0668fe250fbfc6457aa4d52b534c1bbf73f \
           --registry https://ghcr.io \
           --repository "${{ github.repository }}-build-cache" \
-          --fixed-ref kache-linux-amd64-s1-kache-0.20.0 \
+          --fixed-ref kache-linux-amd64-s1-kache-1.2.2 \
           --platform linux/amd64 \
-          --kache-version 0.20.0 \
+          --kache-version 1.2.2 \
           --schema-version 1 \
           --max-transfer-bytes 4294967296 \
           --max-unpacked-bytes 4294967296 \

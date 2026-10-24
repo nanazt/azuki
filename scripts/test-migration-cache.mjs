@@ -102,7 +102,7 @@ const CHANGED_MIGRATION_AFTER = `CREATE TABLE dbc_changed_probe (value TEXT NOT 
 const REMOVED_MIGRATION = `CREATE TABLE dbc_removed_probe (value TEXT NOT NULL);\nINSERT INTO dbc_removed_probe (value) VALUES ('present');\n`;
 
 function usage() {
-  return "usage: node scripts/test-migration-cache.mjs [--cargo <cargo>] [--kache <kache-v0.20.0>]";
+  return "usage: node scripts/test-migration-cache.mjs [--cargo <cargo>] [--kache <kache-v1.2.2>]";
 }
 
 function parseArgs(argv) {
@@ -291,7 +291,6 @@ async function exerciseMode({ name, root, cargo, kache }) {
       KACHE_LOCAL_ONLY: "true",
       KACHE_AUTO_GC: "false",
       KACHE_PREFETCH_ENABLED: "false",
-      KACHE_LOCAL_HIT_DAEMON: "false",
       KACHE_ADAPTIVE_INCREMENTAL: "false",
     });
   }
@@ -327,7 +326,7 @@ async function exerciseMode({ name, root, cargo, kache }) {
     );
     const report = JSON.parse(reportResult.stdout);
     assert.equal(report.schema_version, 1);
-    assert.equal(report.meta.kache_version, "0.20.0");
+    assert.equal(report.meta.kache_version, "1.2.2");
     assert.ok(report.summary.local_hits > 0);
     assert.ok(
       report.all_events.some(
@@ -387,14 +386,14 @@ async function main() {
   const kache = options.kache ? resolve(options.kache) : null;
   if (kache) {
     const version = await runSuccessfully(kache, ["--version"], { env: cleanEnvironment(), timeoutMs: 10_000 });
-    assert.match(version.stdout, /\b0\.20\.0\b/, "--kache must name kache v0.20.0");
+    assert.match(version.stdout, /\b1\.2\.2\b/, "--kache must name kache v1.2.2");
   }
 
   const root = await mkdtemp(join(tmpdir(), "azuki-migration-cache-"));
   try {
     await exerciseMode({ name: "wrapper-free", root, cargo: options.cargo, kache: null });
     if (kache) await exerciseMode({ name: "kache", root, cargo: options.cargo, kache });
-    process.stdout.write(`migration cache regression passed: wrapper-free${kache ? " + kache v0.20.0" : ""}\n`);
+    process.stdout.write(`migration cache regression passed: wrapper-free${kache ? " + kache v1.2.2" : ""}\n`);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

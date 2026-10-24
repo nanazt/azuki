@@ -27,7 +27,7 @@ const CACHE_REPOSITORY = 'nanazt/azuki-build-cache';
 const REGISTRY = 'https://ghcr.io';
 const LAYER_REF = 'ghcr.io/nanazt/azuki-build-cache:buildkit-linux-amd64-v1';
 const TRANSFER_IMAGE = 'docker.io/library/debian:trixie-slim@sha256:abc9cb88a5587630d7f915f47b23b0668fe250fbfc6457aa4d52b534c1bbf73f';
-const COMPATIBILITY = Object.freeze({ platform: 'linux/amd64', schemaVersion: 1, kacheVersion: '0.20.0', fixedRef: 'kache-linux-amd64-s1-kache-0.20.0' });
+const COMPATIBILITY = Object.freeze({ platform: 'linux/amd64', schemaVersion: 1, kacheVersion: '1.2.2', fixedRef: 'kache-linux-amd64-s1-kache-1.2.2' });
 const LIMITS = Object.freeze({ maxTransferBytes: 4_294_967_296, maxUnpackedBytes: 4_294_967_296, maxDiskBytes: 12_884_901_888, maxFiles: 100_000, maxMetadataBytes: 1_048_576, maxCommandOutputBytes: 1_048_576, timeoutMs: 600_000 });
 const RETENTION_LIMITS = Object.freeze({ targetSnapshots: 2, maxPages: 10, maxVersions: 500, perPage: 100, timeoutMs: 60_000, maxWarnings: 8 });
 const COMMAND_TIMEOUT_MS = 30 * 60_000;
@@ -435,7 +435,7 @@ function derivedDockerfile(production, bases, nonce) {
     echo VERIFY_CARGO_RUN_DONE; \\
     snapshot_ready=true; touch /var/cache/kache/.snapshot-uncertain; \\
     if ! timeout --signal=TERM --kill-after=5s 120s kache gc --json; then snapshot_ready=false; echo "warning: bounded kache synchronous GC failed; cache snapshot remains ineligible" >&2; fi; \\
-    if ! timeout --signal=TERM --kill-after=5s 15s kache daemon stop; then snapshot_ready=false; echo "warning: bounded kache daemon shutdown request failed; cache snapshot remains ineligible" >&2; fi; \\
+    if ! timeout --signal=TERM --kill-after=5s 45s kache daemon stop; then snapshot_ready=false; echo "warning: bounded kache daemon shutdown request failed; cache snapshot remains ineligible" >&2; fi; \\
     if ! timeout --signal=TERM --kill-after=5s 50s flock --exclusive --wait 45 /run/kache/daemon.run.lock true; then snapshot_ready=false; echo "warning: kache daemon did not finish draining; cache snapshot remains ineligible" >&2; fi; \\
     if [ "\${snapshot_ready}" = true ]; then rm -f /var/cache/kache/.snapshot-uncertain; fi`;
   text = `${text.slice(0, start)}${cargoRun}${text.slice(end)}\n\nFROM scratch AS verification-report\nCOPY --from=rust-builder /verify/kache-report.json /kache-report.json\n`;
@@ -448,13 +448,14 @@ function cargoStepStatus(execution) {
 }
 
 function reportSummary(report, expectedSeedCount, mode) {
-  expect(report?.schema_version === 1 && report?.meta?.kache_version === '0.20.0' && Array.isArray(report.all_events), 'REPORT_SCHEMA', 'Kache report schema or version is unexpected.');
+  expect(report?.schema_version === 1 && report?.meta?.kache_version === COMPATIBILITY.kacheVersion && Array.isArray(report.all_events), 'REPORT_SCHEMA', 'Kache report schema or version is unexpected.');
   const events = report.all_events;
   for (const event of events) {
     expect(Number.isSafeInteger(event?.compiler_runs) && event.compiler_runs >= 0 && Number.isSafeInteger(event?.dep_info_runs) && event.dep_info_runs >= 0, 'REPORT_EVENT_INVALID', 'A report event has invalid compiler_runs or dep_info_runs counts.');
   }
-  const rust = events.filter((event) => event.dep_info_runs > 0);
-  const native = events.filter((event) => event.dep_info_runs === 0);
+  const native = events.filter((event) => typeof event.object_output === 'string');
+  const buildScripts = events.filter((event) => typeof event.object_output !== 'string' && typeof event.package === 'string');
+  const rust = events.filter((event) => typeof event.object_output !== 'string' && typeof event.package !== 'string');
   const classify = (items) => {
     const resultCounts = {};
     for (const event of items) resultCounts[String(event?.result)] = (resultCounts[String(event?.result)] ?? 0) + 1;
@@ -467,8 +468,8 @@ function reportSummary(report, expectedSeedCount, mode) {
       resultCounts,
     };
   };
-  const summary = { schemaVersion: report.schema_version, kacheVersion: report.meta.kache_version, rust: classify(rust), native: classify(native) };
-  expect(summary.rust.actionCount > 0, 'NO_RUST_ACTIONS', 'Kache report did not classify any Rust actions through dep_info_runs.');
+  const summary = { schemaVersion: report.schema_version, kacheVersion: report.meta.kache_version, rust: classify(rust), buildScripts: classify(buildScripts), native: classify(native) };
+  expect(summary.rust.actionCount > 0, 'NO_RUST_ACTIONS', 'Kache report did not classify any Rust compile actions.');
   if (expectedSeedCount !== undefined) expect(summary.rust.actionCount === expectedSeedCount, 'RUST_ACTION_PARITY', 'Rust action count differs from the seed.', { expected: expectedSeedCount, actual: summary.rust.actionCount });
   if (mode === 'warm' || mode === 'retain') expect(summary.rust.localHits > 0 && summary.rust.compilerRuns === 0, 'WARM_CACHE_MISS', 'Warm verification requires positive Rust local hits and zero Rust compiler runs.', { rust: summary.rust });
   else expect(summary.rust.compilerRuns > 0, 'COMPILER_NOT_RUN', 'Cold or fault verification requires real Rust compiler execution.', { rust: summary.rust });

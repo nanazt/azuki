@@ -639,7 +639,10 @@ export function makeTarHeader({ relativePath, mode, size, type }) {
   return header;
 }
 function isKacheCoordinationLock(relativePath) {
-  return relativePath === 'store/gc.lock' || /^store\/[0-9a-f]{64}\.lock$/u.test(relativePath);
+  return relativePath === 'store/gc.lock'
+    || relativePath === 'store/durability.lock'
+    || relativePath === 'savings.json.lock'
+    || /^store\/[0-9a-f]{64}\.lock$/u.test(relativePath);
 }
 
 function checkOperationDeadline(deadline, operation) {
@@ -677,7 +680,7 @@ async function scanSnapshotDirectory(root, limits, deadline) {
       } else if (info.isFile()) {
         if (/(?:-(?:wal|shm|journal))$/u.test(name)) fail('OPEN_SQLITE_STATE', 'Snapshot source contains SQLite journal state; stop the writer and checkpoint before publishing.', { path: relativePath });
         if (isKacheCoordinationLock(relativePath)) {
-          // Kache v0.20.0 persists diagnostic owner metadata in advisory lock files after the OS lock is released.
+          // Kache leaves these advisory lock files, some holding owner metadata, after the OS lock is released.
           continue;
         }
         expect(!/\.(?:lock|sock|log)$/u.test(name), 'UNEXPECTED_RUNTIME_FILE', 'Snapshot source contains a runtime lock, socket marker, or log outside the validated kache lock location.', { path: relativePath });

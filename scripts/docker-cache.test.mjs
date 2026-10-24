@@ -39,8 +39,8 @@ const PRODUCER_B = Object.freeze({
 const COMPATIBILITY = Object.freeze({
   platform: 'linux/amd64',
   schemaVersion: 1,
-  kacheVersion: '0.20.0',
-  fixedRef: 'kache-linux-amd64-s1-kache-0.20.0',
+  kacheVersion: '1.2.2',
+  fixedRef: 'kache-linux-amd64-s1-kache-1.2.2',
 });
 const TEST_LIMITS = Object.freeze({
   maxTransferBytes: 4 * 1024 * 1024,
@@ -580,6 +580,8 @@ async function kacheFixture(root, marker = 'first') {
   await writeFile(path.join(root, 'store', 'entries', 'compiler'), '#!/bin/sh\nexit 0\n');
   await writeFile(path.join(root, 'store', 'gc.lock'), '4312');
   await writeFile(path.join(root, 'store', `${'a'.repeat(64)}.lock`), '4312');
+  await writeFile(path.join(root, 'store', 'durability.lock'), '4312');
+  await writeFile(path.join(root, 'savings.json.lock'), '');
   await chmod(path.join(root, 'store', 'entries', 'compiler'), 0o755);
 }
 
@@ -617,6 +619,8 @@ test('ustar round trip preserves payload bytes and executable permission', async
   assert.equal((await stat(path.join(restored, 'store', 'entries', 'compiler'))).mode & 0o777, 0o755);
   await assert.rejects(stat(path.join(restored, 'store', 'gc.lock')), { code: 'ENOENT' });
   await assert.rejects(stat(path.join(restored, 'store', `${'a'.repeat(64)}.lock`)), { code: 'ENOENT' });
+  await assert.rejects(stat(path.join(restored, 'store', 'durability.lock')), { code: 'ENOENT' });
+  await assert.rejects(stat(path.join(restored, 'savings.json.lock')), { code: 'ENOENT' });
 });
 
 test('publisher rejects open SQLite state, active staging, and uncertain quiescence', async (t) => {
@@ -639,6 +643,13 @@ test('publisher rejects open SQLite state, active staging, and uncertain quiesce
   );
 
   await rm(path.join(source, 'store', 'staging', 'partial'));
+  await writeFile(path.join(source, 'target-use.lock'), '4312');
+  await assert.rejects(
+    createTarFromDirectory(source, path.join(root, 'runtime-lock.tar'), TEST_LIMITS),
+    (error) => error instanceof CacheTransportError && error.code === 'UNEXPECTED_RUNTIME_FILE',
+  );
+
+  await rm(path.join(source, 'target-use.lock'));
 
   await rm(path.join(source, 'store', 'gc.lock'));
   await writeFile(path.join(source, '.snapshot-uncertain'), 'manual GC or daemon shutdown did not finish');
@@ -1763,8 +1774,8 @@ test('other platforms, layer-cache objects, unknown dependencies, and shared pay
   const armCompatibility = {
     platform: 'linux/arm64',
     schemaVersion: 1,
-    kacheVersion: '0.20.0',
-    fixedRef: 'kache-linux-arm64-s1-kache-0.20.0',
+    kacheVersion: '1.2.2',
+    fixedRef: 'kache-linux-arm64-s1-kache-1.2.2',
   };
   const armRoot = await temporaryDirectory(t);
   await kacheFixture(armRoot, 'mixed-arm');

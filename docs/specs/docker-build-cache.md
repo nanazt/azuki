@@ -68,15 +68,17 @@ BuildKit의 `cache-to=registry`와 `mode=max`는 cache mount 내용을 자동으
 `SQLX_OFFLINE=true`와 기존 release profile의 `strip`, `opt-level`, thin LTO, `codegen-units` 의미를 유지해요.
 kache의 적응형 incremental 정책 때문에 기존 release 컴파일 정책을 암묵적으로 바꾸지 않아요.
 
-Dockerfile은 kache `v0.20.0`의 해당 플랫폼 사전 빌드 바이너리와 SHA-256 `fe5ce52406e0dcb8c9a49798671a073440cae13a88731b1b712b7c0fa372b85b`를 고정해 검증해요.
+Dockerfile은 kache `v1.2.2`의 해당 플랫폼 사전 빌드 바이너리와 SHA-256 `f2f6555dee50945c2a90a7fb793c2084a00cc6459d08ac2306d38d905064321b`를 고정해 검증해요.
 도입을 위해 매번 `cargo install kache`로 도구 자체를 컴파일하지 않아요.
 새로 도입하는 원격 실행 도구를 가변 브랜치나 검증하지 않은 다운로드에 연결하지 않아요.
 
 Rust는 Docker 내부의 `RUSTC_WRAPPER`로 연결해요.
+Rust를 `RUSTC_WRAPPER`로만 연결하도록, kache 1.x의 `install-shims`가 함께 만드는 `cargo`·`rustdoc` shim은 설치 직후 지워요. cargo shim은 캐시 디렉터리에 `target-use.lock`을 만들어서 snapshot 검사에서 거부될 수 있어요.
 kache의 외부 원격 저장소나 planner는 사용하지 않고, GHCR 전송은 workflow의 캐시 helper가 맡아요.
 Docker 전용 cache/runtime 경로와 실행 정책은 Docker 환경에 두어 로컬 개발자의 kache 저장 위치를 바꾸지 않아요.
 구현은 `/var/cache/kache`의 로컬 전용 `KACHE_MAX_SIZE=3GiB` GC 크기 설정과 `/run/kache` tmpfs runtime을 사용해요.
 자동·background GC는 끄고 컴파일 뒤에만 명시적인 동기 GC를 실행하며, 이 GC 크기 설정은 컴파일 중 또는 staging 중의 연속적인 전체 디스크 사용량 hard 상한을 뜻하지 않아요.
+kache 1.2.0부터 CI 밖에서 기본으로 켜지는 여유 공간 기반 eviction도 `KACHE_AUTO_RECOVER_MIN_FREE_BYTES=0`으로 명시해서 꺼요. BuildKit의 RUN 단계는 runner의 CI 환경 변수를 물려받지 않고, 지금은 `KACHE_AUTO_GC=false`가 이 기능도 막지만 그 연결에 기대지 않기 위해서예요.
 
 C/C++은 kache가 지원하는 wrapper 또는 shim 방식을 하나 선택해 연결해요.
 현재 `cc = 1.2.56`은 `RUSTC_WRAPPER=kache`만으로 네이티브 컴파일까지 자동 연결되지 않으므로 실제 cc·CMake 호출을 검증해야 해요.
@@ -226,7 +228,7 @@ SQLx 0.8.6은 기존 파일을 `include_str!`로 추적하지만 Rust 소스 변
 파일 목록과 내용이 kache 키에 반영되어야 하며, Cargo의 재빌드 요청만으로 kache의 오래된 적중을 방지했다고 판단하지 않아요.
 해당 설정은 Docker의 명시적인 COPY 입력에도 포함해요.
 
-검토한 kache v0.20.0은 추가 입력의 디렉터리 감시 정보를 Cargo dep-info에도 반영해요.
+검토한 kache v1.2.2는 추가 입력의 디렉터리 감시 정보를 Cargo dep-info에도 반영해요.
 따라서 두 파일을 두는 이유는 kache가 반드시 build.rs를 요구해서가 아니라, wrapper가 없는 Cargo 경로와 wrapper의 내용 기반 키를 각각 명시하기 위해서예요.
 이미 Cargo가 최신이라고 판단한 target에 설정만 추가해서는 wrapper가 실행되지 않을 수 있으므로, 전환 검증은 새 target 또는 명시적인 해당 패키지 재빌드에서 시작해요.
 
@@ -376,7 +378,7 @@ GHCR 토큰 응답에는 만료 시점이 없으므로, challenge마다 토큰�
 - [Docker GHA cache](https://docs.docker.com/build/cache/backends/gha/)와 [GitHub cache 접근 제한](https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching#restrictions-for-accessing-a-cache)은 태그별 접근 경계를 설명해요.
 - [BuildKit cache mount exporter 설명](https://github.com/moby/buildkit/issues/3011)과 [cache-dance CLI](https://github.com/reproducible-containers/buildkit-cache-dance#cli-usage)는 mount의 별도 반출입 필요성과 명시적 추출 경로를 뒷받침해요.
 - [Cargo build cache](https://doc.rust-lang.org/cargo/reference/build-cache.html)는 Cargo 산출물과 compiler wrapper의 역할을 구분해요.
-- [kache v0.20.0 설정](https://github.com/kunobi-ninja/kache/blob/v0.20.0/docs/getting-started/configuration.mdx)과 [입력 키](https://github.com/kunobi-ninja/kache/blob/v0.20.0/docs/how-it-works/cache-key.mdx)는 저장소·실행 정책과 숨은 입력 계약의 기준이에요.
+- [kache v1.2.2 설정](https://github.com/kunobi-ninja/kache/blob/v1.2.2/docs/getting-started/configuration.mdx)과 [입력 키](https://github.com/kunobi-ninja/kache/blob/v1.2.2/docs/how-it-works/cache-key.mdx)는 저장소·실행 정책과 숨은 입력 계약의 기준이에요.
 - [SQLx 0.8.6 migrate 매크로](https://docs.rs/sqlx/0.8.6/sqlx/macro.migrate.html#triggering-recompilation-on-migration-changes)는 새 migration 파일의 재컴파일 조건을 설명해요.
 - [GHCR Container registry 계약](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry)은 OCI 지원, `GITHUB_TOKEN` 기반 workflow 인증, package admin이 필요한 preview 삭제·복원 API, 레이어당 10 GB와 upload 10분 제한을 설명해요.
 - [GHCR 요금 정책](https://docs.github.com/en/billing/concepts/product-billing/github-packages#free-use-of-github-packages)은 작성 시점의 컨테이너 이미지 저장·대역폭 무료 정책이며 영구적인 비용 보장은 아니에요.
